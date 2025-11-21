@@ -1,0 +1,28 @@
+export type Customer = {
+  id: string;
+  public_id: number;
+  custom_id: string | null;
+  name: string;
+  email: string;
+  password: string | null;
+  phone: string | null;
+  phone_mobile: string | null;
+  phone_mobile_verified: boolean;
+  address: string | null;
+  kind_person: string;
+  national_identification_number: string | null;
+  details: string | null;
+  collector_id: string | null;
+  seller_id: string | null;
+  neighborhood_id: string | null;
+  zone_name: string | null;
+  created_at: Date | string;
+  updated_at: Date | string;
+  link_mobile_login: string | null;
+  latitude: string | null;
+  longitude: string | null;
+  city: string | null;
+  state: string | null;
+  street: string | null;
+  number: string | null;
+};
