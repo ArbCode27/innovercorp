@@ -57,7 +57,7 @@ export default function LoginPage() {
           <div className="flex items-center justify-center space-x-2 mb-4">
             <Wifi className="w-8 h-8 text-primary" />
             <span className="text-2xl font-bold text-foreground">
-              TeleConnect
+              Conexiones Innover
             </span>
           </div>
           <h1 className="text-3xl font-bold text-foreground mb-2">

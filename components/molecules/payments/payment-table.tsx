@@ -86,12 +86,12 @@ export function PaymentTable({
 
   return (
     <div className="rounded-md border relative">
+      {loading && (
+        <div className="backdrop-blur-md bg-white/30 border border-white/20 rounded-xl shadow-lg p-6 absolute w-full h-screen flex items-center justify-center cursor-none z-[10000]">
+          Cargando...
+        </div>
+      )}
       <Table>
-        {loading && (
-          <div className="backdrop-blur-md bg-white/30 border border-white/20 rounded-xl shadow-lg p-6 absolute w-full h-full flex items-center justify-center">
-            Cargando...
-          </div>
-        )}
         <TableHeader>
           <TableRow>
             <TableHead>Nombre</TableHead>
