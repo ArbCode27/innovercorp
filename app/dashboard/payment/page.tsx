@@ -6,7 +6,6 @@ import { getAllPayments } from "@/actions/API/payments";
 
 export default async function paymentPage() {
   const payments = await getAllPayments();
-  console.log(payments);
 
   return (
     <DashboardLayout>

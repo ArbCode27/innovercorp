@@ -8,7 +8,6 @@ import {
 } from "@/components/ui/card";
 import React, { useMemo, useState } from "react";
 import { PaymentTable } from "../payment-table";
-import { ClientDetailModal } from "../payment-detail-modal";
 import { StadisticCards } from "./StadisticCards";
 import { Users } from "lucide-react";
 import { Payment } from "@/types/payments";
@@ -69,7 +68,7 @@ export const ClientsPayTable = ({ payments }: { payments: Payment[] }) => {
   };
   return (
     <>
-      <StadisticCards />
+      <StadisticCards payments={filteredClients} />
 
       <Card>
         <CardHeader>

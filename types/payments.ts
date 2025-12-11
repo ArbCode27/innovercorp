@@ -2,7 +2,7 @@ export type Payment = {
   id: string;
   client_id: string;
   name: string;
-  amount: number;
+  amount: string;
   payment_date: string; // ISO date string
   bank: string;
   comment: string | null;

@@ -61,9 +61,7 @@ export function DashboardSidebar() {
           {/* Logo */}
           <div className="flex items-center space-x-2 p-6 border-b border-border">
             <Wifi className="w-8 h-8 text-primary" />
-            <span className="text-xl font-bold text-foreground">
-              TeleConnect
-            </span>
+            <span className="text-xl font-bold text-foreground">Innover</span>
           </div>
 
           {/* Navigation */}

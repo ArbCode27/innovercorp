@@ -1,10 +1,10 @@
 "use client";
 import { Button } from "@/components/ui/button";
-import { ClientPay } from "@/db/Innover API/types/payments";
+import { Payment } from "@/types/payments";
 import { Download } from "lucide-react";
 import React from "react";
 
-export const PayHeader = ({ clients }: { clients: ClientPay[] }) => {
+export const PayHeader = ({ clients }: { clients: Payment[] }) => {
   const filteredClients = clients;
   const handleExportClients = () => {
     console.log("export");
