@@ -1,9 +1,12 @@
 import React from "react";
 import { motion } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
-import { ClientFilters } from "../payment-filters";
+import { Payment } from "@/types/payments";
 
-export const StadisticCards = () => {
+export const StadisticCards = ({ payments }: { payments: Payment[] }) => {
+  const approved = payments.filter((item) => item.status === "APROBADO");
+  const pending = payments.filter((item) => item.status === "EN_PROCESO");
+  const rejected = payments.filter((item) => item.status === "RECHAZADO");
   return (
     <>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -14,7 +17,9 @@ export const StadisticCards = () => {
         >
           <Card>
             <CardContent className="p-4">
-              <div className="text-2xl font-bold text-foreground"></div>
+              <div className="text-2xl font-bold text-foreground">
+                {payments.length}
+              </div>
               <p className="text-xs text-muted-foreground">Total pagos</p>
             </CardContent>
           </Card>
@@ -28,7 +33,7 @@ export const StadisticCards = () => {
           <Card>
             <CardContent className="p-4">
               <div className="text-2xl font-bold text-green-600">
-                {/* {stats.active} */}
+                {approved.length}
               </div>
               <p className="text-xs text-muted-foreground">Confirmados</p>
             </CardContent>
@@ -43,7 +48,7 @@ export const StadisticCards = () => {
           <Card>
             <CardContent className="p-4">
               <div className="text-2xl font-bold text-yellow-600">
-                {/* {stats.pending} */}
+                {pending.length}
               </div>
               <p className="text-xs text-muted-foreground">Pendientes</p>
             </CardContent>
@@ -58,7 +63,7 @@ export const StadisticCards = () => {
           <Card>
             <CardContent className="p-4">
               <div className="text-2xl font-bold text-red-600">
-                {/* {stats.expired} */}
+                {rejected.length}
               </div>
               <p className="text-xs text-muted-foreground">Negados</p>
             </CardContent>

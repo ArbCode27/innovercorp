@@ -1,45 +1,49 @@
-"use client"
-
-import type React from "react"
-
-import { useState } from "react"
-import { useRouter } from "next/navigation"
-import { motion } from "framer-motion"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Wifi, Eye, EyeOff } from "lucide-react"
-import { useAuth } from "@/lib/auth"
+"use client";
+import type React from "react";
+import { use, useState } from "react";
+import { useRouter } from "next/navigation";
+import { motion } from "framer-motion";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Wifi, Eye, EyeOff } from "lucide-react";
+import { useAuth } from "@/lib/auth";
 
 export default function LoginPage() {
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
-  const [showPassword, setShowPassword] = useState(false)
-  const [error, setError] = useState("")
-  const [isLoading, setIsLoading] = useState(false)
-  const { login } = useAuth()
-  const router = useRouter()
+  const [user, setUser] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const { login } = useAuth();
+  const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError("")
-    setIsLoading(true)
+    e.preventDefault();
+    setError("");
+    setIsLoading(true);
 
     try {
-      const success = await login(email, password)
+      const success = await login(user, password);
       if (success) {
-        router.push("/dashboard")
+        router.push("/dashboard");
       } else {
-        setError("Credenciales incorrectas. Intenta de nuevo.")
+        setError("Credenciales incorrectas. Intenta de nuevo.");
       }
     } catch (err) {
-      setError("Error al iniciar sesión. Intenta de nuevo.")
+      setError("Error al iniciar sesión. Intenta de nuevo.");
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/10 via-background to-accent/5 flex items-center justify-center p-4">
@@ -52,28 +56,36 @@ export default function LoginPage() {
         <div className="text-center mb-8">
           <div className="flex items-center justify-center space-x-2 mb-4">
             <Wifi className="w-8 h-8 text-primary" />
-            <span className="text-2xl font-bold text-foreground">TeleConnect</span>
+            <span className="text-2xl font-bold text-foreground">
+              TeleConnect
+            </span>
           </div>
-          <h1 className="text-3xl font-bold text-foreground mb-2">Iniciar Sesión</h1>
-          <p className="text-muted-foreground">Accede al panel de administración</p>
+          <h1 className="text-3xl font-bold text-foreground mb-2">
+            Iniciar Sesión
+          </h1>
+          <p className="text-muted-foreground">
+            Accede al panel de administración
+          </p>
         </div>
 
         <Card className="shadow-xl">
           <CardHeader>
             <CardTitle>Bienvenido</CardTitle>
-            <CardDescription>Ingresa tus credenciales para continuar</CardDescription>
+            <CardDescription>
+              Ingresa tus credenciales para continuar
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="email">Correo Electrónico</Label>
+                <Label htmlFor="email">Usuario</Label>
                 <Input
-                  id="email"
-                  type="email"
+                  id="user"
+                  type="text"
                   required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="admin@demo.com"
+                  value={user}
+                  onChange={(e) => setUser(e.target.value)}
+                  placeholder="Nombre de usuario"
                   disabled={isLoading}
                 />
               </div>
@@ -118,21 +130,19 @@ export default function LoginPage() {
                 {isLoading ? "Iniciando sesión..." : "Iniciar Sesión"}
               </Button>
             </form>
-
-            <div className="mt-6 p-4 bg-muted/50 rounded-lg">
-              <p className="text-sm text-muted-foreground mb-2">Credenciales de prueba:</p>
-              <p className="text-sm font-mono">Email: admin@demo.com</p>
-              <p className="text-sm font-mono">Password: 123456</p>
-            </div>
           </CardContent>
         </Card>
 
         <div className="text-center mt-6">
-          <Button variant="ghost" onClick={() => router.push("/")} disabled={isLoading}>
+          <Button
+            variant="ghost"
+            onClick={() => router.push("/")}
+            disabled={isLoading}
+          >
             ← Volver al inicio
           </Button>
         </div>
       </motion.div>
     </div>
-  )
+  );
 }

@@ -32,8 +32,6 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { RegisterPayForm } from "@/components/molecules/payments/RegisterPayForm";
-import { RegisterPrePayForm } from "@/components/molecules/payments/RegisterPrePayForm";
 
 interface FormData {
   fullName: string;
@@ -85,10 +83,8 @@ export default function LandingPage() {
         throw new Error(result.message || "Error al procesar el registro");
       }
 
-      console.log("[v0] Registration successful:", result);
       setSubmitted(true);
     } catch (error) {
-      console.error("[v0] Registration error:", error);
       setError(
         error instanceof Error
           ? error.message
@@ -183,7 +179,7 @@ export default function LandingPage() {
           <div className="flex items-center space-x-2">
             <Wifi className="w-8 h-8 text-primary" />
             <span className="text-xl font-bold text-foreground">
-              TeleConnect
+              Innovercorp
             </span>
           </div>
           <nav className="hidden md:flex space-x-6 items-center">
