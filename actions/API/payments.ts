@@ -1,7 +1,10 @@
 import { BACKEND_BASE_URL } from "@/lib/utils";
+import { cache } from "react";
 
 export const getAllPayments = async () => {
-  const res = await fetch(`${BACKEND_BASE_URL}/payments`);
+  const res = await fetch(`${BACKEND_BASE_URL}/payments`, {
+    cache: "no-store",
+  });
   const data = await res.json();
   return data;
 };
