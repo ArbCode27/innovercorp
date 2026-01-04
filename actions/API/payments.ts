@@ -57,3 +57,9 @@ export const approvePayment = async (
   const result = await res.json();
   return result;
 };
+
+export const getCurrentExchangeBs = async () => {
+  const res = await fetch("https://api.dolarvzla.com/public/exchange-rate");
+  const bs = await res.json();
+  return bs.current;
+};

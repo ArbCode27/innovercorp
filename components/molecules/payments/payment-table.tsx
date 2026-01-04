@@ -25,10 +25,12 @@ interface ClientTableProps {
   onViewClient: (client: Payment) => void;
   onEditClient: (client: Payment) => void;
   onDeleteClient: (client: Payment) => void;
+  totalAmount: number;
 }
 
 export function PaymentTable({
   payments,
+  totalAmount,
   onViewClient,
   onEditClient,
   onDeleteClient,
@@ -104,7 +106,13 @@ export function PaymentTable({
         </TableHeader>
         <TableBody>
           {payments.map((client) => (
-            <TableRow key={client.id}>
+            <TableRow
+              key={client.id}
+              className={`${
+                totalAmount.toFixed(2) === client.amount &&
+                "border border-green-200"
+              }`}
+            >
               <TableCell className="font-medium">{client.name}</TableCell>
               <TableCell className="text-sm">{client.amount}</TableCell>
               <TableCell className="text-sm">{client.bank}</TableCell>

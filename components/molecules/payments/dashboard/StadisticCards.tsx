@@ -2,8 +2,23 @@ import React from "react";
 import { motion } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
 import { Payment } from "@/types/payments";
+import { ClientFilters } from "../payment-filters";
 
-export const StadisticCards = ({ payments }: { payments: Payment[] }) => {
+export const StadisticCards = ({
+  payments,
+  searchTerm,
+  setSearchTerm,
+  statusFilter,
+  setStatusFilter,
+  handleClearFilters,
+}: {
+  payments: Payment[];
+  searchTerm: string;
+  setSearchTerm: React.Dispatch<React.SetStateAction<string>>;
+  statusFilter: string;
+  setStatusFilter: React.Dispatch<React.SetStateAction<string>>;
+  handleClearFilters: () => void;
+}) => {
   const approved = payments.filter((item) => item.status === "APROBADO");
   const pending = payments.filter((item) => item.status === "EN_PROCESO");
   const rejected = payments.filter((item) => item.status === "RECHAZADO");
@@ -72,21 +87,17 @@ export const StadisticCards = ({ payments }: { payments: Payment[] }) => {
       </div>
 
       {/* Filters */}
-      {/* <Card>
-        <CardContent className="p-6">
+      <Card>
+        <CardContent className="">
           <ClientFilters
+            setStatusFilter={setStatusFilter}
+            statusFilter={statusFilter}
             searchTerm={searchTerm}
             onSearchChange={setSearchTerm}
-            zoneFilter={zoneFilter}
-            onZoneFilterChange={setZoneFilter}
-            contractFilter={contractFilter}
-            onContractFilterChange={setContractFilter}
-            equipmentFilter={equipmentFilter}
-            onEquipmentFilterChange={setEquipmentFilter}
             onClearFilters={handleClearFilters}
           />
         </CardContent>
-      </Card> */}
+      </Card>
     </>
   );
 };

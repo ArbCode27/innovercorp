@@ -2,10 +2,11 @@ import { DashboardLayout } from "@/components/organisms/dashboard-layout";
 import { PayHeader } from "@/components/molecules/payments/dashboard/PayHeader";
 import { StadisticCards } from "@/components/molecules/payments/dashboard/StadisticCards";
 import { ClientsPayTable } from "@/components/molecules/payments/dashboard/ClientsPayTable";
-import { getAllPayments } from "@/actions/API/payments";
+import { getAllPayments, getCurrentExchangeBs } from "@/actions/API/payments";
 
 export default async function paymentPage() {
   const payments = await getAllPayments();
+  const exchangeBs = await getCurrentExchangeBs();
 
   return (
     <DashboardLayout>
@@ -15,7 +16,10 @@ export default async function paymentPage() {
         {/* Statistics Cards */}
 
         {/* Client Table */}
-        <ClientsPayTable payments={payments ? payments : []} />
+        <ClientsPayTable
+          payments={payments ? payments : []}
+          exchangeBs={exchangeBs.usd}
+        />
       </div>
     </DashboardLayout>
   );

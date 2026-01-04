@@ -12,25 +12,31 @@ import { StadisticCards } from "./StadisticCards";
 import { Users } from "lucide-react";
 import { Payment } from "@/types/payments";
 
-export const ClientsPayTable = ({ payments }: { payments: Payment[] }) => {
+export const ClientsPayTable = ({
+  payments,
+  exchangeBs,
+}: {
+  payments: Payment[];
+  exchangeBs: number;
+}) => {
   const [selectedClient, setSelectedClient] = useState<Payment | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const totalAmmount = exchangeBs * 30;
 
   // Filter states
   const [searchTerm, setSearchTerm] = useState("");
   const [zoneFilter, setZoneFilter] = useState("all");
-  const [contractFilter, setContractFilter] = useState("all");
+  const [status, setStatus] = useState("EN_PROCESO");
   const [equipmentFilter, setEquipmentFilter] = useState("all");
 
   // Filtered clients
   const filteredClients = useMemo(() => {
-    return payments.filter((payment) => {
-      const matchesSearch = payment.name
-        .toLowerCase()
-        .includes(searchTerm.toLowerCase());
-      return matchesSearch;
-    });
-  }, [payments, searchTerm, zoneFilter, contractFilter, equipmentFilter]);
+    return payments.filter(
+      (payment) =>
+        payment.status === status &&
+        payment.name.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [payments, searchTerm, zoneFilter, status, equipmentFilter]);
 
   const handleViewClient = (client: Payment) => {
     setSelectedClient(client);
@@ -50,7 +56,7 @@ export const ClientsPayTable = ({ payments }: { payments: Payment[] }) => {
   const handleClearFilters = () => {
     setSearchTerm("");
     setZoneFilter("all");
-    setContractFilter("all");
+    setStatus("EN_PROCESO");
     setEquipmentFilter("all");
   };
 
@@ -68,7 +74,14 @@ export const ClientsPayTable = ({ payments }: { payments: Payment[] }) => {
   };
   return (
     <>
-      <StadisticCards payments={filteredClients} />
+      <StadisticCards
+        searchTerm={searchTerm}
+        handleClearFilters={handleClearFilters}
+        setSearchTerm={setSearchTerm}
+        statusFilter={status}
+        setStatusFilter={setStatus}
+        payments={filteredClients}
+      />
 
       <Card>
         <CardHeader>
@@ -82,6 +95,7 @@ export const ClientsPayTable = ({ payments }: { payments: Payment[] }) => {
         </CardHeader>
         <CardContent>
           <PaymentTable
+            totalAmount={totalAmmount}
             payments={filteredClients}
             onViewClient={handleViewClient}
             onEditClient={handleEditClient}

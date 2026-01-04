@@ -24,8 +24,8 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 // Hardcoded credentials for demo
 const DEMO_CREDENTIALS = {
-  user: "Innovercorp",
-  password: "Innover2403",
+  user: process.env.NEXT_PUBLIC_USER,
+  password: process.env.NEXT_PUBLIC_PASS,
   name: "Administrador",
 };
 
