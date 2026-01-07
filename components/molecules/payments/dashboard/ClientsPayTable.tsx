@@ -28,20 +28,22 @@ export const ClientsPayTable = ({
   const [zoneFilter, setZoneFilter] = useState("all");
   const [status, setStatus] = useState("EN_PROCESO");
   const [payType, setPayType] = useState("false");
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [bank, setBank] = useState("Venezuela");
   const [equipmentFilter, setEquipmentFilter] = useState("all");
 
+  console.log({ bank, status });
+
   // Filtered clients
   const filteredClients = useMemo(() => {
-    return payments.filter((payment) =>
-      payment.status === status && selectedDate
-        ? payment.createdAt.split("T")[0] ===
-          selectedDate.toISOString().split("T")[0]
-        : true &&
-          payment.bank.toLowerCase() === bank.toLowerCase() &&
-          payment.name.toLowerCase().includes(searchTerm.toLowerCase()) &&
-          payment.is_promise.toString() === payType
+    return payments.filter(
+      (payment) =>
+        payment.status === status &&
+        payment.createdAt.split("T")[0] ===
+          selectedDate.toISOString().split("T")[0] &&
+        payment.bank.toLowerCase() === bank.toLowerCase() &&
+        payment.name.toLowerCase().includes(searchTerm.toLowerCase()) &&
+        payment.is_promise.toString() === payType
     );
   }, [
     payments,
