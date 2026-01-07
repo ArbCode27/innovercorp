@@ -25,7 +25,7 @@ export function DatePicker({
             id="date"
             className="w-48 justify-between font-normal"
           >
-            {date ? date.toLocaleDateString() : "Select date"}
+            {date ? date.toLocaleDateString() : "Selecciona una fecha"}
             <ChevronDownIcon />
           </Button>
         </PopoverTrigger>
