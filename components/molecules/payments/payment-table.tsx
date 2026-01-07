@@ -35,6 +35,7 @@ export function PaymentTable({
   onEditClient,
   onDeleteClient,
 }: ClientTableProps) {
+  console.log(payments);
   if (payments.length === 0) {
     return (
       <div className="text-center py-12">

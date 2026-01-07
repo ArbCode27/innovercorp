@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Search, Filter, X } from "lucide-react";
 import { zones, contractStatuses, equipmentStatuses } from "@/lib/mock-data";
+import { DatePicker } from "@/components/atoms/DatePicker";
 
 interface ClientFiltersProps {
   searchTerm: string;
@@ -18,6 +19,12 @@ interface ClientFiltersProps {
   statusFilter: string;
   setStatusFilter: React.Dispatch<React.SetStateAction<string>>;
   onClearFilters: () => void;
+  payType: string;
+  setPayType: React.Dispatch<React.SetStateAction<string>>;
+  setBank: React.Dispatch<React.SetStateAction<string>>;
+  bank: string;
+  setSelectedDate: React.Dispatch<React.SetStateAction<Date | undefined>>;
+  selectedDate: Date | undefined;
 }
 
 export function ClientFilters({
@@ -26,17 +33,18 @@ export function ClientFilters({
   onClearFilters,
   statusFilter,
   setStatusFilter,
+  payType,
+  setPayType,
+  bank,
+  setBank,
+  selectedDate,
+  setSelectedDate,
 }: ClientFiltersProps) {
   const hasActiveFilters = searchTerm;
 
   return (
     <div className="flex items-center gap-4">
-      <div className="flex items-center space-x-2">
-        <Filter className="w-4 text-muted-foreground" />
-        <span className="text-sm font-medium text-foreground">Filtros</span>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="w-full flex gap-4 justify-between">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
@@ -49,12 +57,35 @@ export function ClientFilters({
 
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger>
-            <SelectValue placeholder="Filtrar por zona" />
+            <SelectValue placeholder="Filtrar estatus" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="EN_PROCESO">En proceso</SelectItem>
             <SelectItem value="RECHAZADO">Rechazado</SelectItem>
             <SelectItem value="APROBADO"> Aprobado </SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Select value={bank} onValueChange={setBank}>
+          <SelectTrigger>
+            <SelectValue placeholder="Filtrar Banco" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="Venezuela">Venezuela</SelectItem>
+            <SelectItem value="Banplus"> Banplus </SelectItem>
+            <SelectItem value="Bancamiga"> Bancamiga </SelectItem>
+          </SelectContent>
+        </Select>
+
+        <DatePicker date={selectedDate} setDate={setSelectedDate} />
+
+        <Select value={payType} onValueChange={setPayType}>
+          <SelectTrigger>
+            <SelectValue placeholder="Tipo de pago" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={"true"}>Promesa de pago</SelectItem>
+            <SelectItem value={"false"}>Pago completo</SelectItem>
           </SelectContent>
         </Select>
 

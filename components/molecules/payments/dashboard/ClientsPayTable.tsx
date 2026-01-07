@@ -27,16 +27,32 @@ export const ClientsPayTable = ({
   const [searchTerm, setSearchTerm] = useState("");
   const [zoneFilter, setZoneFilter] = useState("all");
   const [status, setStatus] = useState("EN_PROCESO");
+  const [payType, setPayType] = useState("false");
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
+  const [bank, setBank] = useState("Venezuela");
   const [equipmentFilter, setEquipmentFilter] = useState("all");
 
   // Filtered clients
   const filteredClients = useMemo(() => {
-    return payments.filter(
-      (payment) =>
-        payment.status === status &&
-        payment.name.toLowerCase().includes(searchTerm.toLowerCase())
+    return payments.filter((payment) =>
+      payment.status === status && selectedDate
+        ? payment.createdAt.split("T")[0] ===
+          selectedDate.toISOString().split("T")[0]
+        : true &&
+          payment.bank.toLowerCase() === bank.toLowerCase() &&
+          payment.name.toLowerCase().includes(searchTerm.toLowerCase()) &&
+          payment.is_promise.toString() === payType
     );
-  }, [payments, searchTerm, zoneFilter, status, equipmentFilter]);
+  }, [
+    payments,
+    searchTerm,
+    zoneFilter,
+    status,
+    equipmentFilter,
+    payType,
+    bank,
+    selectedDate,
+  ]);
 
   const handleViewClient = (client: Payment) => {
     setSelectedClient(client);
@@ -75,12 +91,18 @@ export const ClientsPayTable = ({
   return (
     <>
       <StadisticCards
+        payType={payType}
+        setPayType={setPayType}
         searchTerm={searchTerm}
         handleClearFilters={handleClearFilters}
         setSearchTerm={setSearchTerm}
         statusFilter={status}
         setStatusFilter={setStatus}
-        payments={filteredClients}
+        payments={payments}
+        bank={bank}
+        setBank={setBank}
+        setSelectedDate={setSelectedDate}
+        selectedDate={selectedDate}
       />
 
       <Card>

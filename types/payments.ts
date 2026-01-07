@@ -10,4 +10,5 @@ export type Payment = {
   status: "EN_PROCESO" | "APROBADO" | "RECHAZADO"; // puedes ampliar según tus estados
   createdAt: string; // ISO date string
   updatedAt: string; // ISO date string
+  is_promise: boolean;
 };
