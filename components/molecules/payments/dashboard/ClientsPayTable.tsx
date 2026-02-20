@@ -9,42 +9,61 @@ import {
 import React, { useMemo, useState } from "react";
 import { PaymentTable } from "../payment-table";
 import { StadisticCards } from "./StadisticCards";
-import { Users } from "lucide-react";
-import { Payment } from "@/types/payments";
+import { ChevronLeft, ChevronRight, Users } from "lucide-react";
+import { Payment, PaymentPromise } from "@/types/payments";
+import { usePathname, useSearchParams, useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
 
-export const ClientsPayTable = ({
-  payments,
-  exchangeBs,
-}: {
-  payments: Payment[];
-  exchangeBs: number;
-}) => {
-  const [selectedClient, setSelectedClient] = useState<Payment | null>(null);
+export const ClientsPayTable = ({ payments }: { payments: Payment[] }) => {
+  const searchParams = useSearchParams();
+  const params = new URLSearchParams(searchParams);
+  const pathName = usePathname();
+  const { replace } = useRouter();
+
+  const nextPage = () => {
+    if (params.get("page")) {
+      const next = Number(params.get("page")) + 1;
+      params.set("page", next.toString());
+      replace(`${pathName}?${params}`);
+    } else {
+      params.set("page", "2");
+      replace(`${pathName}?${params}`);
+    }
+  };
+
+  const prevPage = () => {
+    const prev = Number(params.get("page")) - 1;
+    params.set("page", prev.toString());
+    replace(`${pathName}?${params}`);
+  };
+  const [selectedClient, setSelectedClient] = useState<PaymentPromise | null>(
+    null,
+  );
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
-  const totalAmmount = exchangeBs * 30;
 
   // Filter states
   const [searchTerm, setSearchTerm] = useState("");
   const [zoneFilter, setZoneFilter] = useState("all");
   const [status, setStatus] = useState("EN_PROCESO");
   const [payType, setPayType] = useState("false");
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>();
   const [bank, setBank] = useState("Venezuela");
   const [equipmentFilter, setEquipmentFilter] = useState("all");
 
-  console.log({ bank, status });
-
   // Filtered clients
   const filteredClients = useMemo(() => {
-    return payments.filter(
-      (payment) =>
-        payment.status === status &&
-        payment.createdAt.split("T")[0] ===
-          selectedDate.toISOString().split("T")[0] &&
-        payment.bank.toLowerCase() === bank.toLowerCase() &&
-        payment.name.toLowerCase().includes(searchTerm.toLowerCase()) &&
-        payment.is_promise.toString() === payType
-    );
+    if (payments.length > 0) {
+      return payments.filter((payment) =>
+        payment.status === status && selectedDate
+          ? payment.createdAt.split("T")[0] ===
+            selectedDate.toISOString().split("T")[0]
+          : true &&
+            payment.bank.toLowerCase() === bank.toLowerCase() &&
+            payment.name.toLowerCase().includes(searchTerm.toLowerCase()),
+      );
+    }
+
+    return [];
   }, [
     payments,
     searchTerm,
@@ -56,20 +75,20 @@ export const ClientsPayTable = ({
     selectedDate,
   ]);
 
-  const handleViewClient = (client: Payment) => {
-    setSelectedClient(client);
-    setIsDetailModalOpen(true);
-  };
+  // const handleViewClient = (client: PaymentPromise) => {
+  //   setSelectedClient(client);
+  //   setIsDetailModalOpen(true);
+  // };
 
-  const handleEditClient = (client: Payment) => {
-    // TODO: Implement edit functionality
-    console.log("Edit client:", client);
-  };
+  // const handleEditClient = (client: PaymentPromise) => {
+  //   // TODO: Implement edit functionality
+  //   console.log("Edit client:", client);
+  // };
 
-  const handleDeleteClient = (client: Payment) => {
-    // TODO: Implement delete functionality
-    console.log("Delete client:", client);
-  };
+  // const handleDeleteClient = (client: PaymentPromise) => {
+  //   // TODO: Implement delete functionality
+  //   console.log("Delete client:", client);
+  // };
 
   const handleClearFilters = () => {
     setSearchTerm("");
@@ -83,18 +102,9 @@ export const ClientsPayTable = ({
     console.log("Export clients");
   };
 
-  // Statistics
-  const stats = {
-    total: payments.length,
-    active: payments.filter((c) => c.status === "APROBADO").length,
-    pending: payments.filter((c) => c.status === "EN_PROCESO").length,
-    expired: payments.filter((c) => c.status === "RECHAZADO").length,
-  };
   return (
     <>
       <StadisticCards
-        payType={payType}
-        setPayType={setPayType}
         searchTerm={searchTerm}
         handleClearFilters={handleClearFilters}
         setSearchTerm={setSearchTerm}
@@ -118,13 +128,23 @@ export const ClientsPayTable = ({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <PaymentTable
-            totalAmount={totalAmmount}
-            payments={filteredClients}
-            onViewClient={handleViewClient}
-            onEditClient={handleEditClient}
-            onDeleteClient={handleDeleteClient}
-          />
+          <PaymentTable payments={filteredClients} />
+          <div className="flex justify-end gap-4 w-full p-4">
+            <Button
+              disabled={
+                params.get("page") && params.get("page") !== "1" ? false : true
+              }
+              className="text-center"
+              onClick={prevPage}
+            >
+              <ChevronLeft />
+              Anterior
+            </Button>
+            <Button onClick={nextPage} className="text-center">
+              Siguiente
+              <ChevronRight />
+            </Button>
+          </div>
         </CardContent>
       </Card>
 

@@ -15,19 +15,28 @@ import { Payment, PaymentPromise } from "@/types/payments";
 import { useState } from "react";
 import {
   approvePayment,
+  approvePromisePayment,
   deletePayment,
   updateStatusPayment,
 } from "@/actions/API/payments";
 import { useRouter } from "next/navigation";
 
 interface ClientTableProps {
-  payments: Payment[] | PaymentPromise[];
-  // onViewClient: (client: Payment | PaymentPromise) => void;
-  // onEditClient: (client: Payment | PaymentPromise) => void;
-  // onDeleteClient: (client: Payment | PaymentPromise) => void;
+  payments: PaymentPromise[];
+  onViewClient: (client: Payment) => void;
+  onEditClient: (client: Payment) => void;
+  onDeleteClient: (client: Payment) => void;
+  totalAmount: number;
 }
 
-export function PaymentTable({ payments }: ClientTableProps) {
+export function PaymentTable({
+  payments,
+  totalAmount,
+  onViewClient,
+  onEditClient,
+  onDeleteClient,
+}: ClientTableProps) {
+  console.log(payments);
   if (payments.length === 0) {
     return (
       <div className="text-center py-12">
@@ -44,15 +53,12 @@ export function PaymentTable({ payments }: ClientTableProps) {
   const sendPaymentApprove = async (
     id: string,
     data: {
-      client_id: string;
-      amount: string;
-      payment_date: string;
-      transaction_code: string;
-    },
+      valid_until: string;
+      contract_id: string;
+    }
   ) => {
     setLoading(true);
-    const result = await approvePayment(id, data);
-    console.log(result);
+    const result = await approvePromisePayment(id, data);
     if (result.data) {
       setLoading(false);
       router.refresh();
@@ -91,6 +97,7 @@ export function PaymentTable({ payments }: ClientTableProps) {
           <TableRow>
             <TableHead>Nombre</TableHead>
             <TableHead>Monto</TableHead>
+            <TableHead>Hábil hasta</TableHead>
             <TableHead>Banco</TableHead>
             <TableHead>codigo</TableHead>
             <TableHead>Estado</TableHead>
@@ -99,9 +106,18 @@ export function PaymentTable({ payments }: ClientTableProps) {
         </TableHeader>
         <TableBody>
           {payments.map((client) => (
-            <TableRow key={client.id}>
+            <TableRow
+              key={client.id}
+              className={`${
+                totalAmount.toFixed(2) === client.amount &&
+                "border border-green-200"
+              }`}
+            >
               <TableCell className="font-medium">{client.name}</TableCell>
               <TableCell className="text-sm">{client.amount}</TableCell>
+              <TableCell className="text-sm">
+                {client.valid_until.toISOString().split("T")[0]}
+              </TableCell>
               <TableCell className="text-sm">{client.bank}</TableCell>
               <TableCell>{client.transaction_code}</TableCell>
               <TableCell>
@@ -111,11 +127,11 @@ export function PaymentTable({ payments }: ClientTableProps) {
                 {client.status !== "APROBADO" && (
                   <Button
                     onClick={() =>
-                      sendPaymentApprove(client.id, {
-                        client_id: client.id,
-                        payment_date: client.payment_date,
-                        transaction_code: client.transaction_code,
-                        amount: client.amount,
+                      sendPaymentApprove(client.contract_id, {
+                        valid_until: client.valid_until
+                          .toISOString()
+                          .split("T")[0],
+                        contract_id: client.contract_id,
                       })
                     }
                     className="bg-green-400 hover:bg-green-400 cursor-pointer"

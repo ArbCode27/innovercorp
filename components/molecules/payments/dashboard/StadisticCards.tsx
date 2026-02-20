@@ -1,7 +1,7 @@
 import React from "react";
 import { motion } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
-import { Payment } from "@/types/payments";
+import { Payment, PaymentPromise } from "@/types/payments";
 import { ClientFilters } from "../payment-filters";
 
 export const StadisticCards = ({
@@ -11,14 +11,12 @@ export const StadisticCards = ({
   statusFilter,
   setStatusFilter,
   handleClearFilters,
-  payType,
-  setPayType,
   setBank,
   bank,
   selectedDate,
   setSelectedDate,
 }: {
-  payments: Payment[];
+  payments: Payment[] | PaymentPromise[];
   searchTerm: string;
   setSearchTerm: React.Dispatch<React.SetStateAction<string>>;
   statusFilter: string;
@@ -26,14 +24,23 @@ export const StadisticCards = ({
   setBank: React.Dispatch<React.SetStateAction<string>>;
   bank: string;
   handleClearFilters: () => void;
-  payType: string;
-  setPayType: React.Dispatch<React.SetStateAction<string>>;
+
   setSelectedDate: React.Dispatch<React.SetStateAction<Date | undefined>>;
   selectedDate: Date | undefined;
 }) => {
-  const approved = payments.filter((item) => item.status === "APROBADO");
-  const pending = payments.filter((item) => item.status === "EN_PROCESO");
-  const rejected = payments.filter((item) => item.status === "RECHAZADO");
+  const approved =
+    payments.length > 0
+      ? payments.filter((item) => item.status === "APROBADO")
+      : [];
+  const pending =
+    payments.length > 0
+      ? payments.filter((item) => item.status === "EN_PROCESO")
+      : [];
+  const rejected =
+    payments.length > 0
+      ? payments.filter((item) => item.status === "RECHAZADO")
+      : [];
+
   return (
     <>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -102,8 +109,6 @@ export const StadisticCards = ({
       <Card>
         <CardContent className="">
           <ClientFilters
-            payType={payType}
-            setPayType={setPayType}
             setStatusFilter={setStatusFilter}
             statusFilter={statusFilter}
             searchTerm={searchTerm}

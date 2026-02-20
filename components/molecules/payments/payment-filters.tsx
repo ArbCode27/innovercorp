@@ -19,8 +19,6 @@ interface ClientFiltersProps {
   statusFilter: string;
   setStatusFilter: React.Dispatch<React.SetStateAction<string>>;
   onClearFilters: () => void;
-  payType: string;
-  setPayType: React.Dispatch<React.SetStateAction<string>>;
   setBank: React.Dispatch<React.SetStateAction<string>>;
   bank: string;
   setSelectedDate: React.Dispatch<React.SetStateAction<Date | undefined>>;
@@ -33,8 +31,6 @@ export function ClientFilters({
   onClearFilters,
   statusFilter,
   setStatusFilter,
-  payType,
-  setPayType,
   bank,
   setBank,
   selectedDate,
@@ -78,16 +74,6 @@ export function ClientFilters({
         </Select>
 
         <DatePicker date={selectedDate} setDate={setSelectedDate} />
-
-        <Select value={payType} onValueChange={setPayType}>
-          <SelectTrigger>
-            <SelectValue placeholder="Tipo de pago" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={"true"}>Promesa de pago</SelectItem>
-            <SelectItem value={"false"}>Pago completo</SelectItem>
-          </SelectContent>
-        </Select>
 
         {/* <Select value={contractFilter} onValueChange={onContractFilterChange}>
           <SelectTrigger>

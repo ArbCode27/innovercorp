@@ -15,6 +15,7 @@ import {
   X,
   Webhook,
   HandCoins,
+  CalendarCheck2,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -31,6 +32,11 @@ export function DashboardSidebar() {
     { name: "Dashboard", href: "/dashboard", icon: Home },
     { name: "Clientes", href: "/dashboard/clients", icon: Users },
     { name: "Pagos", href: "/dashboard/payment", icon: HandCoins },
+    {
+      name: "Promesas de Pagos",
+      href: "/dashboard/payment-promise",
+      icon: CalendarCheck2,
+    },
     { name: "Calendario", href: "/dashboard/calendar", icon: Calendar },
     { name: "Reportes", href: "/dashboard/reports", icon: BarChart3 },
     { name: "Integraciones", href: "/dashboard/integrations", icon: Webhook },

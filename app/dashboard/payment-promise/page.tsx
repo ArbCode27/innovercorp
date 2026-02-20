@@ -1,16 +1,12 @@
 import { DashboardLayout } from "@/components/organisms/dashboard-layout";
 import { PayHeader } from "@/components/molecules/payments/dashboard/PayHeader";
+import { StadisticCards } from "@/components/molecules/payments/dashboard/StadisticCards";
 import { ClientsPayTable } from "@/components/molecules/payments/dashboard/ClientsPayTable";
-import { getAllPayments } from "@/actions/API/payments";
+import { getAllPromisePayments } from "@/actions/API/payments";
+import { ClientsPromisePayTable } from "@/components/molecules/payments/dashboard/ClientsPromisePayTable";
 
-export default async function paymentPage({
-  searchParams,
-}: {
-  searchParams?: Promise<{ page?: string }>;
-}) {
-  const params = await searchParams;
-  const page = params?.page || 1;
-  const payments = await getAllPayments(page.toString());
+export default async function paymentPage() {
+  const payments = await getAllPromisePayments();
 
   return (
     <DashboardLayout>
@@ -20,7 +16,7 @@ export default async function paymentPage({
         {/* Statistics Cards */}
 
         {/* Client Table */}
-        <ClientsPayTable payments={payments ? payments : []} />
+        <ClientsPromisePayTable payments={payments ? payments : []} />
       </div>
     </DashboardLayout>
   );
