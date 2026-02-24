@@ -35,7 +35,7 @@ interface CsvUploadProps {
 }
 
 export default function FileInput({ onClose, onSuccess }: CsvUploadProps) {
-  const [payments, setPayments] = useState<PaymentBank[]>();
+  const [payments, setPayments] = useState<PaymentBank[]>([]);
   const [apiPayments, setApiPayments] = useState<Payment[]>([]);
   const [bank, setBank] = useState("");
   const [isDragging, setIsDragging] = useState(false);
@@ -66,35 +66,35 @@ export default function FileInput({ onClose, onSuccess }: CsvUploadProps) {
   };
 
   const processPayments = async () => {
-    if (payments && apiPayments) {
+    if (payments?.length > 0 && apiPayments) {
       setLoading(true);
       const match = getMatchPaymentsLast6(apiPayments, payments);
+      console.log(match);
       for (const payment of match) {
-        // await approvePayment(payment.id, {
-        //   client_id: payment.client_id,
-        //   amount: payment.amount,
-        //   payment_date: payment.payment_date,
-        //   transaction_code: payment.transaction_code,
-        // });
-        setTimeout(() => {
-          console.log(payment.id);
-        }, 1000);
+        await approvePayment(payment.id, {
+          client_id: payment.client_id,
+          amount: payment.amount,
+          payment_date: payment.payment_date,
+          transaction_code: payment.transaction_code,
+        });
       }
       setLoading(false);
     }
   };
 
   const handleBank = async (bank: string) => {
-    const payments = await getPaymentsByBank(bank);
-    let fileProcessed;
+    const apiPayments = await getPaymentsByBank(bank);
+    let fileProcessed: PaymentBank[];
     if (file && bank === "Banplus") {
       fileProcessed = await processBanplusFile(file);
+      setPayments(fileProcessed);
+      setApiPayments(apiPayments);
     }
     if (file && bank === "Bancamiga") {
       fileProcessed = await processBancamigaFile(file);
+      setPayments(fileProcessed);
+      setApiPayments(apiPayments);
     }
-    setPayments(fileProcessed);
-    setApiPayments(payments);
   };
 
   const validateFile = (file: File): string | null => {
