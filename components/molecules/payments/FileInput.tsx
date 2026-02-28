@@ -50,6 +50,16 @@ export default function FileInput({ onClose, onSuccess }: CsvUploadProps) {
   const [matchPayments, setMatchPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    console.log(matchPayments);
+  }, [matchPayments]);
+
+  const processMatchPayments = () => {
+    console.log(payments);
+    const match = getMatchPaymentsLast6(apiPayments, payments);
+    setMatchPayments(match);
+  };
+
   const processPayments = async () => {
     if (payments?.length > 0 && apiPayments && matchPayments.length > 0) {
       setLoading(true);
@@ -74,15 +84,11 @@ export default function FileInput({ onClose, onSuccess }: CsvUploadProps) {
       fileProcessed = await processBanplusFile(file);
       setPayments(fileProcessed);
       setApiPayments(apiPayments);
-      const match = getMatchPaymentsLast6(apiPayments, payments);
-      setMatchPayments(match);
     }
     if (file && bank === "Bancamiga") {
       fileProcessed = await processBancamigaFile(file);
       setPayments(fileProcessed);
       setApiPayments(apiPayments);
-      const match = getMatchPaymentsLast6(apiPayments, payments);
-      setMatchPayments(match);
     }
   };
 
@@ -384,18 +390,18 @@ export default function FileInput({ onClose, onSuccess }: CsvUploadProps) {
           {/* Action Buttons */}
           <div className="flex gap-3 pt-2">
             <Button
-              onClick={handleClick}
+              onClick={processMatchPayments}
               variant="outline"
               className="flex-1 bg-transparent"
             >
-              Cambiar archivo
+              Procesar pagos
             </Button>
             <Button
               className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground disabled:opacity-50 disabled:cursor-not-allowed"
               onClick={processPayments}
               disabled={isProcessButtonDisabled}
             >
-              Procesar datos
+              Aprobar pagos
             </Button>
           </div>
         </div>
