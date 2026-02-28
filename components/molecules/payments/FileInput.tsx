@@ -51,7 +51,7 @@ export default function FileInput({ onClose, onSuccess }: CsvUploadProps) {
   const [loading, setLoading] = useState(false);
 
   const processPayments = async () => {
-    if (payments?.length > 0 && apiPayments) {
+    if (payments?.length > 0 && apiPayments && matchPayments.length > 0) {
       setLoading(true);
       for (const payment of matchPayments) {
         await approvePayment(payment.id, {
@@ -82,7 +82,7 @@ export default function FileInput({ onClose, onSuccess }: CsvUploadProps) {
       setPayments(fileProcessed);
       setApiPayments(apiPayments);
       const match = getMatchPaymentsLast6(apiPayments, payments);
-      setMatchPayments(apiPayments);
+      setMatchPayments(match);
     }
   };
 
@@ -178,7 +178,10 @@ export default function FileInput({ onClose, onSuccess }: CsvUploadProps) {
   };
 
   const isProcessButtonDisabled =
-    !uploadedFile || !payments || apiPayments.length === 0;
+    !uploadedFile &&
+    !payments &&
+    apiPayments.length === 0 &&
+    matchPayments.length === 0;
 
   const formatFileSize = (bytes: number): string => {
     if (bytes === 0) return "0 Bytes";
