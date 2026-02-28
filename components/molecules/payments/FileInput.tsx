@@ -6,6 +6,8 @@ import {
   AlertCircle,
   X,
   FileText,
+  CircleCheckBig,
+  Check,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,6 +23,7 @@ import { approvePayment, getPaymentsByBank } from "@/actions/API/payments";
 import { getMatchPaymentsLast6 } from "@/utils/matchPayment";
 import { useRouter } from "next/navigation";
 import { Spinner } from "@/components/ui/spinner";
+import { toast } from "sonner";
 
 interface UploadedFile {
   name: string;
@@ -44,33 +47,13 @@ export default function FileInput({ onClose, onSuccess }: CsvUploadProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [matchPayments, setMatchPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(false);
-  const router = useRouter();
-
-  const sendPaymentApprove = async (
-    id: string,
-    data: {
-      client_id: string;
-      amount: string;
-      payment_date: string;
-      transaction_code: string;
-    },
-  ) => {
-    setLoading(true);
-    const result = await approvePayment(id, data);
-    console.log(result);
-    if (result.data) {
-      setLoading(false);
-      router.refresh();
-    }
-  };
 
   const processPayments = async () => {
     if (payments?.length > 0 && apiPayments) {
       setLoading(true);
-      const match = getMatchPaymentsLast6(apiPayments, payments);
-      console.log(match);
-      for (const payment of match) {
+      for (const payment of matchPayments) {
         await approvePayment(payment.id, {
           client_id: payment.client_id,
           amount: payment.amount,
@@ -79,6 +62,8 @@ export default function FileInput({ onClose, onSuccess }: CsvUploadProps) {
         });
       }
       setLoading(false);
+      setMatchPayments([]);
+      toast.success("Los pagos se procesaron correctamente");
     }
   };
 
@@ -89,11 +74,15 @@ export default function FileInput({ onClose, onSuccess }: CsvUploadProps) {
       fileProcessed = await processBanplusFile(file);
       setPayments(fileProcessed);
       setApiPayments(apiPayments);
+      const match = getMatchPaymentsLast6(apiPayments, payments);
+      setMatchPayments(match);
     }
     if (file && bank === "Bancamiga") {
       fileProcessed = await processBancamigaFile(file);
       setPayments(fileProcessed);
       setApiPayments(apiPayments);
+      const match = getMatchPaymentsLast6(apiPayments, payments);
+      setMatchPayments(apiPayments);
     }
   };
 
@@ -197,6 +186,10 @@ export default function FileInput({ onClose, onSuccess }: CsvUploadProps) {
     const sizes = ["Bytes", "KB", "MB"];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i];
+  };
+
+  const handleDelete = (id: string) => {
+    setMatchPayments((prev) => prev.filter((item) => item.id !== id));
   };
 
   return (
@@ -354,6 +347,35 @@ export default function FileInput({ onClose, onSuccess }: CsvUploadProps) {
                 Archivo cargado exitosamente
               </span>
             </div>
+          </div>
+
+          {/*Payments que hicieron match*/}
+          <div className="flex flex-col gap-3 py-4">
+            <h3 className="border-b-[1px] pb-1 font-semibold">
+              Pagos cargados
+            </h3>
+            {matchPayments.map((item) => (
+              <div
+                key={item.id}
+                className="w-full flex justify-between items-center border border-gray-200 rounded-2xl p-3"
+              >
+                <div className="space-y-1">
+                  <p className="text-[20px] font-semibold">{item.name}</p>
+                  <p className="text-gray-400 text-[14px]">{item.amount}</p>
+                </div>
+                <div>
+                  <Button
+                    onClick={() => handleDelete(item.id)}
+                    className="text-8 text-white rounded-xl bg-red-400 hover:bg-red-500 cursor-pointer"
+                    variant="outline"
+                    size="icon"
+                    aria-label="Submit"
+                  >
+                    <X />
+                  </Button>
+                </div>
+              </div>
+            ))}
           </div>
 
           {/* Action Buttons */}
