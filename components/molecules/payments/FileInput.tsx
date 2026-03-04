@@ -21,7 +21,6 @@ import { processBanplusFile, processBancamigaFile } from "@/utils/process-xls";
 import { Payment, PaymentBank } from "@/types/payments";
 import { approvePayment, getPaymentsByBank } from "@/actions/API/payments";
 import { getMatchPaymentsLast6 } from "@/utils/matchPayment";
-import { useRouter } from "next/navigation";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "sonner";
 
@@ -55,7 +54,6 @@ export default function FileInput({ onClose, onSuccess }: CsvUploadProps) {
   }, [matchPayments]);
 
   const processMatchPayments = () => {
-    console.log(payments);
     const match = getMatchPaymentsLast6(apiPayments, payments);
     setMatchPayments(match);
   };
@@ -63,16 +61,17 @@ export default function FileInput({ onClose, onSuccess }: CsvUploadProps) {
   const processPayments = async () => {
     if (payments?.length > 0 && apiPayments && matchPayments.length > 0) {
       setLoading(true);
+      console.log(matchPayments);
       for (const payment of matchPayments) {
-        await approvePayment(payment.id, {
+        const approvbe = await approvePayment(payment.id, {
           client_id: payment.client_id,
           amount: payment.amount,
           payment_date: payment.payment_date,
           transaction_code: payment.transaction_code,
         });
+        console.log(approvbe);
       }
       setLoading(false);
-      setMatchPayments([]);
       toast.success("Los pagos se procesaron correctamente");
     }
   };

@@ -112,7 +112,7 @@ export function PaymentTable({ payments }: ClientTableProps) {
                   <Button
                     onClick={() =>
                       sendPaymentApprove(client.id, {
-                        client_id: client.id,
+                        client_id: client.client_id,
                         payment_date: client.payment_date,
                         transaction_code: client.transaction_code,
                         amount: client.amount,

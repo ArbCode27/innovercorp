@@ -19,6 +19,7 @@ export type PaymentBank = {
 
 export type PaymentPromise = {
   id: string; // corresponde a String en Prisma
+  client_id: string;
   valid_until: Date; // DateTime en Prisma → Date en TS
   contract_id: string;
   amount: string; // si luego quieres, podrías usar number en lugar de string

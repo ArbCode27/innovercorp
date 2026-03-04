@@ -70,6 +70,7 @@ export const approvePayment = async (
     },
     body: JSON.stringify(payment),
   });
+  console.log(payment);
   const result = await res.json();
   return result;
 };
