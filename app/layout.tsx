@@ -4,6 +4,7 @@ import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth";
+import { Toaster } from "@/components/ui/sonner";
 
 export const metadata: Metadata = {
   title: "Innovercorp - Plataforma de Gestión",
@@ -19,6 +20,7 @@ export default function RootLayout({
     <html lang="en">
       <body className={`font-sans ${GeistSans.variable} ${GeistMono.variable}`}>
         <AuthProvider>{children}</AuthProvider>
+        <Toaster />
       </body>
     </html>
   );

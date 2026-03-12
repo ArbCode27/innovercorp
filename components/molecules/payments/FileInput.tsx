@@ -23,6 +23,7 @@ import { approvePayment, getPaymentsByBank } from "@/actions/API/payments";
 import { getMatchPaymentsLast6 } from "@/utils/matchPayment";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "sonner";
+import { useRouter } from "next/navigation";
 
 interface UploadedFile {
   name: string;
@@ -37,6 +38,7 @@ interface CsvUploadProps {
 }
 
 export default function FileInput({ onClose, onSuccess }: CsvUploadProps) {
+  const router = useRouter();
   const [payments, setPayments] = useState<PaymentBank[]>([]);
   const [apiPayments, setApiPayments] = useState<Payment[]>([]);
   const [bank, setBank] = useState("");
@@ -49,19 +51,15 @@ export default function FileInput({ onClose, onSuccess }: CsvUploadProps) {
   const [matchPayments, setMatchPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    console.log(matchPayments);
-  }, [matchPayments]);
-
   const processMatchPayments = () => {
     const match = getMatchPaymentsLast6(apiPayments, payments);
     setMatchPayments(match);
+    toast.success("Los pagos se procesaron correctamente", {});
   };
 
   const processPayments = async () => {
     if (payments?.length > 0 && apiPayments && matchPayments.length > 0) {
       setLoading(true);
-      console.log(matchPayments);
       for (const payment of matchPayments) {
         const approvbe = await approvePayment(payment.id, {
           client_id: payment.client_id,
@@ -69,10 +67,14 @@ export default function FileInput({ onClose, onSuccess }: CsvUploadProps) {
           payment_date: payment.payment_date,
           transaction_code: payment.transaction_code,
         });
-        console.log(approvbe);
+        if (approvbe.clientId) toast.success("el pago se aprobo correctamente");
+        else
+          toast.error("el pago no se aprobo correctamente", {
+            description: "Verifique la lista de pagos y vuelva a intentarlo",
+          });
       }
       setLoading(false);
-      toast.success("Los pagos se procesaron correctamente");
+      router.refresh();
     }
   };
 
@@ -182,11 +184,7 @@ export default function FileInput({ onClose, onSuccess }: CsvUploadProps) {
     }
   };
 
-  const isProcessButtonDisabled =
-    !uploadedFile &&
-    !payments &&
-    apiPayments.length === 0 &&
-    matchPayments.length === 0;
+  const isProcessButtonDisabled = matchPayments.length === 0;
 
   const formatFileSize = (bytes: number): string => {
     if (bytes === 0) return "0 Bytes";
@@ -224,8 +222,7 @@ export default function FileInput({ onClose, onSuccess }: CsvUploadProps) {
           isDragging
             ? "border-primary bg-primary/5 scale-[1.02]"
             : "border-border bg-secondary/20 hover:border-primary/50 hover:bg-secondary/30"
-        }`}
-      >
+        }`}>
         <input
           ref={fileInputRef}
           type="file"
@@ -241,8 +238,7 @@ export default function FileInput({ onClose, onSuccess }: CsvUploadProps) {
               isDragging
                 ? "bg-primary/20 text-primary"
                 : "bg-muted text-muted-foreground"
-            }`}
-          >
+            }`}>
             <Upload size={32} />
           </div>
 
@@ -260,8 +256,7 @@ export default function FileInput({ onClose, onSuccess }: CsvUploadProps) {
           <Button
             onClick={handleClick}
             disabled={isLoading}
-            className="bg-primary hover:bg-primary/90 text-primary-foreground px-6 py-2"
-          >
+            className="bg-primary hover:bg-primary/90 text-primary-foreground px-6 py-2">
             {isLoading ? "Procesando..." : "Seleccionar archivo"}
           </Button>
 
@@ -292,8 +287,7 @@ export default function FileInput({ onClose, onSuccess }: CsvUploadProps) {
             onValueChange={async (e) => {
               setBank(e);
               await handleBank(e);
-            }}
-          >
+            }}>
             <SelectTrigger className="w-full">
               <SelectValue placeholder="Elige un banco" />
             </SelectTrigger>
@@ -342,8 +336,7 @@ export default function FileInput({ onClose, onSuccess }: CsvUploadProps) {
                 variant="ghost"
                 size="sm"
                 onClick={handleRemoveFile}
-                className="text-muted-foreground hover:text-destructive"
-              >
+                className="text-muted-foreground hover:text-destructive">
                 <X className="w-5 h-5" />
               </Button>
             </div>
@@ -365,8 +358,7 @@ export default function FileInput({ onClose, onSuccess }: CsvUploadProps) {
             {matchPayments.map((item) => (
               <div
                 key={item.id}
-                className="w-full flex justify-between items-center border border-gray-200 rounded-2xl p-3"
-              >
+                className="w-full flex justify-between items-center border border-gray-200 rounded-2xl p-3">
                 <div className="space-y-1">
                   <p className="text-[20px] font-semibold">{item.name}</p>
                   <p className="text-gray-400 text-[14px]">{item.amount}</p>
@@ -377,8 +369,7 @@ export default function FileInput({ onClose, onSuccess }: CsvUploadProps) {
                     className="text-8 text-white rounded-xl bg-red-400 hover:bg-red-500 cursor-pointer"
                     variant="outline"
                     size="icon"
-                    aria-label="Submit"
-                  >
+                    aria-label="Submit">
                     <X />
                   </Button>
                 </div>
@@ -390,16 +381,15 @@ export default function FileInput({ onClose, onSuccess }: CsvUploadProps) {
           <div className="flex gap-3 pt-2">
             <Button
               onClick={processMatchPayments}
+              disabled={apiPayments.length === 0}
               variant="outline"
-              className="flex-1 bg-transparent"
-            >
+              className="flex-1 bg-transparent">
               Procesar pagos
             </Button>
             <Button
               className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground disabled:opacity-50 disabled:cursor-not-allowed"
               onClick={processPayments}
-              disabled={isProcessButtonDisabled}
-            >
+              disabled={isProcessButtonDisabled}>
               Aprobar pagos
             </Button>
           </div>
