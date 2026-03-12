@@ -90,6 +90,7 @@ export function PaymentTable({ payments }: ClientTableProps) {
         <TableHeader>
           <TableRow>
             <TableHead>Nombre</TableHead>
+            <TableHead>Cedula</TableHead>
             <TableHead>Monto</TableHead>
             <TableHead>Banco</TableHead>
             <TableHead>codigo</TableHead>
@@ -101,6 +102,7 @@ export function PaymentTable({ payments }: ClientTableProps) {
           {payments.map((client) => (
             <TableRow key={client.id}>
               <TableCell className="font-medium">{client.name}</TableCell>
+              <TableCell className="text-sm">{client.cedula}</TableCell>
               <TableCell className="text-sm">{client.amount}</TableCell>
               <TableCell className="text-sm">{client.bank}</TableCell>
               <TableCell>{client.transaction_code}</TableCell>
@@ -118,8 +120,7 @@ export function PaymentTable({ payments }: ClientTableProps) {
                         amount: client.amount,
                       })
                     }
-                    className="bg-green-400 hover:bg-green-400 cursor-pointer"
-                  >
+                    className="bg-green-400 hover:bg-green-400 cursor-pointer">
                     <Check />
                   </Button>
                 )}
@@ -129,8 +130,7 @@ export function PaymentTable({ payments }: ClientTableProps) {
                     onClick={() => {
                       changePaymentStatus([client.id], false);
                     }}
-                    className="bg-red-500 hover:bg-red-500 cursor-pointer"
-                  >
+                    className="bg-red-500 hover:bg-red-500 cursor-pointer">
                     <X />
                   </Button>
                 )}
@@ -138,8 +138,7 @@ export function PaymentTable({ payments }: ClientTableProps) {
                 {client.status !== "EN_PROCESO" && (
                   <Button
                     onClick={() => deletePaymentTable(client.id)}
-                    className="bg-red-500 hover:bg-red-500 cursor-pointer"
-                  >
+                    className="bg-red-500 hover:bg-red-500 cursor-pointer">
                     <Trash2 />
                   </Button>
                 )}

@@ -2,6 +2,7 @@ export type Payment = {
   id: string;
   client_id: string;
   name: string;
+  cedula: string;
   amount: string;
   payment_date: string; // ISO date string
   bank: string;
@@ -25,6 +26,7 @@ export type PaymentPromise = {
   amount: string; // si luego quieres, podrías usar number en lugar de string
   bank: string;
   name: string;
+  cedula: string;
   transaction_code: string;
   status: "EN_PROCESO" | "APROBADO" | "RECHAZADO"; // puedes ampliar según tus estados
   payment_date: string; // ISO date string
