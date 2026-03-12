@@ -71,7 +71,7 @@ export default function FileInput({ onClose, onSuccess }: CsvUploadProps) {
           payment_date: payment.payment_date,
           transaction_code: payment.transaction_code,
         });
-        if (approvbe.clientId) toast.success("el pago se aprobo correctamente");
+        if (approvbe) toast.success("el pago se aprobo correctamente");
         else
           toast.error("el pago no se aprobo correctamente", {
             description: "Verifique la lista de pagos y vuelva a intentarlo",
