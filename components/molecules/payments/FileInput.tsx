@@ -54,7 +54,11 @@ export default function FileInput({ onClose, onSuccess }: CsvUploadProps) {
   const processMatchPayments = () => {
     const match = getMatchPaymentsLast6(apiPayments, payments);
     setMatchPayments(match);
-    toast.success("Los pagos se procesaron correctamente", {});
+    if (match.length > 0) {
+      toast.success("Los pagos se procesaron correctamente", {});
+    } else {
+      toast.error("No se encontraron pagos que coincidan", {});
+    }
   };
 
   const processPayments = async () => {
