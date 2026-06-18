@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
         media_id: media_id,
         caption: caption,
         mime_type: mime_type,
-        timestamp: message.timestamp,
+        timestamp: new Date(parseInt(message.timestamp) * 1000).toISOString(),
         phone_number_id: metadata?.phone_number_id,
       };
 
