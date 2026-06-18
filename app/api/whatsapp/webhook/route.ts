@@ -5,7 +5,6 @@ const MAKE_WEBHOOK_URL = process.env.MAKE_WEBHOOK_URL!;
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
-
   const mode = searchParams.get("hub.mode");
   const token = searchParams.get("hub.verify_token");
   const challenge = searchParams.get("hub.challenge");
@@ -14,34 +13,107 @@ export async function GET(req: NextRequest) {
     console.log("✅ Webhook verificado por Meta");
     return new NextResponse(challenge, { status: 200 });
   }
-
   return new NextResponse("Forbidden", { status: 403 });
 }
 
 export async function POST(req: NextRequest) {
   try {
-    // ✅ Leer como texto crudo para no alterar el payload
-    const rawBody = await req.text();
+    const rawBody = await req.json();
 
-    console.log("📨 Body recibido de Meta:", rawBody);
+    // Extraer el valor principal
+    const entry = rawBody?.entry?.[0];
+    const changes = entry?.changes?.[0];
+    const value = changes?.value;
 
-    if (!MAKE_WEBHOOK_URL) {
-      console.error("❌ MAKE_WEBHOOK_URL no está definida");
-      return new NextResponse("Config error", { status: 500 });
+    if (!value) {
+      console.log("⚠️ Payload sin value, ignorando");
+      return new NextResponse("OK", { status: 200 });
     }
 
-    const makeResponse = await fetch(MAKE_WEBHOOK_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: rawBody, // ✅ reenviar sin tocar
-    });
+    // ── CASO 1: Mensaje entrante ──────────────────────────
+    if (value.messages && value.messages.length > 0) {
+      const message = value.messages[0];
+      const contact = value.contacts?.[0];
+      const metadata = value.metadata;
 
-    console.log("✅ Make respondió con status:", makeResponse.status);
+      // Extraer contenido según tipo de mensaje
+      let content = null;
+      let media_id = null;
+      let caption = null;
+      let mime_type = null;
 
-    // Meta siempre espera un 200 rápido
+      switch (message.type) {
+        case "text":
+          content = message.text?.body;
+          break;
+        case "image":
+          media_id = message.image?.id;
+          caption = message.image?.caption;
+          mime_type = message.image?.mime_type;
+          break;
+        case "audio":
+          media_id = message.audio?.id;
+          mime_type = message.audio?.mime_type;
+          break;
+        case "video":
+          media_id = message.video?.id;
+          caption = message.video?.caption;
+          mime_type = message.video?.mime_type;
+          break;
+        case "document":
+          media_id = message.document?.id;
+          caption = message.document?.caption;
+          mime_type = message.document?.mime_type;
+          break;
+      }
+
+      // Payload limpio para Make
+      const makePayload = {
+        event_type: "message",
+        wa_message_id: message.id,
+        from: message.from,
+        wa_name: contact?.profile?.name || null,
+        message_type: message.type,
+        content: content,
+        media_id: media_id,
+        caption: caption,
+        mime_type: mime_type,
+        timestamp: message.timestamp,
+        phone_number_id: metadata?.phone_number_id,
+      };
+
+      console.log("📨 Mensaje entrante:", makePayload);
+
+      await fetch(MAKE_WEBHOOK_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(makePayload),
+      });
+    }
+
+    // ── CASO 2: Status update (delivered/read/failed) ─────
+    else if (value.statuses && value.statuses.length > 0) {
+      const status = value.statuses[0];
+
+      const makePayload = {
+        event_type: "status_update",
+        wa_message_id: status.id,
+        status: status.status, // sent, delivered, read, failed
+        timestamp: status.timestamp,
+        recipient_id: status.recipient_id,
+      };
+
+      console.log("📊 Status update:", makePayload);
+
+      await fetch(MAKE_WEBHOOK_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(makePayload),
+      });
+    } else {
+      console.log("⚠️ Evento no reconocido, ignorando");
+    }
+
     return new NextResponse("OK", { status: 200 });
   } catch (error) {
     console.error("❌ Error en webhook:", error);
