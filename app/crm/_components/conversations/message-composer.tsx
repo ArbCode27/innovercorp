@@ -23,12 +23,17 @@ export const MessageComposer = ({
 
   const handleSendMessage = async () => {
     const content = value.trim();
-    if (!content || disabled) return;
+    if (!content || disabled || isSending) return;
 
     setIsSending(true);
-    await onSend(content);
-    setValue("");
-    setIsSending(false);
+    try {
+      await onSend(content);
+      setValue("");
+    } catch {
+      // The parent component owns user-facing error feedback.
+    } finally {
+      setIsSending(false);
+    }
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {

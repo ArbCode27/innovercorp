@@ -62,6 +62,7 @@ export const CrmShell = () => {
                 selectedClient={crm.selectedClient}
                 selectedConversationId={crm.selectedConversationId}
                 isMessagesLoading={crm.isMessagesLoading}
+                isSendingMessage={crm.isSendingMessage}
                 searchTerm={crm.searchTerm}
                 conversationFilter={crm.conversationFilter}
                 selectedLabelId={crm.selectedLabelId}

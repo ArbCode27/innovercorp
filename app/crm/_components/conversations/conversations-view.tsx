@@ -19,6 +19,7 @@ interface ConversationsViewProps {
   selectedClient: Client | null;
   selectedConversationId: number | null;
   isMessagesLoading: boolean;
+  isSendingMessage: boolean;
   searchTerm: string;
   conversationFilter: ConversationFilter;
   selectedLabelId: number | null;
@@ -50,6 +51,7 @@ export const ConversationsView = ({
   selectedClient,
   selectedConversationId,
   isMessagesLoading,
+  isSendingMessage,
   searchTerm,
   conversationFilter,
   selectedLabelId,
@@ -113,6 +115,7 @@ export const ConversationsView = ({
         currentAgent={currentAgent}
         tickets={selectedTickets}
         isMessagesLoading={isMessagesLoading}
+        isSendingMessage={isSendingMessage}
         onSendMessage={onSendMessage}
         onAddNote={onAddNote}
         onTakeControl={onTakeControl}

@@ -1,28 +1,56 @@
+"use client";
+
+import { useCallback, useState } from "react";
+import type { Message } from "../_lib/types";
+
+interface SendMessageInput {
+  to: string;
+  message: string;
+  conversation_id: number;
+  agent_id?: number;
+}
+
+interface SendMessageResponse {
+  success: true;
+  wa_message_id: string | null;
+  message: Message;
+}
+
 export function useSendMessage() {
-  const sendMessage = async ({
-    to,
-    message,
-    conversation_id,
-    agent_id,
-  }: {
-    to: string;
-    message: string;
-    conversation_id: number;
-    agent_id?: number;
-  }) => {
-    const res = await fetch("/api/whatsapp/send", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ to, message, conversation_id, agent_id }),
-    });
+  const [isSending, setIsSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-    if (!res.ok) {
-      const error = await res.json();
-      throw new Error(error.error || "Error al enviar mensaje");
+  const sendMessage = useCallback(async (input: SendMessageInput) => {
+    setIsSending(true);
+    setError(null);
+
+    try {
+      const res = await fetch("/api/whatsapp/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...input,
+          message: input.message.trim(),
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Error al enviar mensaje");
+      }
+
+      return data as SendMessageResponse;
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Error inesperado al enviar mensaje";
+
+      setError(message);
+      throw new Error(message);
+    } finally {
+      setIsSending(false);
     }
+  }, []);
 
-    return res.json();
-  };
-
-  return { sendMessage };
+  return { sendMessage, isSending, error };
 }

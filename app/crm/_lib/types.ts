@@ -51,13 +51,15 @@ export interface Client {
 export interface Conversation {
   id: number;
   client_id: number | null;
-  phone: string | null;
+  phone?: string | null;
   status: ConversationStatus;
   human_mode: boolean;
   label_ids: number[];
   preview: string | null;
   unread: number | null;
   agent_id: number | null;
+  wa_phone_number_id?: string | null;
+  last_message_at?: string | null;
   updated_at: string | null;
   created_at: string | null;
 }
@@ -65,9 +67,11 @@ export interface Conversation {
 export interface Message {
   id: number;
   conversation_id: number;
+  wa_message_id?: string | null;
   type: MessageType;
   content: string;
   sender_type: MessageSenderType;
+  status?: "sent" | "delivered" | "read" | "failed" | null;
   created_at: string | null;
 }
 

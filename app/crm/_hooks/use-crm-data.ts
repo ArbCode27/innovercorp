@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { crmService } from "../_lib/crm-service";
+import { useSendMessage } from "./use-send-message";
 import type {
   Agent,
   Client,
@@ -36,6 +37,8 @@ export const useCrmData = (agent: Agent | null) => {
   const [conversationFilter, setConversationFilter] =
     useState<ConversationFilter>("all");
   const [selectedLabelId, setSelectedLabelId] = useState<number | null>(null);
+  const { sendMessage: sendWhatsAppMessage, isSending: isSendingMessage } =
+    useSendMessage();
 
   const loadData = useCallback(async () => {
     if (!agent) return;
@@ -130,19 +133,33 @@ export const useCrmData = (agent: Agent | null) => {
   const sendMessage = async (content: string) => {
     if (!selectedConversation) return;
 
-    const senderType = selectedConversation.human_mode ? "agent" : "bot";
-    const saved = await crmService.sendMessage(
-      selectedConversation.id,
-      content,
-      senderType
-    );
+    const trimmedContent = content.trim();
+    if (!trimmedContent) {
+      throw new Error("El mensaje no puede estar vacío");
+    }
 
-    setMessages((current) => [...current, saved]);
+    const to = selectedConversation.phone || selectedClient?.phone;
+    if (!to) {
+      throw new Error("La conversación no tiene un número de teléfono válido");
+    }
+
+    const response = await sendWhatsAppMessage({
+      to,
+      message: trimmedContent,
+      conversation_id: selectedConversation.id,
+      agent_id: selectedConversation.human_mode ? agent?.id : undefined,
+    });
+
+    setMessages((current) => [...current, response.message]);
     setData((current) => ({
       ...current,
       conversations: current.conversations.map((conversation) =>
         conversation.id === selectedConversation.id
-          ? { ...conversation, preview: content, updated_at: new Date().toISOString() }
+          ? {
+              ...conversation,
+              preview: trimmedContent,
+              updated_at: new Date().toISOString(),
+            }
           : conversation
       ),
     }));
@@ -287,6 +304,7 @@ export const useCrmData = (agent: Agent | null) => {
     ticketsByClientId,
     isLoading,
     isMessagesLoading,
+    isSendingMessage,
     searchTerm,
     conversationFilter,
     selectedLabelId,

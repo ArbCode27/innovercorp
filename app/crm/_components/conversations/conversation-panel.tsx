@@ -31,6 +31,7 @@ interface ConversationPanelProps {
   currentAgent: Agent;
   tickets: Ticket[];
   isMessagesLoading: boolean;
+  isSendingMessage: boolean;
   onSendMessage: (content: string) => Promise<void>;
   onAddNote: (content: string) => Promise<void>;
   onTakeControl: () => Promise<void>;
@@ -52,6 +53,7 @@ export const ConversationPanel = ({
   currentAgent,
   tickets,
   isMessagesLoading,
+  isSendingMessage,
   onSendMessage,
   onAddNote,
   onTakeControl,
@@ -81,6 +83,7 @@ export const ConversationPanel = ({
       await onSendMessage(content);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "No se pudo enviar el mensaje");
+      throw error;
     }
   };
 
@@ -119,6 +122,7 @@ export const ConversationPanel = ({
           agentName={`${currentAgent.name} (tú)`}
         />
         <MessageComposer
+          disabled={isSendingMessage}
           onSend={handleSendMessage}
           onOpenLabels={() => setIsLabelDialogOpen(true)}
           onOpenNote={() => setIsNoteDialogOpen(true)}
