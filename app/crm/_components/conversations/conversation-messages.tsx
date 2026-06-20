@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { MessageCircle } from "lucide-react";
 import type { Message } from "../../_lib/types";
 import { EmptyState } from "../shared/empty-state";
@@ -17,6 +18,12 @@ export const ConversationMessages = ({
   isLoading,
   agentName,
 }: ConversationMessagesProps) => {
+  const endRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [messages.length]);
+
   if (isLoading) return <LoadingState label="Cargando mensajes..." />;
 
   if (!messages.length) {
@@ -30,7 +37,7 @@ export const ConversationMessages = ({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-5">
+    <div className="crm-scrollbar flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto bg-[radial-gradient(circle_at_top,_rgba(59,130,246,0.06),_transparent_28rem)] p-5">
       <div className="flex items-center gap-3 text-[11px] text-slate-600">
         <span className="h-px flex-1 bg-white/10" />
         Conversación
@@ -39,6 +46,7 @@ export const ConversationMessages = ({
       {messages.map((message) => (
         <MessageBubble key={message.id} message={message} agentName={agentName} />
       ))}
+      <div ref={endRef} />
     </div>
   );
 };

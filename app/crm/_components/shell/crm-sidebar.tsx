@@ -1,9 +1,18 @@
 "use client";
 
-import { Bot, Headphones, Layers, Tags, Ticket, Users } from "lucide-react";
+import { Bot, Headphones, Layers, LogOut, Tags, Ticket, Users } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { CRM_NAV_ITEMS } from "../../_lib/constants";
 import type { Agent, CrmView } from "../../_lib/types";
 import { AvatarInitials } from "../shared/avatar-initials";
+import { StatusBadge } from "../shared/status-badge";
 import { CrmNavItem } from "./crm-nav-item";
 
 interface CrmSidebarProps {
@@ -11,6 +20,7 @@ interface CrmSidebarProps {
   activeView: CrmView;
   onSelectView: (view: CrmView) => void;
   onToggleStatus: () => void;
+  onLogout: () => void;
 }
 
 const icons = {
@@ -26,6 +36,7 @@ export const CrmSidebar = ({
   activeView,
   onSelectView,
   onToggleStatus,
+  onLogout,
 }: CrmSidebarProps) => (
   <aside className="flex w-16 shrink-0 flex-col items-center border-r border-white/10 bg-[#161922] py-4">
     <div className="mb-5 flex size-10 items-center justify-center rounded-xl bg-blue-500 text-white">
@@ -45,20 +56,51 @@ export const CrmSidebar = ({
       ))}
     </nav>
 
-    <button
-      type="button"
-      onClick={onToggleStatus}
-      className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
-      title="Cambiar mi estado"
-      aria-label="Cambiar mi estado"
-    >
-      <AvatarInitials
-        name={agent.name}
-        initials={agent.initials}
-        color={agent.avatar_color}
-        bg={agent.avatar_bg}
-        size="md"
-      />
-    </button>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
+          title="Abrir menú de agente"
+          aria-label="Abrir menú de agente"
+        >
+          <AvatarInitials
+            name={agent.name}
+            initials={agent.initials}
+            color={agent.avatar_color}
+            bg={agent.avatar_bg}
+            size="md"
+          />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        side="right"
+        align="end"
+        className="w-60 border-white/10 bg-[#161922] text-slate-100"
+      >
+        <DropdownMenuLabel>
+          <span className="block truncate text-sm font-medium text-slate-100">
+            {agent.name}
+          </span>
+          <span className="mt-1 flex items-center">
+            <StatusBadge status={agent.status} />
+          </span>
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator className="bg-white/10" />
+        <DropdownMenuItem
+          onClick={onToggleStatus}
+          className="cursor-pointer focus:bg-white/10"
+        >
+          Cambiar mi estado
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={onLogout}
+          className="cursor-pointer text-red-300 focus:bg-red-400/10 focus:text-red-200"
+        >
+          <LogOut className="size-4" aria-hidden="true" />
+          Salir
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   </aside>
 );

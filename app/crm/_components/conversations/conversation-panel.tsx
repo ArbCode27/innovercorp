@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { toast } from "sonner";
+import { Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -10,6 +11,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import type { Agent, Client, Conversation, Label, Message, Ticket } from "../../_lib/types";
 import { AssignAgentDialog } from "../agents/assign-agent-dialog";
@@ -102,7 +111,7 @@ export const ConversationPanel = ({
   };
 
   return (
-    <section className="flex min-w-0 flex-1 bg-[#0f1117]">
+    <section className="relative flex min-w-0 flex-1 bg-[#0f1117]">
       <div className="flex min-w-0 flex-1 flex-col">
         <ConversationHeader
           conversation={conversation}
@@ -123,11 +132,45 @@ export const ConversationPanel = ({
         />
         <MessageComposer
           disabled={isSendingMessage}
+          readOnly={!conversation.human_mode}
+          placeholder={
+            conversation.human_mode
+              ? "Responde como agente..."
+              : "Toma control de la conversación para responder..."
+          }
           onSend={handleSendMessage}
-          onOpenLabels={() => setIsLabelDialogOpen(true)}
-          onOpenNote={() => setIsNoteDialogOpen(true)}
         />
       </div>
+      <Sheet>
+        <SheetTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="absolute right-4 top-24 z-10 size-9 border-white/10 bg-[#161922]/90 text-slate-300 shadow-lg backdrop-blur lg:hidden"
+            aria-label="Ver ficha del cliente"
+          >
+            <Info className="size-4" aria-hidden="true" />
+          </Button>
+        </SheetTrigger>
+        <SheetContent className="w-[88vw] border-white/10 bg-[#161922] p-0 text-slate-100 sm:max-w-sm">
+          <SheetHeader className="border-b border-white/10 p-4 text-left">
+            <SheetTitle className="text-slate-100">Ficha de conversación</SheetTitle>
+            <SheetDescription className="text-slate-500">
+              Cliente, etiquetas, tickets y agentes disponibles.
+            </SheetDescription>
+          </SheetHeader>
+          <ConversationDetails
+            conversation={conversation}
+            client={client}
+            labels={allLabels}
+            tickets={tickets}
+            agents={agents}
+            className="block h-full w-full border-l-0 bg-transparent lg:hidden"
+            onToggleLabel={onQuickToggleLabel}
+          />
+        </SheetContent>
+      </Sheet>
       <ConversationDetails
         conversation={conversation}
         client={client}

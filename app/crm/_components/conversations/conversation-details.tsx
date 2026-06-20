@@ -1,6 +1,13 @@
 "use client";
 
-import type { Agent, Client, Conversation, Label, Ticket } from "../../_lib/types";
+import { cn } from "@/lib/utils";
+import type {
+  Agent,
+  Client,
+  Conversation,
+  Label,
+  Ticket,
+} from "../../_lib/types";
 import { formatCrmDate } from "../../_lib/formatters";
 import { AvatarInitials } from "../shared/avatar-initials";
 import { LabelChip } from "../shared/label-chip";
@@ -12,6 +19,7 @@ interface ConversationDetailsProps {
   labels: Label[];
   tickets: Ticket[];
   agents: Agent[];
+  className?: string;
   onToggleLabel: (labelId: number) => Promise<void>;
 }
 
@@ -25,17 +33,24 @@ export const ConversationDetails = ({
   labels,
   tickets,
   agents,
+  className,
   onToggleLabel,
 }: ConversationDetailsProps) => {
   const activeTicket =
-    tickets.find((ticket) => ticket.status !== "Resuelto") || tickets[0] || null;
+    tickets.find((ticket) => ticket.status !== "Resuelto") ||
+    tickets[0] ||
+    null;
   const onlineAgents = agents.filter(
-    (agent) => agent.status === "online" || agent.status === "busy"
+    (agent) => agent.status === "online" || agent.status === "busy",
   );
 
   return (
-    <aside className="hidden w-72 shrink-0 overflow-y-auto border-l border-white/10 bg-[#161922] lg:block">
-      <section className="border-b border-white/10 p-4">
+    <aside
+      className={cn(
+        "crm-scrollbar hidden w-72 shrink-0 overflow-y-auto border-l border-white/10 bg-[#161922] lg:block",
+        className,
+      )}>
+      {/* <section className="border-b border-white/10 p-4">
         <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
           Etiquetas
         </h3>
@@ -53,7 +68,7 @@ export const ConversationDetails = ({
             <p className="text-xs text-slate-600">Sin etiquetas</p>
           )}
         </div>
-      </section>
+      </section> */}
 
       <section className="space-y-4 border-b border-white/10 p-4">
         <h3 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
@@ -67,7 +82,9 @@ export const ConversationDetails = ({
             </div>
             <div className={fieldClass}>
               <p className={labelClass}>Teléfono</p>
-              <p className="font-mono text-sm text-slate-300">{client.phone || "—"}</p>
+              <p className="font-mono text-sm text-slate-300">
+                {client.phone || "—"}
+              </p>
             </div>
             <div className={fieldClass}>
               <p className={labelClass}>Zona</p>
@@ -84,7 +101,8 @@ export const ConversationDetails = ({
           </>
         ) : (
           <p className="text-sm text-amber-300">
-            Número desconocido. Crea o asocia un cliente manualmente desde la vista Clientes.
+            Número desconocido. Crea o asocia un cliente manualmente desde la
+            vista Clientes.
           </p>
         )}
       </section>
@@ -95,10 +113,14 @@ export const ConversationDetails = ({
         </h3>
         {activeTicket ? (
           <div className="space-y-2">
-            <p className="font-mono text-sm text-slate-200">{activeTicket.id}</p>
+            <p className="font-mono text-sm text-slate-200">
+              {activeTicket.id}
+            </p>
             <p className="text-sm text-slate-300">{activeTicket.type}</p>
             <StatusBadge status={activeTicket.status} />
-            <p className="text-xs text-slate-500">Agente: {activeTicket.agent}</p>
+            <p className="text-xs text-slate-500">
+              Agente: {activeTicket.agent}
+            </p>
           </div>
         ) : (
           <p className="text-xs text-slate-600">Sin tickets activos</p>

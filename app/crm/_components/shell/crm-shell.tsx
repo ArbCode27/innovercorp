@@ -11,7 +11,6 @@ import { ClientsView } from "../clients/clients-view";
 import { ConversationsView } from "../conversations/conversations-view";
 import { LabelsView } from "../labels/labels-view";
 import { TicketsView } from "../tickets/tickets-view";
-import { CrmHeader } from "./crm-header";
 import { CrmSidebar } from "./crm-sidebar";
 
 export const CrmShell = () => {
@@ -40,9 +39,9 @@ export const CrmShell = () => {
         activeView={activeView}
         onSelectView={handleSelectView}
         onToggleStatus={auth.updateStatus}
+        onLogout={auth.logout}
       />
       <div className="flex min-w-0 flex-1 flex-col">
-        <CrmHeader activeView={activeView} agent={auth.agent} onLogout={auth.logout} />
         {crm.isLoading ? (
           <LoadingState label="Conectando con Supabase..." />
         ) : (

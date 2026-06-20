@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { createClient } from "@supabase/supabase-js";
 import { crmService } from "../_lib/crm-service";
 import { useSendMessage } from "./use-send-message";
 import type {
@@ -19,6 +20,12 @@ import type {
   UpsertAgentInput,
 } from "../_lib/types";
 
+// ── Supabase client para Realtime ─────────────────────────
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+);
+
 const emptyData: CrmData = {
   agents: [],
   clients: [],
@@ -30,7 +37,9 @@ const emptyData: CrmData = {
 export const useCrmData = (agent: Agent | null) => {
   const [data, setData] = useState<CrmData>(emptyData);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [selectedConversationId, setSelectedConversationId] = useState<number | null>(null);
+  const [selectedConversationId, setSelectedConversationId] = useState<
+    number | null
+  >(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isMessagesLoading, setIsMessagesLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -40,6 +49,127 @@ export const useCrmData = (agent: Agent | null) => {
   const { sendMessage: sendWhatsAppMessage, isSending: isSendingMessage } =
     useSendMessage();
 
+  // Ref para acceder al selectedConversationId dentro de los listeners de Realtime
+  const selectedConversationIdRef = useRef<number | null>(null);
+  useEffect(() => {
+    selectedConversationIdRef.current = selectedConversationId;
+  }, [selectedConversationId]);
+
+  // ── REALTIME: mensajes nuevos ──────────────────────────
+  useEffect(() => {
+    const channel = supabase
+      .channel("realtime:messages")
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "messages",
+        },
+        (payload) => {
+          const newMessage = payload.new as Message;
+
+          // Solo agregar si pertenece a la conversación actualmente abierta
+          if (
+            newMessage.conversation_id === selectedConversationIdRef.current
+          ) {
+            setMessages((current) => {
+              // Evitar duplicados (por si ya lo agregamos optimisticamente al enviar)
+              const exists = current.some((m) => m.id === newMessage.id);
+              if (exists) return current;
+              return [...current, newMessage];
+            });
+          }
+        },
+      )
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          console.log("✅ Realtime mensajes conectado");
+        }
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  // ── REALTIME: conversaciones ───────────────────────────
+  useEffect(() => {
+    const channel = supabase
+      .channel("realtime:conversations")
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "conversations",
+        },
+        (payload) => {
+          const newConv = payload.new as Conversation;
+          setData((current) => ({
+            ...current,
+            conversations: [newConv, ...current.conversations],
+          }));
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "conversations",
+        },
+        (payload) => {
+          const updated = payload.new as Conversation;
+          setData((current) => ({
+            ...current,
+            conversations: current.conversations.map((conv) =>
+              conv.id === updated.id ? { ...conv, ...updated } : conv,
+            ),
+          }));
+        },
+      )
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          console.log("✅ Realtime conversaciones conectado");
+        }
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  // ── REALTIME: clientes nuevos ──────────────────────────
+  useEffect(() => {
+    const channel = supabase
+      .channel("realtime:clients")
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "clients",
+        },
+        (payload) => {
+          const newClient = payload.new as Client;
+          setData((current) => ({
+            ...current,
+            clients: [...current.clients, newClient],
+          }));
+        },
+      )
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          console.log("✅ Realtime clientes conectado");
+        }
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
   const loadData = useCallback(async () => {
     if (!agent) return;
 
@@ -48,7 +178,9 @@ export const useCrmData = (agent: Agent | null) => {
       const nextData = await crmService.loadAll(agent);
       setData(nextData);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "No se pudo cargar el CRM");
+      toast.error(
+        error instanceof Error ? error.message : "No se pudo cargar el CRM",
+      );
     } finally {
       setIsLoading(false);
     }
@@ -61,16 +193,17 @@ export const useCrmData = (agent: Agent | null) => {
   const selectedConversation = useMemo(
     () =>
       data.conversations.find(
-        (conversation) => conversation.id === selectedConversationId
+        (conversation) => conversation.id === selectedConversationId,
       ) || null,
-    [data.conversations, selectedConversationId]
+    [data.conversations, selectedConversationId],
   );
 
   const selectedClient = useMemo(() => {
     if (!selectedConversation?.client_id) return null;
     return (
-      data.clients.find((client) => client.id === selectedConversation.client_id) ||
-      null
+      data.clients.find(
+        (client) => client.id === selectedConversation.client_id,
+      ) || null
     );
   }, [data.clients, selectedConversation]);
 
@@ -78,7 +211,9 @@ export const useCrmData = (agent: Agent | null) => {
     const query = searchTerm.trim().toLowerCase();
 
     return data.conversations.filter((conversation) => {
-      const client = data.clients.find((item) => item.id === conversation.client_id);
+      const client = data.clients.find(
+        (item) => item.id === conversation.client_id,
+      );
       const name = client?.name || "Número desconocido";
       const matchesSearch =
         !query ||
@@ -87,13 +222,15 @@ export const useCrmData = (agent: Agent | null) => {
 
       if (!matchesSearch) return false;
       if (conversationFilter === "bot" && conversation.human_mode) return false;
-      if (conversationFilter === "human" && !conversation.human_mode) return false;
-      if (conversationFilter === "resolved" && conversation.status !== "resuelto") {
+      if (conversationFilter === "human" && !conversation.human_mode)
         return false;
-      }
-      if (selectedLabelId && !conversation.label_ids.includes(selectedLabelId)) {
+      if (
+        conversationFilter === "resolved" &&
+        conversation.status !== "resuelto"
+      )
         return false;
-      }
+      if (selectedLabelId && !conversation.label_ids.includes(selectedLabelId))
+        return false;
 
       return true;
     });
@@ -110,13 +247,15 @@ export const useCrmData = (agent: Agent | null) => {
     setIsMessagesLoading(true);
 
     try {
-      const conversation = data.conversations.find((item) => item.id === conversationId);
+      const conversation = data.conversations.find(
+        (item) => item.id === conversationId,
+      );
       if (conversation?.unread) {
         await crmService.clearUnread(conversationId);
         setData((current) => ({
           ...current,
           conversations: current.conversations.map((item) =>
-            item.id === conversationId ? { ...item, unread: 0 } : item
+            item.id === conversationId ? { ...item, unread: 0 } : item,
           ),
         }));
       }
@@ -124,7 +263,11 @@ export const useCrmData = (agent: Agent | null) => {
       const loadedMessages = await crmService.loadMessages(conversationId);
       setMessages(loadedMessages);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "No se pudo abrir la conversación");
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "No se pudo abrir la conversación",
+      );
     } finally {
       setIsMessagesLoading(false);
     }
@@ -150,7 +293,13 @@ export const useCrmData = (agent: Agent | null) => {
       agent_id: selectedConversation.human_mode ? agent?.id : undefined,
     });
 
-    setMessages((current) => [...current, response.message]);
+    // Agregar optimistamente — Realtime lo deduplicará si llega de nuevo
+    setMessages((current) => {
+      const exists = current.some((m) => m.id === response.message.id);
+      if (exists) return current;
+      return [...current, response.message];
+    });
+
     setData((current) => ({
       ...current,
       conversations: current.conversations.map((conversation) =>
@@ -160,7 +309,7 @@ export const useCrmData = (agent: Agent | null) => {
               preview: trimmedContent,
               updated_at: new Date().toISOString(),
             }
-          : conversation
+          : conversation,
       ),
     }));
   };
@@ -177,7 +326,7 @@ export const useCrmData = (agent: Agent | null) => {
     setData((current) => ({
       ...current,
       conversations: current.conversations.map((item) =>
-        item.id === conversation.id ? conversation : item
+        item.id === conversation.id ? conversation : item,
       ),
     }));
   };
@@ -185,7 +334,9 @@ export const useCrmData = (agent: Agent | null) => {
   const takeControl = async () => {
     if (!selectedConversation) return;
 
-    await crmService.updateConversation(selectedConversation.id, { human_mode: true });
+    await crmService.updateConversation(selectedConversation.id, {
+      human_mode: true,
+    });
     updateConversationLocal({ ...selectedConversation, human_mode: true });
     toast.warning("Control tomado");
   };
@@ -193,7 +344,9 @@ export const useCrmData = (agent: Agent | null) => {
   const reactivateBot = async () => {
     if (!selectedConversation) return;
 
-    await crmService.updateConversation(selectedConversation.id, { human_mode: false });
+    await crmService.updateConversation(selectedConversation.id, {
+      human_mode: false,
+    });
     updateConversationLocal({ ...selectedConversation, human_mode: false });
     toast.success("Bot IA reactivado");
   };
@@ -201,7 +354,9 @@ export const useCrmData = (agent: Agent | null) => {
   const resolveConversation = async () => {
     if (!selectedConversation) return;
 
-    await crmService.updateConversation(selectedConversation.id, { status: "resuelto" });
+    await crmService.updateConversation(selectedConversation.id, {
+      status: "resuelto",
+    });
     await crmService.resolveTicketForClient(selectedConversation.client_id);
     updateConversationLocal({ ...selectedConversation, status: "resuelto" });
     await loadData();
@@ -211,7 +366,9 @@ export const useCrmData = (agent: Agent | null) => {
   const updateLabels = async (labelIds: number[]) => {
     if (!selectedConversation) return;
 
-    await crmService.updateConversation(selectedConversation.id, { label_ids: labelIds });
+    await crmService.updateConversation(selectedConversation.id, {
+      label_ids: labelIds,
+    });
     updateConversationLocal({ ...selectedConversation, label_ids: labelIds });
     toast.success("Etiquetas actualizadas");
   };
@@ -238,13 +395,19 @@ export const useCrmData = (agent: Agent | null) => {
 
   const createClient = async (input: CreateClientInput) => {
     const saved = await crmService.createClient(input, data.clients.length);
-    setData((current) => ({ ...current, clients: [...current.clients, saved] }));
+    setData((current) => ({
+      ...current,
+      clients: [...current.clients, saved],
+    }));
     toast.success(`${saved.name} agregado`);
   };
 
   const createTicket = async (input: CreateTicketInput) => {
     const saved = await crmService.createTicket(input);
-    setData((current) => ({ ...current, tickets: [saved, ...current.tickets] }));
+    setData((current) => ({
+      ...current,
+      tickets: [saved, ...current.tickets],
+    }));
     toast.success(`${saved.id} creado`);
   };
 
@@ -267,20 +430,26 @@ export const useCrmData = (agent: Agent | null) => {
   };
 
   const toggleAgentStatus = async (targetAgent: Agent) => {
-    const nextStatus = targetAgent.status === "inactive" ? "offline" : "inactive";
+    const nextStatus =
+      targetAgent.status === "inactive" ? "offline" : "inactive";
     await crmService.updateAgentStatus(targetAgent.id, nextStatus);
     await loadData();
-    toast.info(nextStatus === "inactive" ? "Agente desactivado" : "Agente activado");
+    toast.info(
+      nextStatus === "inactive" ? "Agente desactivado" : "Agente activado",
+    );
   };
 
   const clientsById = useMemo(
-    () => new Map<number, Client>(data.clients.map((client) => [client.id, client])),
-    [data.clients]
+    () =>
+      new Map<number, Client>(
+        data.clients.map((client) => [client.id, client]),
+      ),
+    [data.clients],
   );
 
   const labelsById = useMemo(
     () => new Map<number, Label>(data.labels.map((label) => [label.id, label])),
-    [data.labels]
+    [data.labels],
   );
 
   const ticketsByClientId = useMemo(() => {

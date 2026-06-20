@@ -1,29 +1,31 @@
 "use client";
 
 import { KeyboardEvent, useState } from "react";
-import { FileText, Paperclip, Send, Tag } from "lucide-react";
+import { Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 
 interface MessageComposerProps {
   disabled?: boolean;
+  readOnly?: boolean;
+  placeholder?: string;
   onSend: (content: string) => Promise<void>;
-  onOpenLabels: () => void;
-  onOpenNote: () => void;
 }
 
 export const MessageComposer = ({
   disabled,
+  readOnly = false,
+  placeholder = "Escribe un mensaje...",
   onSend,
-  onOpenLabels,
-  onOpenNote,
 }: MessageComposerProps) => {
   const [value, setValue] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const isInputLocked = disabled || isSending || readOnly;
 
   const handleSendMessage = async () => {
     const content = value.trim();
-    if (!content || disabled || isSending) return;
+    if (!content || isInputLocked) return;
 
     setIsSending(true);
     try {
@@ -37,6 +39,8 @@ export const MessageComposer = ({
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (readOnly) return;
+
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       handleSendMessage();
@@ -44,39 +48,35 @@ export const MessageComposer = ({
   };
 
   return (
-    <div className="shrink-0 border-t border-white/10 bg-[#161922] p-4">
-      <div className="mb-2 flex flex-wrap gap-2">
-        <Button type="button" variant="outline" size="sm" className="border-white/10 bg-transparent text-xs text-slate-400">
-          <Paperclip className="mr-1 size-3" aria-hidden="true" />
-          Adjuntar
-        </Button>
-        <Button type="button" variant="outline" size="sm" onClick={onOpenNote} className="border-white/10 bg-transparent text-xs text-slate-400">
-          <FileText className="mr-1 size-3" aria-hidden="true" />
-          Nota interna
-        </Button>
-        <Button type="button" variant="outline" size="sm" onClick={onOpenLabels} className="border-white/10 bg-transparent text-xs text-slate-400">
-          <Tag className="mr-1 size-3" aria-hidden="true" />
-          Etiqueta
-        </Button>
-      </div>
+    <div className="shrink-0 border-t border-white/10 bg-[#161922]/95 p-4 backdrop-blur">
       <div className="flex items-end gap-2">
         <Textarea
           value={value}
           onChange={(event) => setValue(event.target.value)}
           onKeyDown={handleKeyDown}
+          readOnly={readOnly}
           disabled={disabled || isSending}
-          placeholder="Escribe un mensaje..."
-          className="min-h-10 max-h-32 resize-none border-white/10 bg-[#1d2130] text-slate-100 placeholder:text-slate-600"
+          placeholder={placeholder}
+          className={`min-h-11 max-h-32 resize-none rounded-2xl border-white/10 text-slate-100 placeholder:text-slate-600 focus-visible:ring-blue-400 ${
+            readOnly
+              ? "cursor-not-allowed bg-[#181b24] text-slate-500"
+              : "bg-[#1d2130]"
+          }`}
           aria-label="Mensaje"
+          aria-readonly={readOnly}
         />
         <Button
           type="button"
           onClick={handleSendMessage}
-          disabled={disabled || isSending}
-          className="size-10 rounded-full bg-blue-500 p-0"
-          aria-label="Enviar mensaje"
+          disabled={isInputLocked}
+          className="size-11 rounded-full bg-blue-500 p-0 hover:bg-blue-400 disabled:bg-blue-500/50"
+          aria-label={isSending ? "Enviando mensaje" : "Enviar mensaje"}
         >
-          <Send className="size-4" aria-hidden="true" />
+          {isSending ? (
+            <Spinner className="size-4 text-white" aria-hidden="true" />
+          ) : (
+            <Send className="size-4" aria-hidden="true" />
+          )}
         </Button>
       </div>
     </div>
