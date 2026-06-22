@@ -14,6 +14,8 @@ export type MessageType = "in" | "out" | "note";
 
 export type MessageSenderType = "client" | "agent" | "bot";
 
+export type MessageMediaType = "audio" | "image" | "video" | "document";
+
 export type TicketStatus = "Abierto" | "En proceso" | "Resuelto";
 
 export type CrmView = "conversations" | "clients" | "tickets" | "labels" | "agents";
@@ -70,6 +72,8 @@ export interface Message {
   wa_message_id?: string | null;
   type: MessageType;
   content: string;
+  media_url?: string | null;
+  media_type?: MessageMediaType | null;
   sender_type: MessageSenderType;
   status?: "sent" | "delivered" | "read" | "failed" | null;
   created_at: string | null;

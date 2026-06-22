@@ -1,6 +1,7 @@
 import { AlertCircle, Bot, Check, CheckCheck, FileText } from "lucide-react";
 import type { Message } from "../../_lib/types";
 import { formatCrmTime } from "../../_lib/formatters";
+import { MessageContent } from "./message-content";
 
 interface MessageBubbleProps {
   message: Message;
@@ -26,6 +27,8 @@ export const MessageBubble = ({ message, agentName }: MessageBubbleProps) => {
 
   const isOutgoing = message.type === "out";
   const isBot = isOutgoing && message.sender_type === "bot";
+  const isImageMessage =
+    message.media_type === "image" && Boolean(message.media_url?.trim());
   const senderLabel = isOutgoing ? (isBot ? "Bot IA" : agentName) : "Cliente";
   const status = message.status || "sent";
   const StatusIcon =
@@ -35,8 +38,7 @@ export const MessageBubble = ({ message, agentName }: MessageBubbleProps) => {
     <div
       className={`flex max-w-[82%] flex-col gap-1 sm:max-w-[72%] ${
         isOutgoing ? "ml-auto items-end" : "mr-auto items-start"
-      }`}
-    >
+      }`}>
       <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
         <span>{senderLabel}</span>
         {isBot ? (
@@ -46,15 +48,18 @@ export const MessageBubble = ({ message, agentName }: MessageBubbleProps) => {
           </span>
         ) : null}
       </div>
-      <div
-        className={`rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed shadow-sm ${
-          isOutgoing
-            ? "rounded-br-md bg-blue-500 text-white shadow-blue-950/20"
-            : "rounded-bl-md border border-white/10 bg-[#1d2130] text-slate-100"
-        }`}
-      >
-        {message.content}
-      </div>
+      {isImageMessage ? (
+        <MessageContent message={message} isOutgoing={isOutgoing} />
+      ) : (
+        <div
+          className={`rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed shadow-sm ${
+            isOutgoing
+              ? "rounded-br-md bg-blue-500 text-white shadow-blue-950/20"
+              : "rounded-bl-md border border-white/10 bg-[#1d2130] text-slate-100"
+          }`}>
+          <MessageContent message={message} isOutgoing={isOutgoing} />
+        </div>
+      )}
       <span className="flex items-center gap-1 text-[10px] text-slate-600">
         {formatCrmTime(message.created_at)}
         {isOutgoing ? (
