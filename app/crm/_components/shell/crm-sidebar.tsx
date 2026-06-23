@@ -9,11 +9,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { CRM_MENU, CRM_MENU_ITEM, CRM_SURFACES } from "../../_lib/crm-theme";
 import { CRM_NAV_ITEMS } from "../../_lib/constants";
 import type { Agent, CrmView } from "../../_lib/types";
 import { AvatarInitials } from "../shared/avatar-initials";
 import { StatusBadge } from "../shared/status-badge";
 import { CrmNavItem } from "./crm-nav-item";
+import { CrmThemeToggle } from "./crm-theme-toggle";
 
 interface CrmSidebarProps {
   agent: Agent;
@@ -38,8 +40,9 @@ export const CrmSidebar = ({
   onToggleStatus,
   onLogout,
 }: CrmSidebarProps) => (
-  <aside className="flex w-16 shrink-0 flex-col items-center border-r border-white/10 bg-[#161922] py-4">
-    <div className="mb-5 flex size-10 items-center justify-center rounded-xl bg-blue-500 text-white">
+  <aside
+    className={`flex w-16 shrink-0 flex-col items-center border-r py-4 ${CRM_SURFACES.elevated} ${CRM_SURFACES.border}`}>
+    <div className="mb-5 flex size-10 items-center justify-center rounded-xl bg-blue-600 text-white">
       <Layers className="size-5" aria-hidden="true" />
     </div>
 
@@ -56,51 +59,46 @@ export const CrmSidebar = ({
       ))}
     </nav>
 
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
-          title="Abrir menú de agente"
-          aria-label="Abrir menú de agente"
-        >
-          <AvatarInitials
-            name={agent.name}
-            initials={agent.initials}
-            color={agent.avatar_color}
-            bg={agent.avatar_bg}
-            size="md"
-          />
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent
-        side="right"
-        align="end"
-        className="w-60 border-white/10 bg-[#161922] text-slate-100"
-      >
-        <DropdownMenuLabel>
-          <span className="block truncate text-sm font-medium text-slate-100">
-            {agent.name}
-          </span>
-          <span className="mt-1 flex items-center">
-            <StatusBadge status={agent.status} />
-          </span>
-        </DropdownMenuLabel>
-        <DropdownMenuSeparator className="bg-white/10" />
-        <DropdownMenuItem
-          onClick={onToggleStatus}
-          className="cursor-pointer focus:bg-white/10"
-        >
-          Cambiar mi estado
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onClick={onLogout}
-          className="cursor-pointer text-red-300 focus:bg-red-400/10 focus:text-red-200"
-        >
-          <LogOut className="size-4" aria-hidden="true" />
-          Salir
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <div className="mt-auto flex flex-col items-center gap-2">
+      <CrmThemeToggle />
+
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
+            title="Abrir menú de agente"
+            aria-label="Abrir menú de agente">
+            <AvatarInitials
+              name={agent.name}
+              initials={agent.initials}
+              color={agent.avatar_color}
+              bg={agent.avatar_bg}
+              size="md"
+            />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent side="right" align="end" className={`w-60 ${CRM_MENU}`}>
+          <DropdownMenuLabel>
+            <span className={`block truncate text-sm font-medium ${CRM_SURFACES.textPrimary}`}>
+              {agent.name}
+            </span>
+            <span className="mt-1 flex items-center">
+              <StatusBadge status={agent.status} />
+            </span>
+          </DropdownMenuLabel>
+          <DropdownMenuSeparator className="bg-slate-200 dark:bg-white/10" />
+          <DropdownMenuItem onClick={onToggleStatus} className={CRM_MENU_ITEM}>
+            Cambiar mi estado
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={onLogout}
+            className="cursor-pointer text-red-700 focus:bg-red-50 focus:text-red-900 dark:text-red-100 dark:focus:bg-red-950/60 dark:focus:text-white">
+            <LogOut className="size-4" aria-hidden="true" />
+            Salir
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
   </aside>
 );

@@ -1,8 +1,10 @@
 "use client";
 
 import { Bot, CheckCircle2, Headphones } from "lucide-react";
+import { cn } from "@/lib/utils";
 import type { Client, Conversation, Label } from "../../_lib/types";
 import { formatCrmTime } from "../../_lib/formatters";
+import { CRM_BADGE_TONES, CRM_FOCUS_RING, CRM_SURFACES } from "../../_lib/crm-theme";
 import { AvatarInitials } from "../shared/avatar-initials";
 import { LabelChip } from "../shared/label-chip";
 import { StatusBadge } from "../shared/status-badge";
@@ -31,12 +33,14 @@ export const ConversationListItem = ({
     <button
       type="button"
       onClick={() => onSelect(conversation.id)}
-      className={`group w-full border-b border-white/10 p-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 ${
+      className={cn(
+        CRM_FOCUS_RING,
+        "group w-full border-b p-3 text-left transition",
+        CRM_SURFACES.border,
         isActive
-          ? "border-l-2 border-l-blue-400 bg-blue-400/10"
-          : "hover:bg-white/[.04]"
-      }`}
-    >
+          ? "border-l-2 border-l-blue-500 bg-blue-50 dark:bg-blue-950/40"
+          : CRM_SURFACES.hover,
+      )}>
       <div className="flex gap-3">
         <AvatarInitials
           name={displayName}
@@ -46,21 +50,19 @@ export const ConversationListItem = ({
         />
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
-            <p className="truncate text-sm font-semibold text-slate-100">
+            <p className={`truncate text-sm font-semibold ${CRM_SURFACES.textPrimary}`}>
               {displayName}
             </p>
-            <span className="shrink-0 text-[11px] text-slate-600">
+            <span className={`shrink-0 text-[11px] ${CRM_SURFACES.textMuted}`}>
               {formatCrmTime(conversation.updated_at)}
             </span>
           </div>
           <div className="mt-1 flex items-center gap-1.5">
             <span
-              className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
-                isHuman
-                  ? "bg-rose-400/10 text-rose-300"
-                  : "bg-violet-400/10 text-violet-300"
-              }`}
-            >
+              className={cn(
+                "inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-medium",
+                isHuman ? CRM_BADGE_TONES.rose : CRM_BADGE_TONES.violet,
+              )}>
               {isHuman ? (
                 <Headphones className="size-3" aria-hidden="true" />
               ) : (
@@ -69,7 +71,11 @@ export const ConversationListItem = ({
               {isHuman ? "Humano" : "Bot"}
             </span>
             {isResolved ? (
-              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-400/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-300">
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-medium",
+                  CRM_BADGE_TONES.emerald,
+                )}>
                 <CheckCircle2 className="size-3" aria-hidden="true" />
                 Resuelto
               </span>
@@ -77,12 +83,12 @@ export const ConversationListItem = ({
               <StatusBadge status={conversation.status} />
             )}
           </div>
-          <p className="mt-2 line-clamp-2 text-xs leading-5 text-slate-400 group-hover:text-slate-300">
+          <p className={`mt-2 line-clamp-2 text-xs leading-5 ${CRM_SURFACES.textMuted} group-hover:text-slate-600 dark:group-hover:text-slate-300`}>
             {preview}
           </p>
         </div>
         {conversation.unread ? (
-          <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-blue-500 text-[10px] font-semibold text-white">
+          <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-blue-600 text-[10px] font-semibold text-white">
             {conversation.unread}
           </span>
         ) : null}

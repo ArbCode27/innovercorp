@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import { CrmThemeProvider } from "./_components/shell/crm-theme-provider";
 
 export const metadata: Metadata = {
   title: "CRM · Conexiones Innover",
@@ -7,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function CrmLayout({ children }: { children: ReactNode }) {
-  return children;
+  return <CrmThemeProvider>{children}</CrmThemeProvider>;
 }

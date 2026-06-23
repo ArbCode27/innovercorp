@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { CRM_SURFACES } from "../../_lib/crm-theme";
 
 interface ImageMessageProps {
   src: string;
@@ -22,7 +23,7 @@ export const ImageMessage = ({ src, caption, isOutgoing }: ImageMessageProps) =>
         href={src}
         target="_blank"
         rel="noopener noreferrer"
-        className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950"
+        className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-50 dark:focus-visible:ring-offset-[#0f1117]"
         aria-label="Abrir imagen en una pestaña nueva">
         <Image
           src={src}
@@ -37,7 +38,7 @@ export const ImageMessage = ({ src, caption, isOutgoing }: ImageMessageProps) =>
       {visibleCaption ? (
         <p
           className={`mt-2 whitespace-pre-wrap break-words text-xs leading-relaxed ${
-            isOutgoing ? "text-blue-50" : "text-slate-300"
+            isOutgoing ? "text-blue-50" : CRM_SURFACES.textSecondary
           }`}>
           {visibleCaption}
         </p>

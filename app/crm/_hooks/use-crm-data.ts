@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { createClient } from "@supabase/supabase-js";
 import { crmService } from "../_lib/crm-service";
+import { wisproService } from "../_lib/wispro-service";
 import { useSendMessage } from "./use-send-message";
 import type {
   Agent,
@@ -18,6 +19,8 @@ import type {
   Message,
   Ticket,
   UpsertAgentInput,
+  WisproCustomer,
+  WisproSearchResult,
 } from "../_lib/types";
 
 // ── Supabase client para Realtime ─────────────────────────
@@ -46,6 +49,9 @@ export const useCrmData = (agent: Agent | null) => {
   const [conversationFilter, setConversationFilter] =
     useState<ConversationFilter>("all");
   const [selectedLabelId, setSelectedLabelId] = useState<number | null>(null);
+  const [wisproSnapshotsByClientId, setWisproSnapshotsByClientId] = useState<
+    Record<number, WisproCustomer>
+  >({});
   const { sendMessage: sendWhatsAppMessage, isSending: isSendingMessage } =
     useSendMessage();
 
@@ -140,7 +146,7 @@ export const useCrmData = (agent: Agent | null) => {
     };
   }, []);
 
-  // ── REALTIME: clientes nuevos ──────────────────────────
+  // ── REALTIME: clientes ─────────────────────────────────
   useEffect(() => {
     const channel = supabase
       .channel("realtime:clients")
@@ -153,9 +159,31 @@ export const useCrmData = (agent: Agent | null) => {
         },
         (payload) => {
           const newClient = payload.new as Client;
+          setData((current) => {
+            const exists = current.clients.some((client) => client.id === newClient.id);
+            if (exists) return current;
+
+            return {
+              ...current,
+              clients: [...current.clients, newClient],
+            };
+          });
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "clients",
+        },
+        (payload) => {
+          const updatedClient = payload.new as Client;
           setData((current) => ({
             ...current,
-            clients: [...current.clients, newClient],
+            clients: current.clients.map((client) =>
+              client.id === updatedClient.id ? { ...client, ...updatedClient } : client,
+            ),
           }));
         },
       )
@@ -198,14 +226,23 @@ export const useCrmData = (agent: Agent | null) => {
     [data.conversations, selectedConversationId],
   );
 
+  const clientsById = useMemo(
+    () =>
+      new Map<number, Client>(
+        data.clients.map((client) => [client.id, client]),
+      ),
+    [data.clients],
+  );
+
   const selectedClient = useMemo(() => {
     if (!selectedConversation?.client_id) return null;
-    return (
-      data.clients.find(
-        (client) => client.id === selectedConversation.client_id,
-      ) || null
-    );
-  }, [data.clients, selectedConversation]);
+    return clientsById.get(selectedConversation.client_id) ?? null;
+  }, [clientsById, selectedConversation?.client_id]);
+
+  const selectedWisproSnapshot = useMemo(() => {
+    if (!selectedClient) return null;
+    return wisproSnapshotsByClientId[selectedClient.id] ?? null;
+  }, [selectedClient, wisproSnapshotsByClientId]);
 
   const filteredConversations = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
@@ -218,7 +255,8 @@ export const useCrmData = (agent: Agent | null) => {
       const matchesSearch =
         !query ||
         name.toLowerCase().includes(query) ||
-        (conversation.phone || "").toLowerCase().includes(query);
+        (client?.phone || "").toLowerCase().includes(query) ||
+        (client?.whatsapp_id || "").toLowerCase().includes(query);
 
       if (!matchesSearch) return false;
       if (conversationFilter === "bot" && conversation.human_mode) return false;
@@ -281,9 +319,14 @@ export const useCrmData = (agent: Agent | null) => {
       throw new Error("El mensaje no puede estar vacío");
     }
 
-    const to = selectedConversation.phone || selectedClient?.phone;
+    const to =
+      selectedClient?.phone ||
+      selectedClient?.whatsapp_id ||
+      null;
     if (!to) {
-      throw new Error("La conversación no tiene un número de teléfono válido");
+      throw new Error(
+        "Asocia un cliente con teléfono válido antes de enviar mensajes",
+      );
     }
 
     const response = await sendWhatsAppMessage({
@@ -402,6 +445,47 @@ export const useCrmData = (agent: Agent | null) => {
     toast.success(`${saved.name} agregado`);
   };
 
+  const associateWisproToConversation = async (result: WisproSearchResult) => {
+    if (!selectedConversation) return;
+
+    const { customer, invoicing } = result;
+
+    const saved = await wisproService.associateToConversation({
+      conversationId: selectedConversation.id,
+      customer,
+      invoicing,
+      existingClientId: selectedConversation.client_id,
+      conversationPhone: selectedClient?.phone ?? selectedClient?.whatsapp_id,
+      whatsappId: selectedClient?.whatsapp_id,
+      waName: selectedClient?.wa_name,
+    });
+
+    setData((current) => {
+      const clientExists = current.clients.some((client) => client.id === saved.id);
+
+      return {
+        ...current,
+        clients: clientExists
+          ? current.clients.map((client) =>
+              client.id === saved.id ? saved : client,
+            )
+          : [...current.clients, saved],
+        conversations: current.conversations.map((conversation) =>
+          conversation.id === selectedConversation.id
+            ? { ...conversation, client_id: saved.id }
+            : conversation,
+        ),
+      };
+    });
+
+    setWisproSnapshotsByClientId((current) => ({
+      ...current,
+      [saved.id]: customer,
+    }));
+
+    toast.success(`${saved.name} asociado a la conversación`);
+  };
+
   const createTicket = async (input: CreateTicketInput) => {
     const saved = await crmService.createTicket(input);
     setData((current) => ({
@@ -439,14 +523,6 @@ export const useCrmData = (agent: Agent | null) => {
     );
   };
 
-  const clientsById = useMemo(
-    () =>
-      new Map<number, Client>(
-        data.clients.map((client) => [client.id, client]),
-      ),
-    [data.clients],
-  );
-
   const labelsById = useMemo(
     () => new Map<number, Label>(data.labels.map((label) => [label.id, label])),
     [data.labels],
@@ -466,6 +542,7 @@ export const useCrmData = (agent: Agent | null) => {
     messages,
     selectedConversation,
     selectedClient,
+    selectedWisproSnapshot,
     selectedConversationId,
     filteredConversations,
     clientsById,
@@ -491,6 +568,7 @@ export const useCrmData = (agent: Agent | null) => {
     quickToggleLabel,
     assignAgent,
     createClient,
+    associateWisproToConversation,
     createTicket,
     createLabel,
     deleteLabel,

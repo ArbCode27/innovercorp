@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { Plus } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { CrmButton } from "../shared/crm-button";
 import type { Agent, Client, CreateTicketInput, Ticket } from "../../_lib/types";
+import { CRM_SURFACES } from "../../_lib/crm-theme";
 import { TicketFormDialog } from "./ticket-form-dialog";
 import { TicketsStats } from "./tickets-stats";
 import { TicketsTable } from "./tickets-table";
@@ -26,16 +27,16 @@ export const TicketsView = ({
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto bg-[#0f1117] p-6">
+    <div className={`crm-scrollbar min-h-0 flex-1 overflow-y-auto p-6 ${CRM_SURFACES.page}`}>
       <div className="mb-6 flex items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-semibold text-slate-100">Tickets</h2>
-          <p className="text-sm text-slate-500">Seguimiento de casos</p>
+          <h2 className={`text-2xl font-semibold ${CRM_SURFACES.textPrimary}`}>Tickets</h2>
+          <p className={`text-sm ${CRM_SURFACES.textMuted}`}>Seguimiento de casos</p>
         </div>
-        <Button type="button" onClick={() => setIsDialogOpen(true)} className="bg-blue-500">
+        <CrmButton type="button" onClick={() => setIsDialogOpen(true)}>
           <Plus className="mr-2 size-4" aria-hidden="true" />
           Nuevo ticket
-        </Button>
+        </CrmButton>
       </div>
       <div className="space-y-5">
         <TicketsStats tickets={tickets} />

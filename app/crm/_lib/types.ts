@@ -44,16 +44,57 @@ export interface Client {
   plan: string | null;
   zone: string | null;
   account: ClientAccountStatus | null;
+  wispro_id?: string | null;
+  whatsapp_id?: string | null;
+  wa_name?: string | null;
   color: string | null;
   bg: string | null;
   initials: string | null;
+  envoicing?: string | null;
   created_at: string | null;
+}
+
+export interface WisproInvoicingSummary {
+  debt: number;
+  hasDebt: boolean;
+  accountStatus: ClientAccountStatus;
+  snapshot: {
+    invoiceIndex: number;
+    itemIndex: number;
+    gross_amount: number;
+    amount: number;
+  } | null;
+}
+
+export interface WisproSearchResult {
+  customer: WisproCustomer;
+  invoicing: WisproInvoicingSummary;
+}
+
+export interface WisproCustomer {
+  id: string;
+  name: string;
+  national_identification_number: string;
+  phone_mobile?: string | null;
+  zone_name?: string | null;
+  city?: string | null;
+  state?: string | null;
+}
+
+export interface AssociateWisproInput {
+  conversationId: number;
+  customer: WisproCustomer;
+  invoicing: WisproInvoicingSummary;
+  existingClientsCount?: number;
+  existingClientId?: number | null;
+  conversationPhone?: string | null;
+  whatsappId?: string | null;
+  waName?: string | null;
 }
 
 export interface Conversation {
   id: number;
   client_id: number | null;
-  phone?: string | null;
   status: ConversationStatus;
   human_mode: boolean;
   label_ids: number[];

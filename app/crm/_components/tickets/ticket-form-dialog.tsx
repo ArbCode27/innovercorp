@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
-import { Button } from "@/components/ui/button";
+import { CrmButton } from "../shared/crm-button";
 import {
   Dialog,
   DialogContent,
@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { TICKET_TYPES } from "../../_lib/constants";
+import { CRM_DIALOG, CRM_SURFACES } from "../../_lib/crm-theme";
 import type { Agent, Client, CreateTicketInput } from "../../_lib/types";
 
 interface TicketFormDialogProps {
@@ -64,7 +65,7 @@ export const TicketFormDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="border-white/10 bg-[#161922] text-slate-100">
+      <DialogContent className={CRM_DIALOG}>
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>Nuevo ticket</DialogTitle>
@@ -73,7 +74,7 @@ export const TicketFormDialog = ({
             <div className="space-y-2">
               <Label>Cliente</Label>
               <Select value={clientId || firstClientId} onValueChange={setClientId}>
-                <SelectTrigger className="w-full border-white/10 bg-[#1d2130]">
+                <SelectTrigger className={`w-full ${CRM_SURFACES.border} ${CRM_SURFACES.input}`}>
                   <SelectValue placeholder="Selecciona un cliente" />
                 </SelectTrigger>
                 <SelectContent>
@@ -89,7 +90,7 @@ export const TicketFormDialog = ({
               <div className="space-y-2">
                 <Label>Tipo</Label>
                 <Select value={type} onValueChange={setType}>
-                  <SelectTrigger className="w-full border-white/10 bg-[#1d2130]">
+                  <SelectTrigger className={`w-full ${CRM_SURFACES.border} ${CRM_SURFACES.input}`}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -104,7 +105,7 @@ export const TicketFormDialog = ({
               <div className="space-y-2">
                 <Label>Asignar a</Label>
                 <Select value={agent} onValueChange={setAgent}>
-                  <SelectTrigger className="w-full border-white/10 bg-[#1d2130]">
+                  <SelectTrigger className={`w-full ${CRM_SURFACES.border} ${CRM_SURFACES.input}`}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -123,17 +124,15 @@ export const TicketFormDialog = ({
                 id="ticket-description"
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
-                className="min-h-24 border-white/10 bg-[#1d2130]"
+                className={`min-h-24 ${CRM_SURFACES.border} ${CRM_SURFACES.input}`}
               />
             </div>
           </div>
           <DialogFooter className="mt-5">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <CrmButton type="button" variant="secondary" onClick={() => onOpenChange(false)}>
               Cancelar
-            </Button>
-            <Button type="submit" className="bg-blue-500">
-              Crear ticket
-            </Button>
+            </CrmButton>
+            <CrmButton type="submit">Crear ticket</CrmButton>
           </DialogFooter>
         </form>
       </DialogContent>

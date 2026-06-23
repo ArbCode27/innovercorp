@@ -6,6 +6,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { CRM_SURFACES } from "../../_lib/crm-theme";
 import type { Client, Ticket } from "../../_lib/types";
 import { formatCrmDate } from "../../_lib/formatters";
 import { AvatarInitials } from "../shared/avatar-initials";
@@ -17,16 +18,16 @@ interface TicketsTableProps {
 }
 
 export const TicketsTable = ({ tickets, clientsById }: TicketsTableProps) => (
-  <div className="overflow-hidden rounded-xl border border-white/10 bg-[#161922]">
+  <div className={`overflow-hidden rounded-xl border ${CRM_SURFACES.border} ${CRM_SURFACES.elevated}`}>
     <Table>
       <TableHeader>
-        <TableRow className="border-white/10 hover:bg-transparent">
-          <TableHead className="text-slate-500">ID</TableHead>
-          <TableHead className="text-slate-500">Cliente</TableHead>
-          <TableHead className="text-slate-500">Tipo</TableHead>
-          <TableHead className="text-slate-500">Estado</TableHead>
-          <TableHead className="text-slate-500">Agente</TableHead>
-          <TableHead className="text-slate-500">Creado</TableHead>
+        <TableRow className={`${CRM_SURFACES.border} hover:bg-transparent`}>
+          <TableHead className={CRM_SURFACES.textMuted}>ID</TableHead>
+          <TableHead className={CRM_SURFACES.textMuted}>Cliente</TableHead>
+          <TableHead className={CRM_SURFACES.textMuted}>Tipo</TableHead>
+          <TableHead className={CRM_SURFACES.textMuted}>Estado</TableHead>
+          <TableHead className={CRM_SURFACES.textMuted}>Agente</TableHead>
+          <TableHead className={CRM_SURFACES.textMuted}>Creado</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -35,8 +36,8 @@ export const TicketsTable = ({ tickets, clientsById }: TicketsTableProps) => (
             const client = clientsById.get(ticket.client_id);
 
             return (
-              <TableRow key={ticket.id} className="border-white/10 hover:bg-white/[.03]">
-                <TableCell className="font-mono text-slate-400">{ticket.id}</TableCell>
+              <TableRow key={ticket.id} className={`${CRM_SURFACES.border} ${CRM_SURFACES.hover}`}>
+                <TableCell className={`font-mono ${CRM_SURFACES.textMuted}`}>{ticket.id}</TableCell>
                 <TableCell>
                   {client ? (
                     <div className="flex items-center gap-2">
@@ -47,26 +48,26 @@ export const TicketsTable = ({ tickets, clientsById }: TicketsTableProps) => (
                         bg={client.bg}
                         size="sm"
                       />
-                      <span className="font-medium text-slate-100">{client.name}</span>
+                      <span className={`font-medium ${CRM_SURFACES.textPrimary}`}>{client.name}</span>
                     </div>
                   ) : (
-                    <span className="text-slate-500">Cliente no encontrado</span>
+                    <span className={CRM_SURFACES.textMuted}>Cliente no encontrado</span>
                   )}
                 </TableCell>
-                <TableCell className="text-slate-300">{ticket.type}</TableCell>
+                <TableCell className={CRM_SURFACES.textSecondary}>{ticket.type}</TableCell>
                 <TableCell>
                   <StatusBadge status={ticket.status} />
                 </TableCell>
-                <TableCell className="text-slate-400">{ticket.agent}</TableCell>
-                <TableCell className="text-slate-500">
+                <TableCell className={CRM_SURFACES.textMuted}>{ticket.agent}</TableCell>
+                <TableCell className={CRM_SURFACES.textMuted}>
                   {formatCrmDate(ticket.created_at)}
                 </TableCell>
               </TableRow>
             );
           })
         ) : (
-          <TableRow className="border-white/10">
-            <TableCell colSpan={6} className="h-24 text-center text-slate-500">
+          <TableRow className={CRM_SURFACES.border}>
+            <TableCell colSpan={6} className={`h-24 text-center ${CRM_SURFACES.textMuted}`}>
               Sin tickets.
             </TableCell>
           </TableRow>

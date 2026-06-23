@@ -1,6 +1,7 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
+import { CrmButton } from "../shared/crm-button";
+import { CRM_SURFACES } from "../../_lib/crm-theme";
 import type { Agent, Conversation } from "../../_lib/types";
 import { AvatarInitials } from "../shared/avatar-initials";
 import { StatusBadge } from "../shared/status-badge";
@@ -23,11 +24,11 @@ export const AgentCard = ({
   const isAdmin = currentAgent.role === "admin";
   const activeCount = conversations.filter(
     (conversation) =>
-      conversation.agent_id === agent.id && conversation.status !== "resuelto"
+      conversation.agent_id === agent.id && conversation.status !== "resuelto",
   ).length;
 
   return (
-    <article className="rounded-xl border border-white/10 bg-[#1d2130] p-4">
+    <article className={`rounded-xl border p-4 ${CRM_SURFACES.border} ${CRM_SURFACES.card}`}>
       <div className="flex items-start gap-3">
         <AvatarInitials
           name={agent.name}
@@ -37,36 +38,36 @@ export const AgentCard = ({
         />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h3 className="truncate text-sm font-semibold text-slate-100">{agent.name}</h3>
+            <h3 className={`truncate text-sm font-semibold ${CRM_SURFACES.textPrimary}`}>
+              {agent.name}
+            </h3>
             {agent.id === currentAgent.id ? (
-              <span className="text-[10px] text-blue-300">(tú)</span>
+              <span className="text-[10px] text-blue-700 dark:text-blue-100">(tú)</span>
             ) : null}
           </div>
-          <p className="mt-1 truncate text-xs text-slate-500">
+          <p className={`mt-1 truncate text-xs ${CRM_SURFACES.textMuted}`}>
             {agent.role === "admin" ? "Administrador" : "Agente básico"} · {agent.email}
           </p>
         </div>
         <StatusBadge status={agent.status} />
       </div>
-      <p className="mt-4 text-xs text-slate-400">
+      <p className={`mt-4 text-xs ${CRM_SURFACES.textMuted}`}>
         Conversaciones activas:{" "}
-        <span className="font-semibold text-slate-100">{activeCount}</span>/
+        <span className={`font-semibold ${CRM_SURFACES.textPrimary}`}>{activeCount}</span>/
         {agent.max_conversations || 5}
       </p>
       {isAdmin && agent.id !== currentAgent.id ? (
         <div className="mt-4 flex flex-wrap gap-2">
-          <Button type="button" variant="outline" size="sm" onClick={() => onEdit(agent)}>
+          <CrmButton type="button" variant="secondary" size="sm" onClick={() => onEdit(agent)}>
             Editar
-          </Button>
-          <Button
+          </CrmButton>
+          <CrmButton
             type="button"
-            variant="outline"
+            variant="danger"
             size="sm"
-            onClick={() => onToggleStatus(agent)}
-            className="border-red-400/30 text-red-300"
-          >
+            onClick={() => onToggleStatus(agent)}>
             {agent.status === "inactive" ? "Activar" : "Desactivar"}
-          </Button>
+          </CrmButton>
         </div>
       ) : null}
     </article>

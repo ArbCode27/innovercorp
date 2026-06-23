@@ -1,7 +1,8 @@
 "use client";
 
 import { Trash2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { CrmButton } from "../shared/crm-button";
+import { CRM_SURFACES } from "../../_lib/crm-theme";
 import type { Conversation, Label } from "../../_lib/types";
 import { LabelChip } from "../shared/label-chip";
 
@@ -12,15 +13,15 @@ interface LabelsListProps {
 }
 
 export const LabelsList = ({ labels, conversations, onDeleteLabel }: LabelsListProps) => (
-  <div className="max-w-3xl overflow-hidden rounded-xl border border-white/10 bg-[#161922]">
-    <div className="border-b border-white/10 px-5 py-4 text-sm font-semibold text-slate-300">
+  <div className={`max-w-3xl overflow-hidden rounded-xl border ${CRM_SURFACES.border} ${CRM_SURFACES.elevated}`}>
+    <div className={`border-b px-5 py-4 text-sm font-semibold ${CRM_SURFACES.border} ${CRM_SURFACES.textSecondary}`}>
       Etiquetas ({labels.length})
     </div>
-    <div className="divide-y divide-white/10 px-5 py-2">
+    <div className={`divide-y px-5 py-2 ${CRM_SURFACES.divider}`}>
       {labels.length ? (
         labels.map((label) => {
           const usage = conversations.filter((conversation) =>
-            conversation.label_ids.includes(label.id)
+            conversation.label_ids.includes(label.id),
           ).length;
 
           return (
@@ -30,24 +31,23 @@ export const LabelsList = ({ labels, conversations, onDeleteLabel }: LabelsListP
                 style={{ backgroundColor: label.color }}
                 aria-hidden="true"
               />
-              <span className="flex-1 text-sm text-slate-200">{label.name}</span>
-              <span className="text-xs text-slate-600">{usage} conv.</span>
+              <span className={`flex-1 text-sm ${CRM_SURFACES.textSecondary}`}>{label.name}</span>
+              <span className={`text-xs ${CRM_SURFACES.textMuted}`}>{usage} conv.</span>
               <LabelChip label={label} />
-              <Button
+              <CrmButton
                 type="button"
                 variant="ghost"
                 size="icon"
                 onClick={() => onDeleteLabel(label)}
-                className="size-8 text-slate-500 hover:bg-red-400/10 hover:text-red-300"
-                aria-label={`Eliminar ${label.name}`}
-              >
+                className={`size-8 ${CRM_SURFACES.textMuted} hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950/60 dark:hover:text-red-100`}
+                aria-label={`Eliminar ${label.name}`}>
                 <Trash2 className="size-4" aria-hidden="true" />
-              </Button>
+              </CrmButton>
             </div>
           );
         })
       ) : (
-        <div className="py-8 text-sm text-slate-500">Sin etiquetas.</div>
+        <div className={`py-8 text-sm ${CRM_SURFACES.textMuted}`}>Sin etiquetas.</div>
       )}
     </div>
   </div>

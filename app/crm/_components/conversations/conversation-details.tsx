@@ -1,40 +1,43 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { CRM_SURFACES } from "../../_lib/crm-theme";
 import type {
   Agent,
   Client,
   Conversation,
   Label,
   Ticket,
+  WisproCustomer,
 } from "../../_lib/types";
 import { formatCrmDate } from "../../_lib/formatters";
 import { AvatarInitials } from "../shared/avatar-initials";
-import { LabelChip } from "../shared/label-chip";
+import { CrmButton } from "../shared/crm-button";
 import { StatusBadge } from "../shared/status-badge";
+import { ClientProfileSection } from "./client-profile-section";
 
 interface ConversationDetailsProps {
   conversation: Conversation;
   client: Client | null;
+  wisproSnapshot?: WisproCustomer | null;
   labels: Label[];
   tickets: Ticket[];
   agents: Agent[];
   className?: string;
   onToggleLabel: (labelId: number) => Promise<void>;
+  onOpenWispro?: () => void;
 }
-
-const fieldClass = "space-y-1";
-const labelClass = "text-[11px] uppercase tracking-wide text-slate-600";
-const valueClass = "text-sm font-medium text-slate-200";
 
 export const ConversationDetails = ({
   conversation,
   client,
+  wisproSnapshot,
   labels,
   tickets,
   agents,
   className,
   onToggleLabel,
+  onOpenWispro,
 }: ConversationDetailsProps) => {
   const activeTicket =
     tickets.find((ticket) => ticket.status !== "Resuelto") ||
@@ -47,88 +50,56 @@ export const ConversationDetails = ({
   return (
     <aside
       className={cn(
-        "crm-scrollbar hidden w-72 shrink-0 overflow-y-auto border-l border-white/10 bg-[#161922] lg:block",
+        `crm-scrollbar hidden w-72 shrink-0 overflow-y-auto border-l lg:block ${CRM_SURFACES.border} ${CRM_SURFACES.elevated}`,
         className,
       )}>
-      {/* <section className="border-b border-white/10 p-4">
-        <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-          Etiquetas
-        </h3>
-        <div className="flex flex-wrap gap-2">
-          {labels.length ? (
-            labels.map((label) => (
-              <LabelChip
-                key={label.id}
-                label={label}
-                selected={conversation.label_ids.includes(label.id)}
-                onClick={() => onToggleLabel(label.id)}
-              />
-            ))
-          ) : (
-            <p className="text-xs text-slate-600">Sin etiquetas</p>
-          )}
-        </div>
-      </section> */}
-
-      <section className="space-y-4 border-b border-white/10 p-4">
-        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+      <section className={`space-y-4 border-b p-4 ${CRM_SURFACES.border}`}>
+        <h3 className={`text-[11px] font-semibold uppercase tracking-wide ${CRM_SURFACES.textMuted}`}>
           Ficha del cliente
         </h3>
         {client ? (
-          <>
-            <div className={fieldClass}>
-              <p className={labelClass}>Nombre</p>
-              <p className={valueClass}>{client.name}</p>
-            </div>
-            <div className={fieldClass}>
-              <p className={labelClass}>Teléfono</p>
-              <p className="font-mono text-sm text-slate-300">
-                {client.phone || "—"}
-              </p>
-            </div>
-            <div className={fieldClass}>
-              <p className={labelClass}>Zona</p>
-              <p className={valueClass}>{client.zone || "—"}</p>
-            </div>
-            <div className={fieldClass}>
-              <p className={labelClass}>Estado</p>
-              <p className={valueClass}>{client.account || "—"}</p>
-            </div>
-            <div className={fieldClass}>
-              <p className={labelClass}>Plan</p>
-              <p className={valueClass}>{client.plan || "—"}</p>
-            </div>
-          </>
+          <ClientProfileSection
+            client={client}
+            wisproSnapshot={wisproSnapshot}
+            onOpenWispro={onOpenWispro}
+          />
         ) : (
-          <p className="text-sm text-amber-300">
-            Número desconocido. Crea o asocia un cliente manualmente desde la
-            vista Clientes.
-          </p>
+          <div className="space-y-3">
+            <p className="text-sm text-amber-700 dark:text-amber-300">
+              Número desconocido. Busca al cliente en Wispro para asociarlo a esta
+              conversación.
+            </p>
+            {onOpenWispro ? (
+              <CrmButton type="button" variant="secondary" size="sm" onClick={onOpenWispro}>
+                Buscar en Wispro
+              </CrmButton>
+            ) : null}
+          </div>
         )}
       </section>
 
-      <section className="space-y-3 border-b border-white/10 p-4">
-        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+      <section className={`space-y-3 border-b p-4 ${CRM_SURFACES.border}`}>
+        <h3 className={`text-[11px] font-semibold uppercase tracking-wide ${CRM_SURFACES.textMuted}`}>
           Ticket activo
         </h3>
         {activeTicket ? (
           <div className="space-y-2">
-            <p className="font-mono text-sm text-slate-200">
+            <p className={`font-mono text-sm ${CRM_SURFACES.textPrimary}`}>
               {activeTicket.id}
             </p>
-            <p className="text-sm text-slate-300">{activeTicket.type}</p>
+            <p className={`text-sm ${CRM_SURFACES.textSecondary}`}>{activeTicket.type}</p>
             <StatusBadge status={activeTicket.status} />
-            <p className="text-xs text-slate-500">
+            <p className={`text-xs ${CRM_SURFACES.textMuted}`}>
               Agente: {activeTicket.agent}
             </p>
           </div>
         ) : (
-          <p className="text-xs text-slate-600">Sin tickets activos</p>
+          <p className={`text-xs ${CRM_SURFACES.textLabel}`}>Sin tickets activos</p>
         )}
       </section>
 
-      <section className="space-y-3 border-b border-white/10 p-4">
-        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+      <section className={`space-y-3 border-b p-4 ${CRM_SURFACES.border}`}>
+        <h3 className={`text-[11px] font-semibold uppercase tracking-wide ${CRM_SURFACES.textMuted}`}>
           Agentes en línea
         </h3>
         {onlineAgents.length ? (
@@ -141,7 +112,7 @@ export const ConversationDetails = ({
                 bg={agent.avatar_bg}
                 size="sm"
               />
-              <span className="min-w-0 flex-1 truncate text-xs text-slate-300">
+              <span className={`min-w-0 flex-1 truncate text-xs ${CRM_SURFACES.textSecondary}`}>
                 {agent.name}
               </span>
               <span
@@ -152,15 +123,15 @@ export const ConversationDetails = ({
             </div>
           ))
         ) : (
-          <p className="text-xs text-slate-600">Sin agentes en línea</p>
+          <p className={`text-xs ${CRM_SURFACES.textLabel}`}>Sin agentes en línea</p>
         )}
       </section>
 
       <section className="space-y-2 p-4">
-        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+        <h3 className={`text-[11px] font-semibold uppercase tracking-wide ${CRM_SURFACES.textMuted}`}>
           Historial
         </h3>
-        <p className="text-xs text-slate-500">
+        <p className={`text-xs ${CRM_SURFACES.textMuted}`}>
           Última actividad: {formatCrmDate(conversation.updated_at)}
         </p>
       </section>

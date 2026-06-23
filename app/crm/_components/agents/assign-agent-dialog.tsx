@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
+import { CrmButton } from "../shared/crm-button";
 import {
   Dialog,
   DialogContent,
@@ -9,6 +9,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import type { Agent, Conversation } from "../../_lib/types";
+import { CRM_DIALOG, CRM_FOCUS_RING, CRM_SURFACES } from "../../_lib/crm-theme";
 import { AvatarInitials } from "../shared/avatar-initials";
 import { StatusBadge } from "../shared/status-badge";
 
@@ -38,10 +39,10 @@ export const AssignAgentDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="border-white/10 bg-[#161922] text-slate-100">
+      <DialogContent className={CRM_DIALOG}>
         <DialogHeader>
           <DialogTitle>Asignar conversación</DialogTitle>
-          <DialogDescription className="text-slate-500">
+          <DialogDescription className={CRM_SURFACES.textMuted}>
             Selecciona el agente que atenderá esta conversación.
           </DialogDescription>
         </DialogHeader>
@@ -59,7 +60,7 @@ export const AssignAgentDialog = ({
                   key={agent.id}
                   type="button"
                   onClick={() => handleAssignAgent(agent.id)}
-                  className="flex w-full items-center gap-3 rounded-xl border border-white/10 bg-[#1d2130] p-3 text-left transition hover:border-blue-400/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
+                  className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left transition hover:border-blue-400/40 ${CRM_FOCUS_RING} ${CRM_SURFACES.border} ${CRM_SURFACES.card}`}
                 >
                   <AvatarInitials
                     name={agent.name}
@@ -69,7 +70,7 @@ export const AssignAgentDialog = ({
                   />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{agent.name}</p>
-                    <p className="text-xs text-slate-500">
+                    <p className={`text-xs ${CRM_SURFACES.textMuted}`}>
                       {agent.role === "admin" ? "Admin" : "Agente"} · {activeCount} activas de{" "}
                       {agent.max_conversations || 5}
                     </p>
@@ -79,14 +80,14 @@ export const AssignAgentDialog = ({
               );
             })
           ) : (
-            <div className="rounded-xl border border-white/10 bg-[#1d2130] p-4 text-sm text-slate-500">
+            <div className={`rounded-xl border p-4 text-sm ${CRM_SURFACES.border} ${CRM_SURFACES.card} ${CRM_SURFACES.textMuted}`}>
               No hay agentes disponibles.
             </div>
           )}
         </div>
-        <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+        <CrmButton type="button" variant="secondary" onClick={() => onOpenChange(false)}>
           Cancelar
-        </Button>
+        </CrmButton>
       </DialogContent>
     </Dialog>
   );

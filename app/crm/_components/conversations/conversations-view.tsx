@@ -1,6 +1,7 @@
 "use client";
 
-import type { Agent, Client, Conversation, ConversationFilter, Label, Message, Ticket } from "../../_lib/types";
+import type { Agent, Client, Conversation, ConversationFilter, Label, Message, Ticket, WisproCustomer, WisproSearchResult } from "../../_lib/types";
+import { CRM_SURFACES } from "../../_lib/crm-theme";
 import { ConversationFilters } from "./conversation-filters";
 import { ConversationList } from "./conversation-list";
 import { ConversationPanel } from "./conversation-panel";
@@ -17,6 +18,7 @@ interface ConversationsViewProps {
   messages: Message[];
   selectedConversation: Conversation | null;
   selectedClient: Client | null;
+  selectedWisproSnapshot: WisproCustomer | null;
   selectedConversationId: number | null;
   isMessagesLoading: boolean;
   isSendingMessage: boolean;
@@ -35,6 +37,7 @@ interface ConversationsViewProps {
   onUpdateLabels: (labelIds: number[]) => Promise<void>;
   onQuickToggleLabel: (labelId: number) => Promise<void>;
   onAssignAgent: (conversationId: number, agentId: number) => Promise<void>;
+  onAssociateWispro: (result: WisproSearchResult) => Promise<void>;
 }
 
 export const ConversationsView = ({
@@ -49,6 +52,7 @@ export const ConversationsView = ({
   messages,
   selectedConversation,
   selectedClient,
+  selectedWisproSnapshot,
   selectedConversationId,
   isMessagesLoading,
   isSendingMessage,
@@ -67,6 +71,7 @@ export const ConversationsView = ({
   onUpdateLabels,
   onQuickToggleLabel,
   onAssignAgent,
+  onAssociateWispro,
 }: ConversationsViewProps) => {
   const selectedLabels = selectedConversation
     ? selectedConversation.label_ids
@@ -80,10 +85,10 @@ export const ConversationsView = ({
 
   return (
     <div className="flex min-h-0 flex-1">
-      <aside className="flex w-80 shrink-0 flex-col border-r border-white/10 bg-[#161922]">
-        <div className="border-b border-white/10 p-4">
-          <h2 className="text-sm font-semibold text-slate-100">Conversaciones</h2>
-          <p className="mt-1 text-xs text-slate-500">
+      <aside className={`flex w-80 shrink-0 flex-col border-r ${CRM_SURFACES.border} ${CRM_SURFACES.elevated}`}>
+        <div className={`border-b p-4 ${CRM_SURFACES.border}`}>
+          <h2 className={`text-sm font-semibold ${CRM_SURFACES.textPrimary}`}>Conversaciones</h2>
+          <p className={`mt-1 text-xs ${CRM_SURFACES.textMuted}`}>
             {filteredConversations.length} de {conversations.length}
           </p>
         </div>
@@ -107,6 +112,7 @@ export const ConversationsView = ({
       <ConversationPanel
         conversation={selectedConversation}
         client={selectedClient}
+        wisproSnapshot={selectedWisproSnapshot}
         labels={selectedLabels}
         allLabels={labels}
         messages={messages}
@@ -124,6 +130,7 @@ export const ConversationsView = ({
         onUpdateLabels={onUpdateLabels}
         onQuickToggleLabel={onQuickToggleLabel}
         onAssignAgent={onAssignAgent}
+        onAssociateWispro={onAssociateWispro}
       />
     </div>
   );

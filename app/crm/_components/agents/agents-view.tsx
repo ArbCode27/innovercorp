@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { Plus } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { CrmButton } from "../shared/crm-button";
 import type { Agent, Conversation, UpsertAgentInput } from "../../_lib/types";
+import { CRM_SURFACES } from "../../_lib/crm-theme";
 import { AgentFormDialog } from "./agent-form-dialog";
 import { AgentsList } from "./agents-list";
 
@@ -36,17 +37,17 @@ export const AgentsView = ({
   };
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto bg-[#0f1117] p-6">
+    <div className={`crm-scrollbar min-h-0 flex-1 overflow-y-auto p-6 ${CRM_SURFACES.page}`}>
       <div className="mb-6 flex items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-semibold text-slate-100">Agentes</h2>
-          <p className="text-sm text-slate-500">Gestión del equipo</p>
+          <h2 className={`text-2xl font-semibold ${CRM_SURFACES.textPrimary}`}>Agentes</h2>
+          <p className={`text-sm ${CRM_SURFACES.textMuted}`}>Gestión del equipo</p>
         </div>
         {currentAgent.role === "admin" ? (
-          <Button type="button" onClick={handleNewAgent} className="bg-blue-500">
+          <CrmButton type="button" onClick={handleNewAgent}>
             <Plus className="mr-2 size-4" aria-hidden="true" />
             Nuevo agente
-          </Button>
+          </CrmButton>
         ) : null}
       </div>
       <AgentsList

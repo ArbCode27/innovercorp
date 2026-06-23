@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { CRM_SURFACES } from "../../_lib/crm-theme";
 import { LoadingState } from "../shared/loading-state";
 import { CrmLogin } from "../auth/crm-login";
 import { useCrmAuth } from "../../_hooks/use-crm-auth";
@@ -20,7 +21,7 @@ export const CrmShell = () => {
 
   if (auth.isLoading) {
     return (
-      <main className="min-h-screen bg-[#0f1117] text-slate-100">
+      <main className={`min-h-screen ${CRM_SURFACES.page}`}>
         <LoadingState label="Preparando CRM..." />
       </main>
     );
@@ -33,7 +34,7 @@ export const CrmShell = () => {
   const handleSelectView = (view: CrmView) => setActiveView(view);
 
   return (
-    <main className="flex h-screen overflow-hidden bg-[#0f1117] text-slate-100">
+    <main className={`flex h-screen overflow-hidden ${CRM_SURFACES.page}`}>
       <CrmSidebar
         agent={auth.agent}
         activeView={activeView}
@@ -59,6 +60,7 @@ export const CrmShell = () => {
                 messages={crm.messages}
                 selectedConversation={crm.selectedConversation}
                 selectedClient={crm.selectedClient}
+                selectedWisproSnapshot={crm.selectedWisproSnapshot}
                 selectedConversationId={crm.selectedConversationId}
                 isMessagesLoading={crm.isMessagesLoading}
                 isSendingMessage={crm.isSendingMessage}
@@ -77,6 +79,7 @@ export const CrmShell = () => {
                 onUpdateLabels={crm.updateLabels}
                 onQuickToggleLabel={crm.quickToggleLabel}
                 onAssignAgent={crm.assignAgent}
+                onAssociateWispro={crm.associateWisproToConversation}
               />
             ) : null}
             {activeView === "clients" ? (

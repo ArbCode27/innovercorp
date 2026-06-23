@@ -2,8 +2,11 @@
 
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import { CONVERSATION_FILTERS } from "../../_lib/constants";
+import { CRM_FOCUS_RING, CRM_SURFACES } from "../../_lib/crm-theme";
 import type { ConversationFilter, Label } from "../../_lib/types";
+import { CrmFilterChip } from "../shared/crm-filter-chip";
 import { LabelChip } from "../shared/label-chip";
 
 interface ConversationFiltersProps {
@@ -25,37 +28,34 @@ export const ConversationFilters = ({
   onFilterChange,
   onLabelChange,
 }: ConversationFiltersProps) => (
-  <div className="space-y-3 border-b border-white/10 p-4">
+  <div className={`space-y-3 border-b p-4 ${CRM_SURFACES.border}`}>
     <div>
       <label htmlFor="crm-conversation-search" className="sr-only">
         Buscar conversación
       </label>
       <div className="relative">
-        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-600" />
+        <Search
+          className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-500 dark:text-slate-500"
+          aria-hidden="true"
+        />
         <Input
           id="crm-conversation-search"
           value={searchTerm}
           onChange={(event) => onSearchChange(event.target.value)}
           placeholder="Buscar..."
-          className="border-white/10 bg-[#1d2130] pl-9 text-slate-100 placeholder:text-slate-600"
+          className={`pl-9 ${CRM_SURFACES.border} ${CRM_SURFACES.input} ${CRM_SURFACES.textPrimary} ${CRM_SURFACES.placeholder}`}
         />
       </div>
     </div>
 
     <div className="flex flex-wrap gap-1">
       {CONVERSATION_FILTERS.map((item) => (
-        <button
+        <CrmFilterChip
           key={item.id}
-          type="button"
+          label={item.label}
+          isActive={filter === item.id}
           onClick={() => onFilterChange(item.id)}
-          className={`rounded-full border px-3 py-1 text-xs transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 ${
-            filter === item.id
-              ? "border-blue-400/30 bg-blue-400/10 text-blue-300"
-              : "border-transparent text-slate-500 hover:text-slate-300"
-          }`}
-        >
-          {item.label}
-        </button>
+        />
       ))}
     </div>
 
@@ -63,12 +63,14 @@ export const ConversationFilters = ({
       <button
         type="button"
         onClick={() => onLabelChange(null)}
-        className={`rounded-full px-2.5 py-1 text-xs ${
+        aria-pressed={selectedLabelId === null}
+        className={cn(
+          CRM_FOCUS_RING,
+          "rounded-full px-2.5 py-1 text-xs font-medium transition",
           selectedLabelId === null
-            ? "bg-blue-400/10 text-blue-300"
-            : "bg-white/5 text-slate-400"
-        }`}
-      >
+            ? "bg-blue-100 text-blue-900 dark:bg-blue-950/70 dark:text-blue-100"
+            : `bg-slate-100 text-slate-600 hover:text-slate-900 dark:bg-white/5 dark:text-slate-400 dark:hover:text-slate-200`,
+        )}>
         Todas
       </button>
       {labels.map((label) => (

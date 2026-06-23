@@ -3,7 +3,7 @@
 import { FormEvent, useState } from "react";
 import { toast } from "sonner";
 import { Info } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { CrmButton } from "../shared/crm-button";
 import {
   Dialog,
   DialogContent,
@@ -20,9 +20,12 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
-import type { Agent, Client, Conversation, Label, Message, Ticket } from "../../_lib/types";
+import { CRM_DIALOG, CRM_SURFACES } from "../../_lib/crm-theme";
+import type { Agent, Client, Conversation, Label, Message, Ticket, WisproCustomer, WisproSearchResult } from "../../_lib/types";
 import { AssignAgentDialog } from "../agents/assign-agent-dialog";
 import { LabelPickerDialog } from "../labels/label-picker-dialog";
+import { UnknownClientBanner } from "../wispro/unknown-client-banner";
+import { WisproSearchDialog } from "../wispro/wispro-search-dialog";
 import { ConversationDetails } from "./conversation-details";
 import { ConversationHeader } from "./conversation-header";
 import { ConversationMessages } from "./conversation-messages";
@@ -32,6 +35,7 @@ import { MessageComposer } from "./message-composer";
 interface ConversationPanelProps {
   conversation: Conversation | null;
   client: Client | null;
+  wisproSnapshot?: WisproCustomer | null;
   labels: Label[];
   allLabels: Label[];
   messages: Message[];
@@ -49,11 +53,13 @@ interface ConversationPanelProps {
   onUpdateLabels: (labelIds: number[]) => Promise<void>;
   onQuickToggleLabel: (labelId: number) => Promise<void>;
   onAssignAgent: (conversationId: number, agentId: number) => Promise<void>;
+  onAssociateWispro: (result: WisproSearchResult) => Promise<void>;
 }
 
 export const ConversationPanel = ({
   conversation,
   client,
+  wisproSnapshot,
   labels,
   allLabels,
   messages,
@@ -71,10 +77,12 @@ export const ConversationPanel = ({
   onUpdateLabels,
   onQuickToggleLabel,
   onAssignAgent,
+  onAssociateWispro,
 }: ConversationPanelProps) => {
   const [isLabelDialogOpen, setIsLabelDialogOpen] = useState(false);
   const [isNoteDialogOpen, setIsNoteDialogOpen] = useState(false);
   const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false);
+  const [isWisproDialogOpen, setIsWisproDialogOpen] = useState(false);
   const [note, setNote] = useState("");
 
   if (!conversation) {
@@ -110,8 +118,15 @@ export const ConversationPanel = ({
     await onAssignAgent(conversation.id, agentId);
   };
 
+  const handleAssociateWispro = async (result: WisproSearchResult) => {
+    await onAssociateWispro(result);
+  };
+
+  const showUnknownBanner = !client;
+  const showWisproAction = !client || !client.wispro_id;
+
   return (
-    <section className="relative flex min-w-0 flex-1 bg-[#0f1117]">
+    <section className={`relative flex min-w-0 flex-1 ${CRM_SURFACES.page}`}>
       <div className="flex min-w-0 flex-1 flex-col">
         <ConversationHeader
           conversation={conversation}
@@ -124,7 +139,11 @@ export const ConversationPanel = ({
           onResolve={onResolve}
           onOpenNote={() => setIsNoteDialogOpen(true)}
           onOpenAssign={() => setIsAssignDialogOpen(true)}
+          onOpenWispro={() => setIsWisproDialogOpen(true)}
         />
+        {showUnknownBanner ? (
+          <UnknownClientBanner onOpenWispro={() => setIsWisproDialogOpen(true)} />
+        ) : null}
         <ConversationMessages
           messages={messages}
           isLoading={isMessagesLoading}
@@ -143,41 +162,50 @@ export const ConversationPanel = ({
       </div>
       <Sheet>
         <SheetTrigger asChild>
-          <Button
+          <CrmButton
             type="button"
-            variant="outline"
+            variant="secondary"
             size="icon"
-            className="absolute right-4 top-24 z-10 size-9 border-white/10 bg-[#161922]/90 text-slate-300 shadow-lg backdrop-blur lg:hidden"
-            aria-label="Ver ficha del cliente"
-          >
+            className={`absolute right-4 top-24 z-10 size-9 shadow-lg backdrop-blur lg:hidden ${CRM_SURFACES.elevatedTranslucent}`}
+            aria-label="Ver ficha del cliente">
             <Info className="size-4" aria-hidden="true" />
-          </Button>
+          </CrmButton>
         </SheetTrigger>
-        <SheetContent className="w-[88vw] border-white/10 bg-[#161922] p-0 text-slate-100 sm:max-w-sm">
-          <SheetHeader className="border-b border-white/10 p-4 text-left">
-            <SheetTitle className="text-slate-100">Ficha de conversación</SheetTitle>
-            <SheetDescription className="text-slate-500">
+        <SheetContent className={`w-[88vw] p-0 sm:max-w-sm ${CRM_SURFACES.border} ${CRM_SURFACES.elevated} ${CRM_SURFACES.textPrimary}`}>
+          <SheetHeader className={`border-b p-4 text-left ${CRM_SURFACES.border}`}>
+            <SheetTitle className={CRM_SURFACES.textPrimary}>Ficha de conversación</SheetTitle>
+            <SheetDescription className={CRM_SURFACES.textMuted}>
               Cliente, etiquetas, tickets y agentes disponibles.
             </SheetDescription>
           </SheetHeader>
           <ConversationDetails
             conversation={conversation}
             client={client}
+            wisproSnapshot={wisproSnapshot}
             labels={allLabels}
             tickets={tickets}
             agents={agents}
             className="block h-full w-full border-l-0 bg-transparent lg:hidden"
             onToggleLabel={onQuickToggleLabel}
+            onOpenWispro={showWisproAction ? () => setIsWisproDialogOpen(true) : undefined}
           />
         </SheetContent>
       </Sheet>
       <ConversationDetails
         conversation={conversation}
         client={client}
+        wisproSnapshot={wisproSnapshot}
         labels={allLabels}
         tickets={tickets}
         agents={agents}
         onToggleLabel={onQuickToggleLabel}
+        onOpenWispro={showWisproAction ? () => setIsWisproDialogOpen(true) : undefined}
+      />
+
+      <WisproSearchDialog
+        open={isWisproDialogOpen}
+        onOpenChange={setIsWisproDialogOpen}
+        onAssociate={handleAssociateWispro}
       />
 
       <LabelPickerDialog
@@ -197,7 +225,7 @@ export const ConversationPanel = ({
       />
 
       <Dialog open={isNoteDialogOpen} onOpenChange={setIsNoteDialogOpen}>
-        <DialogContent className="border-white/10 bg-[#161922] text-slate-100">
+        <DialogContent className={CRM_DIALOG}>
           <form onSubmit={handleSubmitNote}>
             <DialogHeader>
               <DialogTitle>Nota interna</DialogTitle>
@@ -206,19 +234,16 @@ export const ConversationPanel = ({
               value={note}
               onChange={(event) => setNote(event.target.value)}
               placeholder="Solo visible para agentes"
-              className="mt-4 min-h-28 border-white/10 bg-[#1d2130] text-slate-100"
+              className={`mt-4 min-h-28 ${CRM_SURFACES.border} ${CRM_SURFACES.input} ${CRM_SURFACES.textPrimary}`}
             />
             <DialogFooter className="mt-4">
-              <Button
+              <CrmButton
                 type="button"
-                variant="outline"
-                onClick={() => setIsNoteDialogOpen(false)}
-              >
+                variant="secondary"
+                onClick={() => setIsNoteDialogOpen(false)}>
                 Cancelar
-              </Button>
-              <Button type="submit" className="bg-blue-500">
-                Agregar nota
-              </Button>
+              </CrmButton>
+              <CrmButton type="submit">Agregar nota</CrmButton>
             </DialogFooter>
           </form>
         </DialogContent>

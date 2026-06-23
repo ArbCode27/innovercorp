@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { Button } from "@/components/ui/button";
+import { CrmButton } from "../shared/crm-button";
 import {
   Dialog,
   DialogContent,
@@ -12,6 +12,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label as UiLabel } from "@/components/ui/label";
 import { CRM_COLORS } from "../../_lib/constants";
+import { CRM_DIALOG, CRM_SURFACES } from "../../_lib/crm-theme";
 import type { CreateLabelInput } from "../../_lib/types";
 
 interface LabelFormDialogProps {
@@ -46,7 +47,7 @@ export const LabelFormDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="border-white/10 bg-[#161922] text-slate-100">
+      <DialogContent className={CRM_DIALOG}>
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>Nueva etiqueta</DialogTitle>
@@ -59,7 +60,7 @@ export const LabelFormDialog = ({
                 value={name}
                 onChange={(event) => setName(event.target.value)}
                 placeholder="ej: pago pendiente, VIP, instalación..."
-                className="border-white/10 bg-[#1d2130]"
+                className={`${CRM_SURFACES.border} ${CRM_SURFACES.input}`}
               />
             </div>
             <div className="space-y-2">
@@ -71,7 +72,7 @@ export const LabelFormDialog = ({
                     type="button"
                     onClick={() => setColorIndex(index)}
                     className={`size-6 rounded-full border-2 transition ${
-                      colorIndex === index ? "scale-110 border-white" : "border-transparent"
+                      colorIndex === index ? "scale-110 border-slate-900 dark:border-white" : "border-transparent"
                     }`}
                     style={{ backgroundColor: item.color }}
                     aria-label={`Color ${index + 1}`}
@@ -81,12 +82,10 @@ export const LabelFormDialog = ({
             </div>
           </div>
           <DialogFooter className="mt-5">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <CrmButton type="button" variant="secondary" onClick={() => onOpenChange(false)}>
               Cancelar
-            </Button>
-            <Button type="submit" className="bg-blue-500">
-              Crear etiqueta
-            </Button>
+            </CrmButton>
+            <CrmButton type="submit">Crear etiqueta</CrmButton>
           </DialogFooter>
         </form>
       </DialogContent>

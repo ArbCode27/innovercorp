@@ -2,6 +2,7 @@
 
 import { Pause, Play, Volume2 } from "lucide-react";
 import { useRef, useState } from "react";
+import { CRM_SURFACES } from "../../_lib/crm-theme";
 
 interface AudioMessageProps {
   src: string;
@@ -32,8 +33,8 @@ export const AudioMessage = ({ src, caption, isOutgoing }: AudioMessageProps) =>
     ? `Mensaje de audio: ${trimmedCaption}`
     : "Mensaje de audio";
   const playButtonClassName = isOutgoing
-    ? "bg-white text-blue-600 hover:bg-blue-50 focus-visible:ring-white/70"
-    : "bg-blue-500 text-white hover:bg-blue-400 focus-visible:ring-blue-300";
+    ? "bg-white text-blue-700 hover:bg-blue-50 focus-visible:ring-white/70"
+    : "bg-blue-600 text-white hover:bg-blue-500 focus-visible:ring-blue-400";
   const durationLabel = duration ? formatAudioTime(duration) : "--:--";
 
   const handleTogglePlayback = async () => {
@@ -109,7 +110,7 @@ export const AudioMessage = ({ src, caption, isOutgoing }: AudioMessageProps) =>
       <div className="flex items-center gap-3">
         <button
           type="button"
-          className={`flex size-10 shrink-0 items-center justify-center rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 ${playButtonClassName}`}
+          className={`flex size-10 shrink-0 items-center justify-center rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-50 dark:focus-visible:ring-offset-[#0f1117] ${playButtonClassName}`}
           onClick={handleTogglePlayback}
           aria-label={isPlaying ? "Pausar audio" : "Reproducir audio"}>
           {isPlaying ? (
@@ -147,7 +148,7 @@ export const AudioMessage = ({ src, caption, isOutgoing }: AudioMessageProps) =>
       {visibleCaption ? (
         <p
           className={`whitespace-pre-wrap break-words text-xs leading-relaxed ${
-            isOutgoing ? "text-blue-50" : "text-slate-300"
+            isOutgoing ? "text-blue-50" : CRM_SURFACES.textSecondary
           }`}>
           {visibleCaption}
         </p>

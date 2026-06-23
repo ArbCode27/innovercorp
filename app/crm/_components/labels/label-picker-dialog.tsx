@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
+import { CrmButton } from "../shared/crm-button";
 import {
   Dialog,
   DialogContent,
@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import type { Label } from "../../_lib/types";
+import { CRM_DIALOG, CRM_SURFACES } from "../../_lib/crm-theme";
 import { LabelChip } from "../shared/label-chip";
 
 interface LabelPickerDialogProps {
@@ -49,10 +50,10 @@ export const LabelPickerDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="border-white/10 bg-[#161922] text-slate-100">
+      <DialogContent className={CRM_DIALOG}>
         <DialogHeader>
           <DialogTitle>Asignar etiquetas</DialogTitle>
-          <DialogDescription className="text-slate-500">
+          <DialogDescription className={CRM_SURFACES.textMuted}>
             Haz clic para activar o desactivar etiquetas en esta conversación.
           </DialogDescription>
         </DialogHeader>
@@ -67,12 +68,12 @@ export const LabelPickerDialog = ({
           ))}
         </div>
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+          <CrmButton type="button" variant="secondary" onClick={() => onOpenChange(false)}>
             Cancelar
-          </Button>
-          <Button type="button" onClick={handleSubmit} className="bg-blue-500">
+          </CrmButton>
+          <CrmButton type="button" onClick={handleSubmit}>
             Guardar
-          </Button>
+          </CrmButton>
         </DialogFooter>
       </DialogContent>
     </Dialog>

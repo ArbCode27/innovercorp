@@ -6,6 +6,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { CRM_SURFACES } from "../../_lib/crm-theme";
 import type { Client, Ticket } from "../../_lib/types";
 import { AvatarInitials } from "../shared/avatar-initials";
 import { StatusBadge } from "../shared/status-badge";
@@ -16,16 +17,16 @@ interface ClientsTableProps {
 }
 
 export const ClientsTable = ({ clients, tickets }: ClientsTableProps) => (
-  <div className="overflow-hidden rounded-xl border border-white/10 bg-[#161922]">
+  <div className={`overflow-hidden rounded-xl border ${CRM_SURFACES.border} ${CRM_SURFACES.elevated}`}>
     <Table>
       <TableHeader>
-        <TableRow className="border-white/10 hover:bg-transparent">
-          <TableHead className="text-slate-500">Cliente</TableHead>
-          <TableHead className="text-slate-500">Teléfono</TableHead>
-          <TableHead className="text-slate-500">Plan</TableHead>
-          <TableHead className="text-slate-500">Zona</TableHead>
-          <TableHead className="text-slate-500">Estado</TableHead>
-          <TableHead className="text-slate-500">Tickets</TableHead>
+        <TableRow className={`${CRM_SURFACES.border} hover:bg-transparent`}>
+          <TableHead className={CRM_SURFACES.textMuted}>Cliente</TableHead>
+          <TableHead className={CRM_SURFACES.textMuted}>Teléfono</TableHead>
+          <TableHead className={CRM_SURFACES.textMuted}>Plan</TableHead>
+          <TableHead className={CRM_SURFACES.textMuted}>Zona</TableHead>
+          <TableHead className={CRM_SURFACES.textMuted}>Estado</TableHead>
+          <TableHead className={CRM_SURFACES.textMuted}>Tickets</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -36,7 +37,7 @@ export const ClientsTable = ({ clients, tickets }: ClientsTableProps) => (
             );
 
             return (
-              <TableRow key={client.id} className="border-white/10 hover:bg-white/[.03]">
+              <TableRow key={client.id} className={`${CRM_SURFACES.border} ${CRM_SURFACES.hover}`}>
                 <TableCell>
                   <div className="flex items-center gap-2">
                     <AvatarInitials
@@ -46,13 +47,13 @@ export const ClientsTable = ({ clients, tickets }: ClientsTableProps) => (
                       bg={client.bg}
                       size="sm"
                     />
-                    <span className="font-medium text-slate-100">{client.name}</span>
+                    <span className={`font-medium ${CRM_SURFACES.textPrimary}`}>{client.name}</span>
                   </div>
                 </TableCell>
-                <TableCell className="font-mono text-slate-400">{client.phone}</TableCell>
-                <TableCell className="text-slate-300">{client.plan || "—"}</TableCell>
-                <TableCell className="text-slate-400">{client.zone || "—"}</TableCell>
-                <TableCell className="text-slate-300">{client.account || "—"}</TableCell>
+                <TableCell className={`font-mono ${CRM_SURFACES.textMuted}`}>{client.phone}</TableCell>
+                <TableCell className={CRM_SURFACES.textSecondary}>{client.plan || "—"}</TableCell>
+                <TableCell className={CRM_SURFACES.textMuted}>{client.zone || "—"}</TableCell>
+                <TableCell className={CRM_SURFACES.textSecondary}>{client.account || "—"}</TableCell>
                 <TableCell>
                   <StatusBadge
                     status={
@@ -66,8 +67,8 @@ export const ClientsTable = ({ clients, tickets }: ClientsTableProps) => (
             );
           })
         ) : (
-          <TableRow className="border-white/10">
-            <TableCell colSpan={6} className="h-24 text-center text-slate-500">
+          <TableRow className={CRM_SURFACES.border}>
+            <TableCell colSpan={6} className={`h-24 text-center ${CRM_SURFACES.textMuted}`}>
               Sin clientes aún.
             </TableCell>
           </TableRow>
