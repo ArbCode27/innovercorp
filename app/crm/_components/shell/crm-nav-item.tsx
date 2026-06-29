@@ -7,6 +7,7 @@ interface CrmNavItemProps {
   label: string;
   view: CrmView;
   isActive: boolean;
+  badgeCount?: number;
   onSelect: (view: CrmView) => void;
 }
 
@@ -15,6 +16,7 @@ export const CrmNavItem = ({
   label,
   view,
   isActive,
+  badgeCount = 0,
   onSelect,
 }: CrmNavItemProps) => (
   <button
@@ -29,5 +31,12 @@ export const CrmNavItem = ({
         : "text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-slate-200"
     }`}>
     <Icon className="size-5" aria-hidden="true" />
+    {badgeCount > 0 ? (
+      <span
+        className="absolute -right-0.5 -top-0.5 flex min-w-4 items-center justify-center rounded-full bg-blue-600 px-1 text-[10px] font-semibold leading-4 text-white"
+        aria-hidden="true">
+        {badgeCount > 99 ? "99+" : badgeCount}
+      </span>
+    ) : null}
   </button>
 );

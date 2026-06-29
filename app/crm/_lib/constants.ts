@@ -7,6 +7,8 @@ export const CRM_NAV_ITEMS: Array<{
   label: string;
 }> = [
   { id: "conversations", label: "Conversaciones" },
+  { id: "my-conversations", label: "Mis asignadas" },
+  { id: "history", label: "Historial" },
   { id: "clients", label: "Clientes" },
   { id: "tickets", label: "Tickets" },
   { id: "labels", label: "Etiquetas" },
@@ -20,7 +22,6 @@ export const CONVERSATION_FILTERS: Array<{
   { id: "all", label: "Todas" },
   { id: "bot", label: "Bot" },
   { id: "human", label: "Humano" },
-  { id: "resolved", label: "Resueltas" },
 ];
 
 export const AGENT_STATUSES: AgentStatus[] = ["online", "busy", "offline"];

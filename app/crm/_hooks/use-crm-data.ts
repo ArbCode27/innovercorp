@@ -49,11 +49,15 @@ export const useCrmData = (agent: Agent | null) => {
   const [conversationFilter, setConversationFilter] =
     useState<ConversationFilter>("all");
   const [selectedLabelId, setSelectedLabelId] = useState<number | null>(null);
+  const [myAssignedSearchTerm, setMyAssignedSearchTerm] = useState("");
+  const [myAssignedIncludeResolved, setMyAssignedIncludeResolved] =
+    useState(false);
   const [wisproSnapshotsByClientId, setWisproSnapshotsByClientId] = useState<
     Record<number, WisproCustomer>
   >({});
   const { sendMessage: sendWhatsAppMessage, isSending: isSendingMessage } =
     useSendMessage();
+  const [isResolvingConversation, setIsResolvingConversation] = useState(false);
 
   // Ref para acceder al selectedConversationId dentro de los listeners de Realtime
   const selectedConversationIdRef = useRef<number | null>(null);
@@ -133,6 +137,30 @@ export const useCrmData = (agent: Agent | null) => {
               conv.id === updated.id ? { ...conv, ...updated } : conv,
             ),
           }));
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "DELETE",
+          schema: "public",
+          table: "conversations",
+        },
+        (payload) => {
+          const deletedId = (payload.old as { id?: number }).id;
+          if (!deletedId) return;
+
+          setData((current) => ({
+            ...current,
+            conversations: current.conversations.filter(
+              (conv) => conv.id !== deletedId,
+            ),
+          }));
+
+          if (selectedConversationIdRef.current === deletedId) {
+            setSelectedConversationId(null);
+            setMessages([]);
+          }
         },
       )
       .subscribe((status) => {
@@ -244,6 +272,53 @@ export const useCrmData = (agent: Agent | null) => {
     return wisproSnapshotsByClientId[selectedClient.id] ?? null;
   }, [selectedClient, wisproSnapshotsByClientId]);
 
+  const myAssignedConversations = useMemo(() => {
+    if (!agent) return [];
+
+    return data.conversations.filter(
+      (conversation) => conversation.agent_id === agent.id,
+    );
+  }, [agent, data.conversations]);
+
+  const filteredMyAssignedConversations = useMemo(() => {
+    const query = myAssignedSearchTerm.trim().toLowerCase();
+
+    return myAssignedConversations.filter((conversation) => {
+      if (
+        !myAssignedIncludeResolved &&
+        conversation.status === "resuelto"
+      ) {
+        return false;
+      }
+
+      const client = data.clients.find(
+        (item) => item.id === conversation.client_id,
+      );
+      const name = client?.name || "Número desconocido";
+
+      if (!query) return true;
+
+      return (
+        name.toLowerCase().includes(query) ||
+        (client?.phone || "").toLowerCase().includes(query) ||
+        (client?.whatsapp_id || "").toLowerCase().includes(query)
+      );
+    });
+  }, [
+    data.clients,
+    myAssignedConversations,
+    myAssignedIncludeResolved,
+    myAssignedSearchTerm,
+  ]);
+
+  const myActiveAssignedCount = useMemo(
+    () =>
+      myAssignedConversations.filter(
+        (conversation) => conversation.status !== "resuelto",
+      ).length,
+    [myAssignedConversations],
+  );
+
   const filteredConversations = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
 
@@ -260,11 +335,9 @@ export const useCrmData = (agent: Agent | null) => {
 
       if (!matchesSearch) return false;
       if (conversationFilter === "bot" && conversation.human_mode) return false;
-      if (conversationFilter === "human" && !conversation.human_mode)
-        return false;
       if (
-        conversationFilter === "resolved" &&
-        conversation.status !== "resuelto"
+        conversationFilter === "human" &&
+        !conversation.human_mode
       )
         return false;
       if (selectedLabelId && !conversation.label_ids.includes(selectedLabelId))
@@ -395,15 +468,40 @@ export const useCrmData = (agent: Agent | null) => {
   };
 
   const resolveConversation = async () => {
-    if (!selectedConversation) return;
+    if (!selectedConversation || !agent) return;
 
-    await crmService.updateConversation(selectedConversation.id, {
-      status: "resuelto",
-    });
-    await crmService.resolveTicketForClient(selectedConversation.client_id);
-    updateConversationLocal({ ...selectedConversation, status: "resuelto" });
-    await loadData();
-    toast.success("Conversación resuelta");
+    const resolvedConversationId = selectedConversation.id;
+
+    setIsResolvingConversation(true);
+
+    try {
+      await crmService.archiveAndResolveConversation(
+        resolvedConversationId,
+        agent.id,
+      );
+
+      setData((current) => ({
+        ...current,
+        conversations: current.conversations.filter(
+          (conversation) => conversation.id !== resolvedConversationId,
+        ),
+      }));
+
+      if (selectedConversationId === resolvedConversationId) {
+        setSelectedConversationId(null);
+        setMessages([]);
+      }
+
+      toast.success("Conversación archivada y cerrada");
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "No se pudo archivar la conversación",
+      );
+    } finally {
+      setIsResolvingConversation(false);
+    }
   };
 
   const updateLabels = async (labelIds: number[]) => {
@@ -545,12 +643,20 @@ export const useCrmData = (agent: Agent | null) => {
     selectedWisproSnapshot,
     selectedConversationId,
     filteredConversations,
+    myAssignedConversations,
+    filteredMyAssignedConversations,
+    myActiveAssignedCount,
+    myAssignedSearchTerm,
+    myAssignedIncludeResolved,
+    setMyAssignedSearchTerm,
+    setMyAssignedIncludeResolved,
     clientsById,
     labelsById,
     ticketsByClientId,
     isLoading,
     isMessagesLoading,
     isSendingMessage,
+    isResolvingConversation,
     searchTerm,
     conversationFilter,
     selectedLabelId,

@@ -17,6 +17,7 @@ interface ConversationHeaderProps {
   onTakeControl: () => void;
   onReactivateBot: () => void;
   onResolve: () => void;
+  isResolving?: boolean;
   onOpenNote: () => void;
   onOpenAssign: () => void;
   onOpenWispro: () => void;
@@ -34,6 +35,7 @@ export const ConversationHeader = ({
   onOpenNote,
   onOpenAssign,
   onOpenWispro,
+  isResolving = false,
 }: ConversationHeaderProps) => {
   const displayName = client?.name || "Número desconocido";
   const phone =
@@ -92,12 +94,15 @@ export const ConversationHeader = ({
               Tomar control
             </CrmButton>
           )}
-          {conversation.status !== "resuelto" ? (
-            <CrmButton type="button" variant="success" size="sm" onClick={onResolve}>
-              <Check className="size-3" aria-hidden="true" />
-              Resolver
-            </CrmButton>
-          ) : null}
+          <CrmButton
+            type="button"
+            variant="success"
+            size="sm"
+            disabled={isResolving}
+            onClick={onResolve}>
+            <Check className="size-3" aria-hidden="true" />
+            {isResolving ? "Archivando..." : "Resolver"}
+          </CrmButton>
           <CrmButton type="button" variant="secondary" size="sm" onClick={onOpenLabels}>
             <Tag className="size-3" aria-hidden="true" />
             Editar etiquetas

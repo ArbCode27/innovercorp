@@ -18,9 +18,16 @@ export type MessageMediaType = "audio" | "image" | "video" | "document";
 
 export type TicketStatus = "Abierto" | "En proceso" | "Resuelto";
 
-export type CrmView = "conversations" | "clients" | "tickets" | "labels" | "agents";
+export type CrmView =
+  | "conversations"
+  | "my-conversations"
+  | "history"
+  | "clients"
+  | "tickets"
+  | "labels"
+  | "agents";
 
-export type ConversationFilter = "all" | "bot" | "human" | "resolved";
+export type ConversationFilter = "all" | "bot" | "human";
 
 export interface Agent {
   id: number;
@@ -118,6 +125,56 @@ export interface Message {
   sender_type: MessageSenderType;
   status?: "sent" | "delivered" | "read" | "failed" | null;
   created_at: string | null;
+}
+
+export interface MessageSnapshot {
+  id: number;
+  type: MessageType;
+  content: string;
+  sender_type: MessageSenderType;
+  media_url?: string | null;
+  media_type?: MessageMediaType | null;
+  wa_message_id?: string | null;
+  status?: "sent" | "delivered" | "read" | "failed" | null;
+  created_at: string | null;
+}
+
+export interface HistoryMessage {
+  id: number;
+  history_id: number;
+  source_message_id: number | null;
+  source_conversation_id: number | null;
+  type: MessageType;
+  content: string;
+  sender_type: MessageSenderType;
+  media_url?: string | null;
+  media_type?: MessageMediaType | null;
+  wa_message_id?: string | null;
+  status?: "sent" | "delivered" | "read" | "failed" | null;
+  created_at: string;
+  archived_at?: string | null;
+}
+
+export interface ConversationHistory {
+  id: number;
+  client_id: number | null;
+  agent_id: number | null;
+  client_name: string | null;
+  client_phone: string | null;
+  client_plan: string | null;
+  client_zone: string | null;
+  client_account: string | null;
+  resolved_at: string;
+  resolved_by: number | null;
+  human_mode: boolean;
+  label_ids: number[];
+  wa_phone_number_id: string | null;
+  total_messages: number;
+  first_message_at: string | null;
+  last_message_at: string | null;
+  summary: string | null;
+  created_at: string;
+  history_messages?: HistoryMessage[];
 }
 
 export interface Label {

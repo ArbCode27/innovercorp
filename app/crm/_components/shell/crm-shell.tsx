@@ -9,7 +9,9 @@ import { useCrmData } from "../../_hooks/use-crm-data";
 import type { CrmView } from "../../_lib/types";
 import { AgentsView } from "../agents/agents-view";
 import { ClientsView } from "../clients/clients-view";
+import { MyConversationsView } from "../conversations/my-conversations-view";
 import { ConversationsView } from "../conversations/conversations-view";
+import { HistoryView } from "../history/history-view";
 import { LabelsView } from "../labels/labels-view";
 import { TicketsView } from "../tickets/tickets-view";
 import { CrmSidebar } from "./crm-sidebar";
@@ -21,7 +23,7 @@ export const CrmShell = () => {
 
   if (auth.isLoading) {
     return (
-      <main className={`min-h-screen ${CRM_SURFACES.page}`}>
+      <main className={`flex h-full items-center justify-center ${CRM_SURFACES.page}`}>
         <LoadingState label="Preparando CRM..." />
       </main>
     );
@@ -34,17 +36,20 @@ export const CrmShell = () => {
   const handleSelectView = (view: CrmView) => setActiveView(view);
 
   return (
-    <main className={`flex h-screen overflow-hidden ${CRM_SURFACES.page}`}>
+    <main className={`flex h-full overflow-hidden ${CRM_SURFACES.page}`}>
       <CrmSidebar
         agent={auth.agent}
         activeView={activeView}
+        myAssignedCount={crm.myActiveAssignedCount}
         onSelectView={handleSelectView}
         onToggleStatus={auth.updateStatus}
         onLogout={auth.logout}
       />
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         {crm.isLoading ? (
-          <LoadingState label="Conectando con Supabase..." />
+          <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden">
+            <LoadingState label="Conectando con Supabase..." />
+          </div>
         ) : (
           <>
             {activeView === "conversations" ? (
@@ -64,6 +69,7 @@ export const CrmShell = () => {
                 selectedConversationId={crm.selectedConversationId}
                 isMessagesLoading={crm.isMessagesLoading}
                 isSendingMessage={crm.isSendingMessage}
+                isResolvingConversation={crm.isResolvingConversation}
                 searchTerm={crm.searchTerm}
                 conversationFilter={crm.conversationFilter}
                 selectedLabelId={crm.selectedLabelId}
@@ -81,6 +87,43 @@ export const CrmShell = () => {
                 onAssignAgent={crm.assignAgent}
                 onAssociateWispro={crm.associateWisproToConversation}
               />
+            ) : null}
+            {activeView === "my-conversations" ? (
+              <MyConversationsView
+                currentAgent={auth.agent}
+                assignedConversations={crm.myAssignedConversations}
+                filteredConversations={crm.filteredMyAssignedConversations}
+                clientsById={crm.clientsById}
+                labelsById={crm.labelsById}
+                labels={crm.labels}
+                agents={crm.agents}
+                ticketsByClientId={crm.ticketsByClientId}
+                messages={crm.messages}
+                selectedConversation={crm.selectedConversation}
+                selectedClient={crm.selectedClient}
+                selectedWisproSnapshot={crm.selectedWisproSnapshot}
+                selectedConversationId={crm.selectedConversationId}
+                isMessagesLoading={crm.isMessagesLoading}
+                isSendingMessage={crm.isSendingMessage}
+                isResolvingConversation={crm.isResolvingConversation}
+                searchTerm={crm.myAssignedSearchTerm}
+                includeResolved={crm.myAssignedIncludeResolved}
+                onSearchChange={crm.setMyAssignedSearchTerm}
+                onIncludeResolvedChange={crm.setMyAssignedIncludeResolved}
+                onSelectConversation={crm.selectConversation}
+                onSendMessage={crm.sendMessage}
+                onAddNote={crm.addNote}
+                onTakeControl={crm.takeControl}
+                onReactivateBot={crm.reactivateBot}
+                onResolve={crm.resolveConversation}
+                onUpdateLabels={crm.updateLabels}
+                onQuickToggleLabel={crm.quickToggleLabel}
+                onAssignAgent={crm.assignAgent}
+                onAssociateWispro={crm.associateWisproToConversation}
+              />
+            ) : null}
+            {activeView === "history" ? (
+              <HistoryView agents={crm.agents} labels={crm.labels} />
             ) : null}
             {activeView === "clients" ? (
               <ClientsView

@@ -8,5 +8,9 @@ export const metadata: Metadata = {
 };
 
 export default function CrmLayout({ children }: { children: ReactNode }) {
-  return <CrmThemeProvider>{children}</CrmThemeProvider>;
+  return (
+    <CrmThemeProvider>
+      <div className="h-svh overflow-hidden">{children}</div>
+    </CrmThemeProvider>
+  );
 }

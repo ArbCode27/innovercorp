@@ -1,6 +1,6 @@
 "use client";
 
-import { Bot, Headphones, Layers, LogOut, Tags, Ticket, Users } from "lucide-react";
+import { Bot, Headphones, History, Inbox, Layers, LogOut, Tags, Ticket, Users } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,6 +20,7 @@ import { CrmThemeToggle } from "./crm-theme-toggle";
 interface CrmSidebarProps {
   agent: Agent;
   activeView: CrmView;
+  myAssignedCount?: number;
   onSelectView: (view: CrmView) => void;
   onToggleStatus: () => void;
   onLogout: () => void;
@@ -27,21 +28,24 @@ interface CrmSidebarProps {
 
 const icons = {
   conversations: Headphones,
+  "my-conversations": Inbox,
+  history: History,
   clients: Users,
   tickets: Ticket,
   labels: Tags,
   agents: Bot,
-};
+} as const;
 
 export const CrmSidebar = ({
   agent,
   activeView,
+  myAssignedCount = 0,
   onSelectView,
   onToggleStatus,
   onLogout,
 }: CrmSidebarProps) => (
   <aside
-    className={`flex w-16 shrink-0 flex-col items-center border-r py-4 ${CRM_SURFACES.elevated} ${CRM_SURFACES.border}`}>
+    className={`flex h-full min-h-0 w-16 shrink-0 flex-col items-center border-r py-4 ${CRM_SURFACES.elevated} ${CRM_SURFACES.border}`}>
     <div className="mb-5 flex size-10 items-center justify-center rounded-xl bg-blue-600 text-white">
       <Layers className="size-5" aria-hidden="true" />
     </div>
@@ -54,6 +58,7 @@ export const CrmSidebar = ({
           label={item.label}
           view={item.id}
           isActive={activeView === item.id}
+          badgeCount={item.id === "my-conversations" ? myAssignedCount : 0}
           onSelect={onSelectView}
         />
       ))}

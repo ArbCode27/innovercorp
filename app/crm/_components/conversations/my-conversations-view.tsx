@@ -1,14 +1,25 @@
 "use client";
 
-import type { Agent, Client, Conversation, ConversationFilter, Label, Message, Ticket, WisproCustomer, WisproSearchResult } from "../../_lib/types";
+import { Inbox } from "lucide-react";
+import type {
+  Agent,
+  Client,
+  Conversation,
+  Label,
+  Message,
+  Ticket,
+  WisproCustomer,
+  WisproSearchResult,
+} from "../../_lib/types";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
-import { ConversationFilters } from "./conversation-filters";
+import { EmptyState } from "../shared/empty-state";
 import { ConversationList } from "./conversation-list";
 import { ConversationPanel } from "./conversation-panel";
+import { MyConversationsFilters } from "./my-conversations-filters";
 
-interface ConversationsViewProps {
+interface MyConversationsViewProps {
   currentAgent: Agent;
-  conversations: Conversation[];
+  assignedConversations: Conversation[];
   filteredConversations: Conversation[];
   clientsById: Map<number, Client>;
   labelsById: Map<number, Label>;
@@ -24,11 +35,9 @@ interface ConversationsViewProps {
   isSendingMessage: boolean;
   isResolvingConversation?: boolean;
   searchTerm: string;
-  conversationFilter: ConversationFilter;
-  selectedLabelId: number | null;
+  includeResolved: boolean;
   onSearchChange: (value: string) => void;
-  onFilterChange: (value: ConversationFilter) => void;
-  onLabelFilterChange: (value: number | null) => void;
+  onIncludeResolvedChange: (value: boolean) => void;
   onSelectConversation: (id: number) => void;
   onSendMessage: (content: string) => Promise<void>;
   onAddNote: (content: string) => Promise<void>;
@@ -41,9 +50,9 @@ interface ConversationsViewProps {
   onAssociateWispro: (result: WisproSearchResult) => Promise<void>;
 }
 
-export const ConversationsView = ({
+export const MyConversationsView = ({
   currentAgent,
-  conversations,
+  assignedConversations,
   filteredConversations,
   clientsById,
   labelsById,
@@ -59,11 +68,9 @@ export const ConversationsView = ({
   isSendingMessage,
   isResolvingConversation,
   searchTerm,
-  conversationFilter,
-  selectedLabelId,
+  includeResolved,
   onSearchChange,
-  onFilterChange,
-  onLabelFilterChange,
+  onIncludeResolvedChange,
   onSelectConversation,
   onSendMessage,
   onAddNote,
@@ -74,7 +81,7 @@ export const ConversationsView = ({
   onQuickToggleLabel,
   onAssignAgent,
   onAssociateWispro,
-}: ConversationsViewProps) => {
+}: MyConversationsViewProps) => {
   const selectedLabels = selectedConversation
     ? selectedConversation.label_ids
         .map((id) => labelsById.get(id))
@@ -85,32 +92,51 @@ export const ConversationsView = ({
       ? ticketsByClientId.get(selectedConversation.client_id) || []
       : [];
 
+  const activeCount = assignedConversations.filter(
+    (conversation) => conversation.status !== "resuelto",
+  ).length;
+
   return (
     <div className="flex min-h-0 flex-1">
-      <aside className={`flex w-80 shrink-0 flex-col border-r ${CRM_SURFACES.border} ${CRM_SURFACES.elevated}`}>
+      <aside
+        className={`flex w-80 shrink-0 flex-col border-r ${CRM_SURFACES.border} ${CRM_SURFACES.elevated}`}>
         <div className={`border-b p-4 ${CRM_SURFACES.border}`}>
-          <h2 className={`text-sm font-semibold ${CRM_SURFACES.textPrimary}`}>Conversaciones</h2>
+          <h2 className={`text-sm font-semibold ${CRM_SURFACES.textPrimary}`}>
+            Mis asignadas
+          </h2>
           <p className={`mt-1 text-xs ${CRM_SURFACES.textMuted}`}>
-            {filteredConversations.length} de {conversations.length}
+            {filteredConversations.length} de {assignedConversations.length}{" "}
+            asignadas
+            {!includeResolved && activeCount !== assignedConversations.length
+              ? ` · ${activeCount} activas`
+              : ""}
           </p>
         </div>
-        <ConversationFilters
+
+        <MyConversationsFilters
           searchTerm={searchTerm}
-          filter={conversationFilter}
-          labels={labels}
-          selectedLabelId={selectedLabelId}
+          includeResolved={includeResolved}
           onSearchChange={onSearchChange}
-          onFilterChange={onFilterChange}
-          onLabelChange={onLabelFilterChange}
+          onIncludeResolvedChange={onIncludeResolvedChange}
         />
-        <ConversationList
-          conversations={filteredConversations}
-          clientsById={clientsById}
-          labelsById={labelsById}
-          selectedConversationId={selectedConversationId}
-          onSelect={onSelectConversation}
-        />
+
+        {assignedConversations.length ? (
+          <ConversationList
+            conversations={filteredConversations}
+            clientsById={clientsById}
+            labelsById={labelsById}
+            selectedConversationId={selectedConversationId}
+            onSelect={onSelectConversation}
+          />
+        ) : (
+          <EmptyState
+            icon={Inbox}
+            title="No tienes conversaciones asignadas"
+            description="Cuando un administrador te asigne chats, aparecerán aquí."
+          />
+        )}
       </aside>
+
       <ConversationPanel
         conversation={selectedConversation}
         client={selectedClient}
@@ -119,7 +145,7 @@ export const ConversationsView = ({
         allLabels={labels}
         messages={messages}
         agents={agents}
-        conversations={conversations}
+        conversations={assignedConversations}
         currentAgent={currentAgent}
         tickets={selectedTickets}
         isMessagesLoading={isMessagesLoading}

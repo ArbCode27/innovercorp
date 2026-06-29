@@ -26,6 +26,7 @@ import { AssignAgentDialog } from "../agents/assign-agent-dialog";
 import { LabelPickerDialog } from "../labels/label-picker-dialog";
 import { UnknownClientBanner } from "../wispro/unknown-client-banner";
 import { WisproSearchDialog } from "../wispro/wispro-search-dialog";
+import { ResolveConversationDialog } from "./resolve-conversation-dialog";
 import { ConversationDetails } from "./conversation-details";
 import { ConversationHeader } from "./conversation-header";
 import { ConversationMessages } from "./conversation-messages";
@@ -45,6 +46,7 @@ interface ConversationPanelProps {
   tickets: Ticket[];
   isMessagesLoading: boolean;
   isSendingMessage: boolean;
+  isResolvingConversation?: boolean;
   onSendMessage: (content: string) => Promise<void>;
   onAddNote: (content: string) => Promise<void>;
   onTakeControl: () => Promise<void>;
@@ -69,6 +71,7 @@ export const ConversationPanel = ({
   tickets,
   isMessagesLoading,
   isSendingMessage,
+  isResolvingConversation = false,
   onSendMessage,
   onAddNote,
   onTakeControl,
@@ -83,7 +86,10 @@ export const ConversationPanel = ({
   const [isNoteDialogOpen, setIsNoteDialogOpen] = useState(false);
   const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false);
   const [isWisproDialogOpen, setIsWisproDialogOpen] = useState(false);
+  const [isResolveDialogOpen, setIsResolveDialogOpen] = useState(false);
   const [note, setNote] = useState("");
+
+  const clientDisplayName = client?.name || "Número desconocido";
 
   if (!conversation) {
     return (
@@ -136,7 +142,8 @@ export const ConversationPanel = ({
           onOpenLabels={() => setIsLabelDialogOpen(true)}
           onTakeControl={onTakeControl}
           onReactivateBot={onReactivateBot}
-          onResolve={onResolve}
+          onResolve={() => setIsResolveDialogOpen(true)}
+          isResolving={isResolvingConversation}
           onOpenNote={() => setIsNoteDialogOpen(true)}
           onOpenAssign={() => setIsAssignDialogOpen(true)}
           onOpenWispro={() => setIsWisproDialogOpen(true)}
@@ -222,6 +229,14 @@ export const ConversationPanel = ({
         conversations={conversations}
         onOpenChange={setIsAssignDialogOpen}
         onAssign={handleAssignAgent}
+      />
+
+      <ResolveConversationDialog
+        open={isResolveDialogOpen}
+        onOpenChange={setIsResolveDialogOpen}
+        clientName={clientDisplayName}
+        isSubmitting={isResolvingConversation}
+        onConfirm={onResolve}
       />
 
       <Dialog open={isNoteDialogOpen} onOpenChange={setIsNoteDialogOpen}>

@@ -15,6 +15,7 @@ import type {
   Message,
   Ticket,
   Client,
+  ConversationHistory,
   UpsertAgentInput,
 } from "./types";
 
@@ -185,6 +186,49 @@ export const crmService = {
       .eq("id", data.id);
 
     throwIfError(error);
+  },
+
+  async archiveAndResolveConversation(
+    conversationId: number,
+    resolvedBy: number,
+  ): Promise<number> {
+    const response = await fetch("/api/crm/conversations/resolve", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ conversationId, resolvedBy }),
+    });
+
+    const payload = (await response.json()) as {
+      historyId?: number;
+      error?: string;
+    };
+
+    if (!response.ok) {
+      throw new Error(payload.error || "No se pudo archivar la conversación");
+    }
+
+    if (!payload.historyId) {
+      throw new Error("No se recibió el historial de la conversación");
+    }
+
+    return payload.historyId;
+  },
+
+  async loadConversationHistory(): Promise<ConversationHistory[]> {
+    const response = await fetch("/api/crm/conversations/history");
+
+    const payload = (await response.json()) as {
+      entries?: ConversationHistory[];
+      error?: string;
+    };
+
+    if (!response.ok) {
+      throw new Error(
+        payload.error || "No se pudo cargar el historial de conversaciones",
+      );
+    }
+
+    return payload.entries ?? [];
   },
 
   async createClient(input: CreateClientInput, existingClients: number) {
