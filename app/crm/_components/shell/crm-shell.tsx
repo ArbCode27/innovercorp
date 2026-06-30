@@ -72,6 +72,7 @@ export const CrmShell = () => {
                 isResolvingConversation={crm.isResolvingConversation}
                 searchTerm={crm.searchTerm}
                 conversationFilter={crm.conversationFilter}
+                conversationFilterCounts={crm.conversationFilterCounts}
                 selectedLabelId={crm.selectedLabelId}
                 onSearchChange={crm.setSearchTerm}
                 onFilterChange={crm.setConversationFilter}

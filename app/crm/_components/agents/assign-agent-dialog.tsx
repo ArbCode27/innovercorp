@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { CrmButton } from "../shared/crm-button";
 import {
   Dialog,
@@ -8,6 +9,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  getAgentActiveConversationCount,
+  getAssignableAgents,
+  sortAgentsForAssignment,
+} from "../../_lib/agent-utils";
 import type { Agent, Conversation } from "../../_lib/types";
 import { CRM_DIALOG, CRM_FOCUS_RING, CRM_SURFACES } from "../../_lib/crm-theme";
 import { AvatarInitials } from "../shared/avatar-initials";
@@ -28,8 +34,9 @@ export const AssignAgentDialog = ({
   onOpenChange,
   onAssign,
 }: AssignAgentDialogProps) => {
-  const availableAgents = agents.filter(
-    (agent) => agent.status === "online" || agent.status === "busy"
+  const assignableAgents = useMemo(
+    () => sortAgentsForAssignment(getAssignableAgents(agents)),
+    [agents],
   );
 
   const handleAssignAgent = async (agentId: number) => {
@@ -43,25 +50,24 @@ export const AssignAgentDialog = ({
         <DialogHeader>
           <DialogTitle>Asignar conversación</DialogTitle>
           <DialogDescription className={CRM_SURFACES.textMuted}>
-            Selecciona el agente que atenderá esta conversación.
+            Selecciona el agente que atenderá esta conversación. Puedes asignar
+            aunque esté desconectado.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-2">
-          {availableAgents.length ? (
-            availableAgents.map((agent) => {
-              const activeCount = conversations.filter(
-                (conversation) =>
-                  conversation.agent_id === agent.id &&
-                  conversation.status !== "resuelto"
-              ).length;
+          {assignableAgents.length ? (
+            assignableAgents.map((agent) => {
+              const activeCount = getAgentActiveConversationCount(
+                agent.id,
+                conversations,
+              );
 
               return (
                 <button
                   key={agent.id}
                   type="button"
                   onClick={() => handleAssignAgent(agent.id)}
-                  className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left transition hover:border-blue-400/40 ${CRM_FOCUS_RING} ${CRM_SURFACES.border} ${CRM_SURFACES.card}`}
-                >
+                  className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left transition hover:border-blue-400/40 ${CRM_FOCUS_RING} ${CRM_SURFACES.border} ${CRM_SURFACES.card}`}>
                   <AvatarInitials
                     name={agent.name}
                     initials={agent.initials}
@@ -71,8 +77,8 @@ export const AssignAgentDialog = ({
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{agent.name}</p>
                     <p className={`text-xs ${CRM_SURFACES.textMuted}`}>
-                      {agent.role === "admin" ? "Admin" : "Agente"} · {activeCount} activas de{" "}
-                      {agent.max_conversations || 5}
+                      {agent.role === "admin" ? "Admin" : "Agente"} · {activeCount}{" "}
+                      activas de {agent.max_conversations || 5}
                     </p>
                   </div>
                   <StatusBadge status={agent.status} />
@@ -80,8 +86,9 @@ export const AssignAgentDialog = ({
               );
             })
           ) : (
-            <div className={`rounded-xl border p-4 text-sm ${CRM_SURFACES.border} ${CRM_SURFACES.card} ${CRM_SURFACES.textMuted}`}>
-              No hay agentes disponibles.
+            <div
+              className={`rounded-xl border p-4 text-sm ${CRM_SURFACES.border} ${CRM_SURFACES.card} ${CRM_SURFACES.textMuted}`}>
+              No hay agentes registrados.
             </div>
           )}
         </div>

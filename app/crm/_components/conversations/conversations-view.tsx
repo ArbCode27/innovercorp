@@ -1,5 +1,6 @@
 "use client";
 
+import type { ConversationFilterCounts } from "../../_lib/conversation-filter-utils";
 import type { Agent, Client, Conversation, ConversationFilter, Label, Message, Ticket, WisproCustomer, WisproSearchResult } from "../../_lib/types";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
 import { ConversationFilters } from "./conversation-filters";
@@ -25,6 +26,7 @@ interface ConversationsViewProps {
   isResolvingConversation?: boolean;
   searchTerm: string;
   conversationFilter: ConversationFilter;
+  conversationFilterCounts: ConversationFilterCounts;
   selectedLabelId: number | null;
   onSearchChange: (value: string) => void;
   onFilterChange: (value: ConversationFilter) => void;
@@ -60,6 +62,7 @@ export const ConversationsView = ({
   isResolvingConversation,
   searchTerm,
   conversationFilter,
+  conversationFilterCounts,
   selectedLabelId,
   onSearchChange,
   onFilterChange,
@@ -91,12 +94,13 @@ export const ConversationsView = ({
         <div className={`border-b p-4 ${CRM_SURFACES.border}`}>
           <h2 className={`text-sm font-semibold ${CRM_SURFACES.textPrimary}`}>Conversaciones</h2>
           <p className={`mt-1 text-xs ${CRM_SURFACES.textMuted}`}>
-            {filteredConversations.length} de {conversations.length}
+            {filteredConversations.length} de {conversationFilterCounts.all}
           </p>
         </div>
         <ConversationFilters
           searchTerm={searchTerm}
           filter={conversationFilter}
+          counts={conversationFilterCounts}
           labels={labels}
           selectedLabelId={selectedLabelId}
           onSearchChange={onSearchChange}

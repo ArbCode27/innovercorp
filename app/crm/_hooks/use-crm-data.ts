@@ -4,6 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { createClient } from "@supabase/supabase-js";
 import { crmService } from "../_lib/crm-service";
+import {
+  filterConversations,
+  getConversationFilterCounts,
+} from "../_lib/conversation-filter-utils";
 import { wisproService } from "../_lib/wispro-service";
 import { useSendMessage } from "./use-send-message";
 import type {
@@ -319,39 +323,32 @@ export const useCrmData = (agent: Agent | null) => {
     [myAssignedConversations],
   );
 
-  const filteredConversations = useMemo(() => {
-    const query = searchTerm.trim().toLowerCase();
+  const filteredConversations = useMemo(
+    () =>
+      filterConversations(data.conversations, clientsById, {
+        searchTerm,
+        selectedLabelId,
+        modeFilter: conversationFilter,
+      }),
+    [
+      clientsById,
+      conversationFilter,
+      data.conversations,
+      searchTerm,
+      selectedLabelId,
+    ],
+  );
 
-    return data.conversations.filter((conversation) => {
-      const client = data.clients.find(
-        (item) => item.id === conversation.client_id,
-      );
-      const name = client?.name || "Número desconocido";
-      const matchesSearch =
-        !query ||
-        name.toLowerCase().includes(query) ||
-        (client?.phone || "").toLowerCase().includes(query) ||
-        (client?.whatsapp_id || "").toLowerCase().includes(query);
-
-      if (!matchesSearch) return false;
-      if (conversationFilter === "bot" && conversation.human_mode) return false;
-      if (
-        conversationFilter === "human" &&
-        !conversation.human_mode
-      )
-        return false;
-      if (selectedLabelId && !conversation.label_ids.includes(selectedLabelId))
-        return false;
-
-      return true;
-    });
-  }, [
-    conversationFilter,
-    data.clients,
-    data.conversations,
-    searchTerm,
-    selectedLabelId,
-  ]);
+  const conversationFilterCounts = useMemo(
+    () =>
+      getConversationFilterCounts(
+        data.conversations,
+        clientsById,
+        searchTerm,
+        selectedLabelId,
+      ),
+    [clientsById, data.conversations, searchTerm, selectedLabelId],
+  );
 
   const selectConversation = async (conversationId: number) => {
     setSelectedConversationId(conversationId);
@@ -643,6 +640,7 @@ export const useCrmData = (agent: Agent | null) => {
     selectedWisproSnapshot,
     selectedConversationId,
     filteredConversations,
+    conversationFilterCounts,
     myAssignedConversations,
     filteredMyAssignedConversations,
     myActiveAssignedCount,

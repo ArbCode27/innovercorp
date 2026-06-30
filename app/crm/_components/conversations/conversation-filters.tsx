@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { CONVERSATION_FILTERS } from "../../_lib/constants";
 import { CRM_FOCUS_RING, CRM_SURFACES } from "../../_lib/crm-theme";
+import type { ConversationFilterCounts } from "../../_lib/conversation-filter-utils";
 import type { ConversationFilter, Label } from "../../_lib/types";
 import { CrmFilterChip } from "../shared/crm-filter-chip";
 import { LabelChip } from "../shared/label-chip";
@@ -12,6 +13,7 @@ import { LabelChip } from "../shared/label-chip";
 interface ConversationFiltersProps {
   searchTerm: string;
   filter: ConversationFilter;
+  counts: ConversationFilterCounts;
   labels: Label[];
   selectedLabelId: number | null;
   onSearchChange: (value: string) => void;
@@ -22,6 +24,7 @@ interface ConversationFiltersProps {
 export const ConversationFilters = ({
   searchTerm,
   filter,
+  counts,
   labels,
   selectedLabelId,
   onSearchChange,
@@ -53,6 +56,7 @@ export const ConversationFilters = ({
         <CrmFilterChip
           key={item.id}
           label={item.label}
+          count={counts[item.id]}
           isActive={filter === item.id}
           onClick={() => onFilterChange(item.id)}
         />
