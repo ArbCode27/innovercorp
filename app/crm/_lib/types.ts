@@ -27,7 +27,7 @@ export type CrmView =
   | "labels"
   | "agents";
 
-export type ConversationFilter = "all" | "bot" | "human";
+export type ConversationFilter = "all" | "unread" | "bot" | "human";
 
 export interface Agent {
   id: number;

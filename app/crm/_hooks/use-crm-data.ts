@@ -8,6 +8,10 @@ import {
   filterConversations,
   getConversationFilterCounts,
 } from "../_lib/conversation-filter-utils";
+import {
+  applyInboundMessageToConversation,
+  sortConversationsForInbox,
+} from "../_lib/conversation-inbox-utils";
 import { wisproService } from "../_lib/wispro-service";
 import { useSendMessage } from "./use-send-message";
 import type {
@@ -82,18 +86,30 @@ export const useCrmData = (agent: Agent | null) => {
         },
         (payload) => {
           const newMessage = payload.new as Message;
+          const isOpenConversation =
+            newMessage.conversation_id === selectedConversationIdRef.current;
 
-          // Solo agregar si pertenece a la conversación actualmente abierta
-          if (
-            newMessage.conversation_id === selectedConversationIdRef.current
-          ) {
+          if (isOpenConversation) {
             setMessages((current) => {
-              // Evitar duplicados (por si ya lo agregamos optimisticamente al enviar)
               const exists = current.some((m) => m.id === newMessage.id);
               if (exists) return current;
               return [...current, newMessage];
             });
+            return;
           }
+
+          if (newMessage.type !== "in") return;
+
+          setData((current) => ({
+            ...current,
+            conversations: current.conversations.map((conversation) =>
+              conversation.id === newMessage.conversation_id
+                ? applyInboundMessageToConversation(conversation, newMessage, {
+                    incrementUnread: true,
+                  })
+                : conversation,
+            ),
+          }));
         },
       )
       .subscribe((status) => {
@@ -287,7 +303,8 @@ export const useCrmData = (agent: Agent | null) => {
   const filteredMyAssignedConversations = useMemo(() => {
     const query = myAssignedSearchTerm.trim().toLowerCase();
 
-    return myAssignedConversations.filter((conversation) => {
+    return sortConversationsForInbox(
+      myAssignedConversations.filter((conversation) => {
       if (
         !myAssignedIncludeResolved &&
         conversation.status === "resuelto"
@@ -307,7 +324,8 @@ export const useCrmData = (agent: Agent | null) => {
         (client?.phone || "").toLowerCase().includes(query) ||
         (client?.whatsapp_id || "").toLowerCase().includes(query)
       );
-    });
+    }),
+    );
   }, [
     data.clients,
     myAssignedConversations,
@@ -325,11 +343,13 @@ export const useCrmData = (agent: Agent | null) => {
 
   const filteredConversations = useMemo(
     () =>
-      filterConversations(data.conversations, clientsById, {
-        searchTerm,
-        selectedLabelId,
-        modeFilter: conversationFilter,
-      }),
+      sortConversationsForInbox(
+        filterConversations(data.conversations, clientsById, {
+          searchTerm,
+          selectedLabelId,
+          modeFilter: conversationFilter,
+        }),
+      ),
     [
       clientsById,
       conversationFilter,
@@ -352,20 +372,25 @@ export const useCrmData = (agent: Agent | null) => {
 
   const selectConversation = async (conversationId: number) => {
     setSelectedConversationId(conversationId);
+
+    const conversation = data.conversations.find(
+      (item) => item.id === conversationId,
+    );
+
+    if (conversation?.unread) {
+      setData((current) => ({
+        ...current,
+        conversations: current.conversations.map((item) =>
+          item.id === conversationId ? { ...item, unread: 0 } : item,
+        ),
+      }));
+    }
+
     setIsMessagesLoading(true);
 
     try {
-      const conversation = data.conversations.find(
-        (item) => item.id === conversationId,
-      );
       if (conversation?.unread) {
         await crmService.clearUnread(conversationId);
-        setData((current) => ({
-          ...current,
-          conversations: current.conversations.map((item) =>
-            item.id === conversationId ? { ...item, unread: 0 } : item,
-          ),
-        }));
       }
 
       const loadedMessages = await crmService.loadMessages(conversationId);

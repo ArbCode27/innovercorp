@@ -94,7 +94,7 @@ export const ConversationsView = ({
         <div className={`border-b p-4 ${CRM_SURFACES.border}`}>
           <h2 className={`text-sm font-semibold ${CRM_SURFACES.textPrimary}`}>Conversaciones</h2>
           <p className={`mt-1 text-xs ${CRM_SURFACES.textMuted}`}>
-            {filteredConversations.length} de {conversationFilterCounts.all}
+            {filteredConversations.length} de {conversationFilterCounts[conversationFilter]}
           </p>
         </div>
         <ConversationFilters

@@ -31,6 +31,15 @@ export const CRM_MENU_ITEM =
 export const CRM_FOCUS_RING =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-50 dark:focus-visible:ring-offset-[#0f1117]";
 
+/** Conversation list item states in the inbox sidebar. */
+export const CRM_INBOX_ITEM = {
+  active:
+    "border-b border-l-2 border-l-blue-500 border-slate-200 bg-blue-50 dark:border-white/10 dark:bg-blue-950/40",
+  unread:
+    "border-b border-l-4 border-l-amber-400 border-slate-200 bg-amber-50/60 dark:border-l-amber-400 dark:border-white/10 dark:bg-amber-950/25",
+  default: "border-b border-slate-200 dark:border-white/10",
+} as const;
+
 /** Accessible badge tones for light and dark modes. */
 export const CRM_BADGE_TONES = {
   blue: "border-blue-300 bg-blue-50 text-blue-800 dark:border-blue-500/40 dark:bg-blue-950/60 dark:text-blue-100",

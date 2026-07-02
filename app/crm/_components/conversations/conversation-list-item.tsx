@@ -2,12 +2,18 @@
 
 import { Bot, CheckCircle2, Headphones } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  getConversationActivityTimestamp,
+  getUnreadCount,
+  hasUnreadMessages,
+} from "../../_lib/conversation-inbox-utils";
 import type { Client, Conversation, Label } from "../../_lib/types";
 import { formatCrmTime } from "../../_lib/formatters";
-import { CRM_BADGE_TONES, CRM_FOCUS_RING, CRM_SURFACES } from "../../_lib/crm-theme";
+import { CRM_BADGE_TONES, CRM_FOCUS_RING, CRM_INBOX_ITEM, CRM_SURFACES } from "../../_lib/crm-theme";
 import { AvatarInitials } from "../shared/avatar-initials";
 import { LabelChip } from "../shared/label-chip";
 import { StatusBadge } from "../shared/status-badge";
+import { UnreadCountBadge } from "../shared/unread-count-badge";
 
 interface ConversationListItemProps {
   conversation: Conversation;
@@ -28,18 +34,27 @@ export const ConversationListItem = ({
   const isResolved = conversation.status === "resuelto";
   const isHuman = conversation.human_mode;
   const preview = conversation.preview || "Sin mensajes";
+  const unreadCount = getUnreadCount(conversation);
+  const hasUnread = hasUnreadMessages(conversation);
+  const activityTimestamp = getConversationActivityTimestamp(conversation);
 
   return (
     <button
       type="button"
       onClick={() => onSelect(conversation.id)}
+      aria-label={
+        hasUnread
+          ? `${displayName}, ${unreadCount} mensajes sin leer`
+          : displayName
+      }
       className={cn(
         CRM_FOCUS_RING,
-        "group w-full border-b p-3 text-left transition",
-        CRM_SURFACES.border,
+        "group w-full p-3 text-left transition",
         isActive
-          ? "border-l-2 border-l-blue-500 bg-blue-50 dark:bg-blue-950/40"
-          : CRM_SURFACES.hover,
+          ? CRM_INBOX_ITEM.active
+          : hasUnread
+            ? CRM_INBOX_ITEM.unread
+            : cn(CRM_INBOX_ITEM.default, CRM_SURFACES.hover),
       )}>
       <div className="flex gap-3">
         <AvatarInitials
@@ -50,12 +65,27 @@ export const ConversationListItem = ({
         />
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
-            <p className={`truncate text-sm font-semibold ${CRM_SURFACES.textPrimary}`}>
+            <p
+              className={cn(
+                "truncate text-sm",
+                hasUnread || isActive
+                  ? `font-semibold ${CRM_SURFACES.textPrimary}`
+                  : `font-medium ${CRM_SURFACES.textPrimary}`,
+              )}>
               {displayName}
             </p>
-            <span className={`shrink-0 text-[11px] ${CRM_SURFACES.textMuted}`}>
-              {formatCrmTime(conversation.updated_at)}
-            </span>
+            <div className="flex shrink-0 items-center gap-1.5">
+              <span
+                className={cn(
+                  "text-[11px]",
+                  hasUnread
+                    ? "font-semibold text-amber-700 dark:text-amber-300"
+                    : CRM_SURFACES.textMuted,
+                )}>
+                {formatCrmTime(activityTimestamp || conversation.updated_at)}
+              </span>
+              <UnreadCountBadge count={unreadCount} />
+            </div>
           </div>
           <div className="mt-1 flex items-center gap-1.5">
             <span
@@ -83,15 +113,16 @@ export const ConversationListItem = ({
               <StatusBadge status={conversation.status} />
             )}
           </div>
-          <p className={`mt-2 line-clamp-2 text-xs leading-5 ${CRM_SURFACES.textMuted} group-hover:text-slate-600 dark:group-hover:text-slate-300`}>
+          <p
+            className={cn(
+              "mt-2 line-clamp-2 text-xs leading-5",
+              hasUnread
+                ? "font-medium text-slate-700 dark:text-slate-200"
+                : `${CRM_SURFACES.textMuted} group-hover:text-slate-600 dark:group-hover:text-slate-300`,
+            )}>
             {preview}
           </p>
         </div>
-        {conversation.unread ? (
-          <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-blue-600 text-[10px] font-semibold text-white">
-            {conversation.unread}
-          </span>
-        ) : null}
       </div>
 
       {labels.length ? (

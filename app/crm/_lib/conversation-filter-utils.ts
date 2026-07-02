@@ -1,4 +1,5 @@
 import type { Client, Conversation, ConversationFilter } from "./types";
+import { hasUnreadMessages } from "./conversation-inbox-utils";
 
 export type ConversationFilterCounts = Record<ConversationFilter, number>;
 
@@ -39,6 +40,7 @@ export const matchesConversationMode = (
   conversation: Conversation,
   modeFilter: ConversationFilter,
 ) => {
+  if (modeFilter === "unread") return hasUnreadMessages(conversation);
   if (modeFilter === "bot") return !conversation.human_mode;
   if (modeFilter === "human") return conversation.human_mode;
   return true;
@@ -75,6 +77,7 @@ export const getConversationFilterCounts = (
   selectedLabelId: number | null,
 ): ConversationFilterCounts => {
   let all = 0;
+  let unread = 0;
   let bot = 0;
   let human = 0;
 
@@ -89,6 +92,10 @@ export const getConversationFilterCounts = (
 
     all += 1;
 
+    if (hasUnreadMessages(conversation)) {
+      unread += 1;
+    }
+
     if (conversation.human_mode) {
       human += 1;
     } else {
@@ -96,7 +103,7 @@ export const getConversationFilterCounts = (
     }
   }
 
-  return { all, bot, human };
+  return { all, unread, bot, human };
 };
 
 export const filterConversations = (

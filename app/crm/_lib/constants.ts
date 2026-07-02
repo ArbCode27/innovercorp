@@ -20,6 +20,7 @@ export const CONVERSATION_FILTERS: Array<{
   label: string;
 }> = [
   { id: "all", label: "Todas" },
+  { id: "unread", label: "No leídas" },
   { id: "bot", label: "Bot" },
   { id: "human", label: "Humano" },
 ];
