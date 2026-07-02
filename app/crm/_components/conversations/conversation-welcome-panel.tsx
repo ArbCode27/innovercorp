@@ -1,6 +1,7 @@
 "use client";
 
 import { Bot, Headphones, MessageCircle, Sparkles, Tags, UserCheck } from "lucide-react";
+import { hasUnreadMessages } from "../../_lib/conversation-inbox-utils";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
 import type { Agent, Conversation, Label } from "../../_lib/types";
 
@@ -15,10 +16,9 @@ export const ConversationWelcomePanel = ({
   labels,
   currentAgent,
 }: ConversationWelcomePanelProps) => {
-  const unreadCount = conversations.reduce(
-    (total, conversation) => total + (conversation.unread || 0),
-    0
-  );
+  const unreadConversationsCount = conversations.filter((conversation) =>
+    hasUnreadMessages(conversation),
+  ).length;
   const botCount = conversations.filter(
     (conversation) => !conversation.human_mode && conversation.status !== "resuelto"
   ).length;
@@ -61,8 +61,10 @@ export const ConversationWelcomePanel = ({
             </div>
             <div className={`rounded-2xl border p-4 ${CRM_SURFACES.border} bg-slate-50 dark:bg-white/[.03]`}>
               <MessageCircle className="mx-auto mb-2 size-5 text-amber-600 dark:text-amber-300" aria-hidden="true" />
-              <p className={`text-xl font-semibold ${CRM_SURFACES.textPrimary}`}>{unreadCount}</p>
-              <p className={`text-xs ${CRM_SURFACES.textMuted}`}>sin leer</p>
+              <p className={`text-xl font-semibold ${CRM_SURFACES.textPrimary}`}>
+                {unreadConversationsCount}
+              </p>
+              <p className={`text-xs ${CRM_SURFACES.textMuted}`}>no leídas</p>
             </div>
             <div className={`rounded-2xl border p-4 ${CRM_SURFACES.border} bg-slate-50 dark:bg-white/[.03]`}>
               <Bot className="mx-auto mb-2 size-5 text-violet-600 dark:text-violet-300" aria-hidden="true" />
