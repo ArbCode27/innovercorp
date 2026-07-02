@@ -2,6 +2,7 @@
 
 import { Check, FileText, RotateCcw, Search, Tag, UserCheck, UserPlus } from "lucide-react";
 import type { Agent, Client, Conversation, Label } from "../../_lib/types";
+import { canAssignConversation } from "../../_lib/conversation-permissions";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
 import { AvatarInitials } from "../shared/avatar-initials";
 import { CrmButton } from "../shared/crm-button";
@@ -40,8 +41,7 @@ export const ConversationHeader = ({
   const displayName = client?.name || "Número desconocido";
   const phone =
     client?.phone || client?.whatsapp_id || "Sin identificar";
-  const canAssignAgent =
-    currentAgent.role === "admin" || conversation.human_mode;
+  const canAssignAgent = canAssignConversation(currentAgent);
   const assignLabel = conversation.human_mode
     ? "Transferir conversación"
     : "Asignar agente";
