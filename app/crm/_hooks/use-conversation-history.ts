@@ -58,8 +58,12 @@ export const useConversationHistory = (agents: Agent[], labels: Label[]) => {
     [entries, selectedHistoryId],
   );
 
-  const selectHistoryEntry = useCallback((id: number) => {
+  const selectHistoryEntry = useCallback<(id: number | null) => void>((id) => {
     setSelectedHistoryId(id);
+  }, []);
+
+  const clearSelectedHistory = useCallback(() => {
+    setSelectedHistoryId(null);
   }, []);
 
   return {
@@ -74,6 +78,7 @@ export const useConversationHistory = (agents: Agent[], labels: Label[]) => {
     labelsById,
     setSearchTerm,
     selectHistoryEntry,
+    clearSelectedHistory,
     reloadHistory: loadHistory,
   };
 };

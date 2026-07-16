@@ -1,6 +1,16 @@
 "use client";
 
-import { Bot, Headphones, History, Inbox, Layers, LogOut, Tags, Ticket, Users } from "lucide-react";
+import {
+  Bot,
+  Headphones,
+  History,
+  Inbox,
+  Layers,
+  LogOut,
+  Tags,
+  Ticket,
+  Users,
+} from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -36,6 +46,12 @@ const icons = {
   agents: Bot,
 } as const;
 
+const MOBILE_PRIMARY_NAV_ITEMS: CrmView[] = [
+  "conversations",
+  "my-conversations",
+  "history",
+];
+
 export const CrmSidebar = ({
   agent,
   activeView,
@@ -45,7 +61,7 @@ export const CrmSidebar = ({
   onLogout,
 }: CrmSidebarProps) => (
   <aside
-    className={`flex h-full min-h-0 w-16 shrink-0 flex-col items-center border-r py-4 ${CRM_SURFACES.elevated} ${CRM_SURFACES.border}`}>
+    className={`hidden h-full min-h-0 w-16 shrink-0 flex-col items-center border-r py-4 md:flex ${CRM_SURFACES.elevated} ${CRM_SURFACES.border}`}>
     <div className="mb-5 flex size-10 items-center justify-center rounded-xl bg-blue-600 text-white">
       <Layers className="size-5" aria-hidden="true" />
     </div>
@@ -106,4 +122,46 @@ export const CrmSidebar = ({
       </DropdownMenu>
     </div>
   </aside>
+);
+
+export const CrmMobileNav = ({
+  activeView,
+  myAssignedCount = 0,
+  onSelectView,
+}: Pick<CrmSidebarProps, "activeView" | "myAssignedCount" | "onSelectView">) => (
+  <nav
+    className={`fixed inset-x-0 bottom-0 z-40 border-t px-2 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] pt-2 md:hidden ${CRM_SURFACES.elevatedTranslucent} ${CRM_SURFACES.border}`}
+    aria-label="Navegación móvil CRM">
+    <div className="mx-auto flex max-w-screen-sm items-center justify-between gap-1">
+      {MOBILE_PRIMARY_NAV_ITEMS.map((view) => {
+        const Icon = icons[view];
+        const label = CRM_NAV_ITEMS.find((item) => item.id === view)?.label || view;
+        const isActive = activeView === view;
+        const badgeCount = view === "my-conversations" ? myAssignedCount : 0;
+
+        return (
+          <button
+            key={view}
+            type="button"
+            onClick={() => onSelectView(view)}
+            aria-current={isActive ? "page" : undefined}
+            className={`relative flex min-w-0 flex-1 flex-col items-center gap-1 rounded-lg px-2 py-2 text-[11px] transition ${
+              isActive
+                ? "bg-blue-100 text-blue-800 dark:bg-blue-600/20 dark:text-blue-100"
+                : "text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-slate-200"
+            }`}>
+            <Icon className="size-4" aria-hidden="true" />
+            <span className="truncate">{label}</span>
+            {badgeCount > 0 ? (
+              <span
+                className="absolute right-3 top-1 flex min-w-4 items-center justify-center rounded-full bg-blue-600 px-1 text-[10px] font-semibold leading-4 text-white"
+                aria-hidden="true">
+                {badgeCount > 99 ? "99+" : badgeCount}
+              </span>
+            ) : null}
+          </button>
+        );
+      })}
+    </div>
+  </nav>
 );

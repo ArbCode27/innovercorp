@@ -2,7 +2,6 @@
 
 import { FormEvent, useState } from "react";
 import { toast } from "sonner";
-import { Info } from "lucide-react";
 import { CrmButton } from "../shared/crm-button";
 import {
   Dialog,
@@ -17,7 +16,6 @@ import {
   SheetDescription,
   SheetHeader,
   SheetTitle,
-  SheetTrigger,
 } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { CRM_DIALOG, CRM_SURFACES } from "../../_lib/crm-theme";
@@ -47,7 +45,12 @@ interface ConversationPanelProps {
   isMessagesLoading: boolean;
   isSendingMessage: boolean;
   isResolvingConversation?: boolean;
+  onBackToList?: () => void;
   onSendMessage: (content: string) => Promise<void>;
+  onSendVoiceNote: (
+    audioBlob: Blob,
+    meta: { durationMs: number; mimeType: string },
+  ) => Promise<void>;
   onAddNote: (content: string) => Promise<void>;
   onTakeControl: () => Promise<void>;
   onReactivateBot: () => Promise<void>;
@@ -72,7 +75,9 @@ export const ConversationPanel = ({
   isMessagesLoading,
   isSendingMessage,
   isResolvingConversation = false,
+  onBackToList,
   onSendMessage,
+  onSendVoiceNote,
   onAddNote,
   onTakeControl,
   onReactivateBot,
@@ -87,6 +92,7 @@ export const ConversationPanel = ({
   const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false);
   const [isWisproDialogOpen, setIsWisproDialogOpen] = useState(false);
   const [isResolveDialogOpen, setIsResolveDialogOpen] = useState(false);
+  const [isDetailsSheetOpen, setIsDetailsSheetOpen] = useState(false);
   const [note, setNote] = useState("");
 
   const clientDisplayName = client?.name || "Número desconocido";
@@ -128,6 +134,22 @@ export const ConversationPanel = ({
     await onAssociateWispro(result);
   };
 
+  const handleSendVoiceNote = async (
+    audioBlob: Blob,
+    meta: { durationMs: number; mimeType: string },
+  ) => {
+    try {
+      await onSendVoiceNote(audioBlob, meta);
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "No se pudo enviar la nota de voz",
+      );
+      throw error;
+    }
+  };
+
   const showUnknownBanner = !client;
   const showWisproAction = !client || !client.wispro_id;
 
@@ -139,6 +161,8 @@ export const ConversationPanel = ({
           client={client}
           labels={labels}
           currentAgent={currentAgent}
+          onOpenDetails={() => setIsDetailsSheetOpen(true)}
+          onBackToList={onBackToList}
           onOpenLabels={() => setIsLabelDialogOpen(true)}
           onTakeControl={onTakeControl}
           onReactivateBot={onReactivateBot}
@@ -165,19 +189,10 @@ export const ConversationPanel = ({
               : "Toma control de la conversación para responder..."
           }
           onSend={handleSendMessage}
+          onSendVoiceNote={handleSendVoiceNote}
         />
       </div>
-      <Sheet>
-        <SheetTrigger asChild>
-          <CrmButton
-            type="button"
-            variant="secondary"
-            size="icon"
-            className={`absolute right-4 top-24 z-10 size-9 shadow-lg backdrop-blur lg:hidden ${CRM_SURFACES.elevatedTranslucent}`}
-            aria-label="Ver ficha del cliente">
-            <Info className="size-4" aria-hidden="true" />
-          </CrmButton>
-        </SheetTrigger>
+      <Sheet open={isDetailsSheetOpen} onOpenChange={setIsDetailsSheetOpen}>
         <SheetContent className={`w-[88vw] p-0 sm:max-w-sm ${CRM_SURFACES.border} ${CRM_SURFACES.elevated} ${CRM_SURFACES.textPrimary}`}>
           <SheetHeader className={`border-b p-4 text-left ${CRM_SURFACES.border}`}>
             <SheetTitle className={CRM_SURFACES.textPrimary}>Ficha de conversación</SheetTitle>

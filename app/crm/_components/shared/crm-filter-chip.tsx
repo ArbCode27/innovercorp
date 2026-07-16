@@ -14,6 +14,7 @@ export const CrmFilterChip = ({
   isActive,
   onClick,
 }: CrmFilterChipProps) => {
+  const countText = count === undefined ? "" : ` ${count}`;
   const accessibleLabel =
     count === undefined ? label : `${label}, ${count} conversaciones`;
 
@@ -25,24 +26,12 @@ export const CrmFilterChip = ({
       aria-label={accessibleLabel}
       className={cn(
         CRM_FOCUS_RING,
-        "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition",
+        "inline-flex h-8 shrink-0 items-center rounded-full border px-3 text-xs font-semibold transition",
         isActive
-          ? "border-blue-400 bg-blue-50 text-blue-900 dark:border-blue-500/50 dark:bg-blue-950/70 dark:text-blue-100"
-          : "border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200",
+          ? "border-emerald-500/60 bg-emerald-900/20 text-emerald-200"
+          : "border-slate-700/70 bg-[#111827] text-slate-300 hover:border-slate-500/80 hover:text-slate-100",
       )}>
-      <span>{label}</span>
-      {count !== undefined ? (
-        <span
-          aria-hidden="true"
-          className={cn(
-            "rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none",
-            isActive
-              ? "bg-blue-200/80 text-blue-900 dark:bg-blue-900/80 dark:text-blue-100"
-              : "bg-slate-200/80 text-slate-600 dark:bg-white/10 dark:text-slate-300",
-          )}>
-          {count}
-        </span>
-      ) : null}
+      <span>{`${label}${countText}`}</span>
     </button>
   );
 };

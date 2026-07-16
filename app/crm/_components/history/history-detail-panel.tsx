@@ -12,6 +12,7 @@ interface HistoryDetailPanelProps {
   assignedAgent: Agent | null;
   labels: Label[];
   totalEntries: number;
+  onBackToList?: () => void;
 }
 
 export const HistoryDetailPanel = ({
@@ -20,6 +21,7 @@ export const HistoryDetailPanel = ({
   assignedAgent,
   labels,
   totalEntries,
+  onBackToList,
 }: HistoryDetailPanelProps) => {
   if (!entry) {
     return (
@@ -40,6 +42,7 @@ export const HistoryDetailPanel = ({
         resolvedByAgent={resolvedByAgent}
         assignedAgent={assignedAgent}
         labels={labels}
+        onBackToList={onBackToList}
       />
       <HistoryMessages
         entry={entry}

@@ -14,7 +14,7 @@ import { ConversationsView } from "../conversations/conversations-view";
 import { HistoryView } from "../history/history-view";
 import { LabelsView } from "../labels/labels-view";
 import { TicketsView } from "../tickets/tickets-view";
-import { CrmSidebar } from "./crm-sidebar";
+import { CrmMobileNav, CrmSidebar } from "./crm-sidebar";
 
 export const CrmShell = () => {
   const [activeView, setActiveView] = useState<CrmView>("conversations");
@@ -34,6 +34,10 @@ export const CrmShell = () => {
   }
 
   const handleSelectView = (view: CrmView) => setActiveView(view);
+  const isConversationView =
+    activeView === "conversations" || activeView === "my-conversations";
+  const shouldHideMobileNav =
+    isConversationView && crm.selectedConversationId !== null;
 
   return (
     <main className={`flex h-full overflow-hidden ${CRM_SURFACES.page}`}>
@@ -45,7 +49,10 @@ export const CrmShell = () => {
         onToggleStatus={auth.updateStatus}
         onLogout={auth.logout}
       />
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+      <div
+        className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden ${
+          shouldHideMobileNav ? "pb-0" : "pb-20"
+        } md:pb-0`}>
         {crm.isLoading ? (
           <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden">
             <LoadingState label="Conectando con Supabase..." />
@@ -79,6 +86,7 @@ export const CrmShell = () => {
                 onLabelFilterChange={crm.setSelectedLabelId}
                 onSelectConversation={crm.selectConversation}
                 onSendMessage={crm.sendMessage}
+                onSendVoiceNote={crm.sendVoiceNote}
                 onAddNote={crm.addNote}
                 onTakeControl={crm.takeControl}
                 onReactivateBot={crm.reactivateBot}
@@ -87,6 +95,7 @@ export const CrmShell = () => {
                 onQuickToggleLabel={crm.quickToggleLabel}
                 onAssignAgent={crm.assignAgent}
                 onAssociateWispro={crm.associateWisproToConversation}
+                onOpenSettingsView={handleSelectView}
               />
             ) : null}
             {activeView === "my-conversations" ? (
@@ -113,6 +122,7 @@ export const CrmShell = () => {
                 onIncludeResolvedChange={crm.setMyAssignedIncludeResolved}
                 onSelectConversation={crm.selectConversation}
                 onSendMessage={crm.sendMessage}
+                onSendVoiceNote={crm.sendVoiceNote}
                 onAddNote={crm.addNote}
                 onTakeControl={crm.takeControl}
                 onReactivateBot={crm.reactivateBot}
@@ -121,10 +131,15 @@ export const CrmShell = () => {
                 onQuickToggleLabel={crm.quickToggleLabel}
                 onAssignAgent={crm.assignAgent}
                 onAssociateWispro={crm.associateWisproToConversation}
+                onOpenSettingsView={handleSelectView}
               />
             ) : null}
             {activeView === "history" ? (
-              <HistoryView agents={crm.agents} labels={crm.labels} />
+              <HistoryView
+                agents={crm.agents}
+                labels={crm.labels}
+                onOpenSettingsView={handleSelectView}
+              />
             ) : null}
             {activeView === "clients" ? (
               <ClientsView
@@ -162,6 +177,13 @@ export const CrmShell = () => {
           </>
         )}
       </div>
+      {!shouldHideMobileNav ? (
+        <CrmMobileNav
+          activeView={activeView}
+          myAssignedCount={crm.myActiveAssignedCount}
+          onSelectView={handleSelectView}
+        />
+      ) : null}
     </main>
   );
 };

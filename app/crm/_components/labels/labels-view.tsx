@@ -24,15 +24,15 @@ export const LabelsView = ({
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
   return (
-    <div className={`crm-scrollbar min-h-0 flex-1 overflow-y-auto p-6 ${CRM_SURFACES.page}`}>
-      <div className="mb-6 flex items-center justify-between gap-4">
+    <div className={`crm-scrollbar min-h-0 flex-1 overflow-y-auto p-4 md:p-6 ${CRM_SURFACES.page}`}>
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className={`text-2xl font-semibold ${CRM_SURFACES.textPrimary}`}>Etiquetas</h2>
+          <h2 className={`text-xl font-semibold md:text-2xl ${CRM_SURFACES.textPrimary}`}>Etiquetas</h2>
           <p className={`text-sm ${CRM_SURFACES.textMuted}`}>
             Organiza tus conversaciones por categoría
           </p>
         </div>
-        <CrmButton type="button" onClick={() => setIsDialogOpen(true)}>
+        <CrmButton type="button" onClick={() => setIsDialogOpen(true)} className="w-full sm:w-auto">
           <Plus className="mr-2 size-4" aria-hidden="true" />
           Nueva etiqueta
         </CrmButton>

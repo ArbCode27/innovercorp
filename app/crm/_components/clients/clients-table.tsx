@@ -18,7 +18,8 @@ interface ClientsTableProps {
 
 export const ClientsTable = ({ clients, tickets }: ClientsTableProps) => (
   <div className={`overflow-hidden rounded-xl border ${CRM_SURFACES.border} ${CRM_SURFACES.elevated}`}>
-    <Table>
+    <div className="overflow-x-auto">
+      <Table className="min-w-[720px]">
       <TableHeader>
         <TableRow className={`${CRM_SURFACES.border} hover:bg-transparent`}>
           <TableHead className={CRM_SURFACES.textMuted}>Cliente</TableHead>
@@ -74,6 +75,7 @@ export const ClientsTable = ({ clients, tickets }: ClientsTableProps) => (
           </TableRow>
         )}
       </TableBody>
-    </Table>
+      </Table>
+    </div>
   </div>
 );

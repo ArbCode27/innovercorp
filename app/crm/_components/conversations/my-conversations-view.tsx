@@ -5,6 +5,7 @@ import type {
   Agent,
   Client,
   Conversation,
+  CrmView,
   Label,
   Message,
   Ticket,
@@ -13,6 +14,8 @@ import type {
 } from "../../_lib/types";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
 import { EmptyState } from "../shared/empty-state";
+import { CrmMobileSettingsMenu } from "../shell/crm-mobile-settings-menu";
+import { CrmThemeToggle } from "../shell/crm-theme-toggle";
 import { ConversationList } from "./conversation-list";
 import { ConversationPanel } from "./conversation-panel";
 import { MyConversationsFilters } from "./my-conversations-filters";
@@ -38,8 +41,12 @@ interface MyConversationsViewProps {
   includeResolved: boolean;
   onSearchChange: (value: string) => void;
   onIncludeResolvedChange: (value: boolean) => void;
-  onSelectConversation: (id: number) => void;
+  onSelectConversation: (id: number | null) => void;
   onSendMessage: (content: string) => Promise<void>;
+  onSendVoiceNote: (
+    audioBlob: Blob,
+    meta: { durationMs: number; mimeType: string },
+  ) => Promise<void>;
   onAddNote: (content: string) => Promise<void>;
   onTakeControl: () => Promise<void>;
   onReactivateBot: () => Promise<void>;
@@ -48,6 +55,7 @@ interface MyConversationsViewProps {
   onQuickToggleLabel: (labelId: number) => Promise<void>;
   onAssignAgent: (conversationId: number, agentId: number) => Promise<void>;
   onAssociateWispro: (result: WisproSearchResult) => Promise<void>;
+  onOpenSettingsView: (view: CrmView) => void;
 }
 
 export const MyConversationsView = ({
@@ -73,6 +81,7 @@ export const MyConversationsView = ({
   onIncludeResolvedChange,
   onSelectConversation,
   onSendMessage,
+  onSendVoiceNote,
   onAddNote,
   onTakeControl,
   onReactivateBot,
@@ -81,6 +90,7 @@ export const MyConversationsView = ({
   onQuickToggleLabel,
   onAssignAgent,
   onAssociateWispro,
+  onOpenSettingsView,
 }: MyConversationsViewProps) => {
   const selectedLabels = selectedConversation
     ? selectedConversation.label_ids
@@ -95,15 +105,24 @@ export const MyConversationsView = ({
   const activeCount = assignedConversations.filter(
     (conversation) => conversation.status !== "resuelto",
   ).length;
+  const isConversationOpen = selectedConversationId !== null;
 
   return (
     <div className="flex min-h-0 flex-1">
       <aside
-        className={`flex w-80 shrink-0 flex-col border-r ${CRM_SURFACES.border} ${CRM_SURFACES.elevated}`}>
+        className={`${
+          isConversationOpen ? "hidden md:flex" : "flex"
+        } min-h-0 w-full shrink-0 flex-col border-r md:w-80 ${CRM_SURFACES.border} ${CRM_SURFACES.elevated}`}>
         <div className={`border-b p-4 ${CRM_SURFACES.border}`}>
-          <h2 className={`text-sm font-semibold ${CRM_SURFACES.textPrimary}`}>
-            Mis asignadas
-          </h2>
+          <div className="flex items-center justify-between gap-2">
+            <h2 className={`text-sm font-semibold ${CRM_SURFACES.textPrimary}`}>
+              Mis asignadas
+            </h2>
+            <div className="flex items-center gap-1 md:hidden">
+              <CrmThemeToggle className="size-8" />
+              <CrmMobileSettingsMenu onSelectView={onOpenSettingsView} />
+            </div>
+          </div>
           <p className={`mt-1 text-xs ${CRM_SURFACES.textMuted}`}>
             {filteredConversations.length} de {assignedConversations.length}{" "}
             asignadas
@@ -137,30 +156,37 @@ export const MyConversationsView = ({
         )}
       </aside>
 
-      <ConversationPanel
-        conversation={selectedConversation}
-        client={selectedClient}
-        wisproSnapshot={selectedWisproSnapshot}
-        labels={selectedLabels}
-        allLabels={labels}
-        messages={messages}
-        agents={agents}
-        conversations={assignedConversations}
-        currentAgent={currentAgent}
-        tickets={selectedTickets}
-        isMessagesLoading={isMessagesLoading}
-        isSendingMessage={isSendingMessage}
-        isResolvingConversation={isResolvingConversation}
-        onSendMessage={onSendMessage}
-        onAddNote={onAddNote}
-        onTakeControl={onTakeControl}
-        onReactivateBot={onReactivateBot}
-        onResolve={onResolve}
-        onUpdateLabels={onUpdateLabels}
-        onQuickToggleLabel={onQuickToggleLabel}
-        onAssignAgent={onAssignAgent}
-        onAssociateWispro={onAssociateWispro}
-      />
+      <div
+        className={`${
+          isConversationOpen ? "flex" : "hidden md:flex"
+        } min-h-0 min-w-0 flex-1`}>
+        <ConversationPanel
+          conversation={selectedConversation}
+          client={selectedClient}
+          wisproSnapshot={selectedWisproSnapshot}
+          labels={selectedLabels}
+          allLabels={labels}
+          messages={messages}
+          agents={agents}
+          conversations={assignedConversations}
+          currentAgent={currentAgent}
+          tickets={selectedTickets}
+          isMessagesLoading={isMessagesLoading}
+          isSendingMessage={isSendingMessage}
+          isResolvingConversation={isResolvingConversation}
+          onSendMessage={onSendMessage}
+          onSendVoiceNote={onSendVoiceNote}
+          onBackToList={() => onSelectConversation(null)}
+          onAddNote={onAddNote}
+          onTakeControl={onTakeControl}
+          onReactivateBot={onReactivateBot}
+          onResolve={onResolve}
+          onUpdateLabels={onUpdateLabels}
+          onQuickToggleLabel={onQuickToggleLabel}
+          onAssignAgent={onAssignAgent}
+          onAssociateWispro={onAssociateWispro}
+        />
+      </div>
     </div>
   );
 };

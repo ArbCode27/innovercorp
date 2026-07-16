@@ -1,14 +1,16 @@
 "use client";
 
-import { Search } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Check, ChevronDown, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { CONVERSATION_FILTERS } from "../../_lib/constants";
 import { CRM_FOCUS_RING, CRM_SURFACES } from "../../_lib/crm-theme";
 import type { ConversationFilterCounts } from "../../_lib/conversation-filter-utils";
 import type { ConversationFilter, Label } from "../../_lib/types";
 import { CrmFilterChip } from "../shared/crm-filter-chip";
-import { LabelChip } from "../shared/label-chip";
 
 interface ConversationFiltersProps {
   searchTerm: string;
@@ -30,8 +32,15 @@ export const ConversationFilters = ({
   onSearchChange,
   onFilterChange,
   onLabelChange,
-}: ConversationFiltersProps) => (
-  <div className={`space-y-3 border-b p-4 ${CRM_SURFACES.border}`}>
+}: ConversationFiltersProps) => {
+  const [isLabelMenuOpen, setIsLabelMenuOpen] = useState(false);
+  const selectedLabel = useMemo(
+    () => labels.find((label) => label.id === selectedLabelId) || null,
+    [labels, selectedLabelId],
+  );
+
+  return (
+    <div className={`space-y-3 border-b p-4 ${CRM_SURFACES.border}`}>
     <div>
       <label htmlFor="crm-conversation-search" className="sr-only">
         Buscar conversación
@@ -51,7 +60,7 @@ export const ConversationFilters = ({
       </div>
     </div>
 
-    <div className="flex flex-wrap gap-1">
+    <div className="crm-scrollbar flex gap-2 overflow-x-auto pb-1">
       {CONVERSATION_FILTERS.map((item) => (
         <CrmFilterChip
           key={item.id}
@@ -63,28 +72,78 @@ export const ConversationFilters = ({
       ))}
     </div>
 
-    <div className="flex flex-wrap gap-2">
-      <button
-        type="button"
-        onClick={() => onLabelChange(null)}
-        aria-pressed={selectedLabelId === null}
-        className={cn(
-          CRM_FOCUS_RING,
-          "rounded-full px-2.5 py-1 text-xs font-medium transition",
-          selectedLabelId === null
-            ? "bg-blue-100 text-blue-900 dark:bg-blue-950/70 dark:text-blue-100"
-            : `bg-slate-100 text-slate-600 hover:text-slate-900 dark:bg-white/5 dark:text-slate-400 dark:hover:text-slate-200`,
-        )}>
-        Todas
-      </button>
-      {labels.map((label) => (
-        <LabelChip
-          key={label.id}
-          label={label}
-          selected={selectedLabelId === label.id}
-          onClick={() => onLabelChange(label.id)}
-        />
-      ))}
+    <div>
+      <Popover open={isLabelMenuOpen} onOpenChange={setIsLabelMenuOpen}>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            aria-label="Filtrar por etiqueta"
+            className={cn(
+              CRM_FOCUS_RING,
+              "inline-flex h-9 w-full items-center justify-between rounded-xl border px-3 text-sm font-medium transition",
+              "border-slate-700/70 bg-[#111827] text-slate-100 hover:border-slate-500/80",
+            )}>
+            <span className="truncate">
+              {selectedLabel ? `Etiqueta: ${selectedLabel.name}` : "Todas las etiquetas"}
+            </span>
+            <ChevronDown className="size-4 shrink-0 text-slate-400" aria-hidden="true" />
+          </button>
+        </PopoverTrigger>
+
+        <PopoverContent
+          align="start"
+          className={`w-[min(22rem,calc(100vw-2rem))] border p-0 ${CRM_SURFACES.border} ${CRM_SURFACES.elevated} ${CRM_SURFACES.textPrimary}`}>
+          <Command>
+            <CommandInput placeholder="Buscar etiqueta..." />
+            <CommandList>
+              <CommandEmpty>Sin coincidencias</CommandEmpty>
+              <CommandGroup heading="Etiquetas">
+                <CommandItem
+                  value="todas"
+                  className="data-[selected=true]:bg-blue-600/25 data-[selected=true]:text-blue-100"
+                  onSelect={() => {
+                    onLabelChange(null);
+                    setIsLabelMenuOpen(false);
+                  }}>
+                  <Check
+                    className={cn(
+                      "size-4",
+                      selectedLabelId === null ? "opacity-100" : "opacity-0",
+                    )}
+                    aria-hidden="true"
+                  />
+                  Todas las etiquetas
+                </CommandItem>
+                {labels.map((label) => (
+                  <CommandItem
+                    key={label.id}
+                    value={label.name}
+                    className="data-[selected=true]:bg-blue-600/25 data-[selected=true]:text-blue-100"
+                    onSelect={() => {
+                      onLabelChange(label.id);
+                      setIsLabelMenuOpen(false);
+                    }}>
+                    <Check
+                      className={cn(
+                        "size-4",
+                        selectedLabelId === label.id ? "opacity-100" : "opacity-0",
+                      )}
+                      aria-hidden="true"
+                    />
+                    <span
+                      className="size-2 shrink-0 rounded-full"
+                      style={{ backgroundColor: label.color }}
+                      aria-hidden="true"
+                    />
+                    {label.name}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
     </div>
   </div>
-);
+  );
+};

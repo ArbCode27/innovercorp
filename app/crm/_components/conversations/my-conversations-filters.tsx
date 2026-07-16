@@ -45,7 +45,7 @@ export const MyConversationsFilters = ({
       </div>
     </div>
 
-    <div className="flex flex-wrap gap-1">
+    <div className="crm-scrollbar flex gap-2 overflow-x-auto pb-1">
       <CrmFilterChip
         label="Activas"
         isActive={!includeResolved}

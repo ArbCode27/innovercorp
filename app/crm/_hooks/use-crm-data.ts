@@ -45,6 +45,14 @@ const emptyData: CrmData = {
   tickets: [],
 };
 
+const MAX_WHATSAPP_AUDIO_BYTES = 16 * 1024 * 1024;
+const formatVoiceNotePreview = (durationMs: number) => {
+  const totalSeconds = Math.max(0, Math.floor(durationMs / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = String(totalSeconds % 60).padStart(2, "0");
+  return `🎤 Nota de voz (${minutes}:${seconds})`;
+};
+
 export const useCrmData = (agent: Agent | null) => {
   const [data, setData] = useState<CrmData>(emptyData);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -63,8 +71,11 @@ export const useCrmData = (agent: Agent | null) => {
   const [wisproSnapshotsByClientId, setWisproSnapshotsByClientId] = useState<
     Record<number, WisproCustomer>
   >({});
-  const { sendMessage: sendWhatsAppMessage, isSending: isSendingMessage } =
-    useSendMessage();
+  const {
+    sendMessage: sendWhatsAppMessage,
+    sendVoiceNote: sendWhatsAppVoiceNote,
+    isSending: isSendingMessage,
+  } = useSendMessage();
   const [isResolvingConversation, setIsResolvingConversation] = useState(false);
 
   // Ref para acceder al selectedConversationId dentro de los listeners de Realtime
@@ -370,7 +381,13 @@ export const useCrmData = (agent: Agent | null) => {
     [clientsById, data.conversations, searchTerm, selectedLabelId],
   );
 
-  const selectConversation = async (conversationId: number) => {
+  const selectConversation = async (conversationId: number | null) => {
+    if (conversationId === null) {
+      setSelectedConversationId(null);
+      setMessages([]);
+      return;
+    }
+
     setSelectedConversationId(conversationId);
 
     const conversation = data.conversations.find(
@@ -445,6 +462,69 @@ export const useCrmData = (agent: Agent | null) => {
           ? {
               ...conversation,
               preview: trimmedContent,
+              updated_at: new Date().toISOString(),
+            }
+          : conversation,
+      ),
+    }));
+  };
+
+  const sendVoiceNote = async (
+    audioBlob: Blob,
+    meta: { durationMs: number; mimeType: string },
+  ) => {
+    if (!selectedConversation) return;
+    if (!agent) {
+      throw new Error("Debes iniciar sesión como agente para enviar notas de voz");
+    }
+    if (!selectedConversation.human_mode) {
+      throw new Error(
+        "Toma control de la conversación antes de enviar una nota de voz",
+      );
+    }
+
+    if (!audioBlob || audioBlob.size <= 0) {
+      throw new Error("Graba una nota de voz válida antes de enviarla");
+    }
+
+    if (audioBlob.size > MAX_WHATSAPP_AUDIO_BYTES) {
+      throw new Error("La nota de voz supera el límite de 16 MB");
+    }
+
+    const normalizedAudio = new Blob([audioBlob], {
+      type: meta.mimeType || audioBlob.type || "audio/webm",
+    });
+
+    const to = selectedClient?.phone || selectedClient?.whatsapp_id || null;
+    if (!to) {
+      throw new Error(
+        "Asocia un cliente con teléfono válido antes de enviar mensajes",
+      );
+    }
+
+    const response = await sendWhatsAppVoiceNote({
+      to,
+      audio: normalizedAudio,
+      conversation_id: selectedConversation.id,
+      duration_ms: meta.durationMs,
+      agent_id: agent.id,
+    });
+
+    const preview = response.message.content || formatVoiceNotePreview(meta.durationMs);
+
+    setMessages((current) => {
+      const exists = current.some((message) => message.id === response.message.id);
+      if (exists) return current;
+      return [...current, response.message];
+    });
+
+    setData((current) => ({
+      ...current,
+      conversations: current.conversations.map((conversation) =>
+        conversation.id === selectedConversation.id
+          ? {
+              ...conversation,
+              preview,
               updated_at: new Date().toISOString(),
             }
           : conversation,
@@ -689,6 +769,7 @@ export const useCrmData = (agent: Agent | null) => {
     loadData,
     selectConversation,
     sendMessage,
+    sendVoiceNote,
     addNote,
     takeControl,
     reactivateBot,

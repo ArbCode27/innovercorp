@@ -19,7 +19,8 @@ interface TicketsTableProps {
 
 export const TicketsTable = ({ tickets, clientsById }: TicketsTableProps) => (
   <div className={`overflow-hidden rounded-xl border ${CRM_SURFACES.border} ${CRM_SURFACES.elevated}`}>
-    <Table>
+    <div className="overflow-x-auto">
+      <Table className="min-w-[760px]">
       <TableHeader>
         <TableRow className={`${CRM_SURFACES.border} hover:bg-transparent`}>
           <TableHead className={CRM_SURFACES.textMuted}>ID</TableHead>
@@ -73,6 +74,7 @@ export const TicketsTable = ({ tickets, clientsById }: TicketsTableProps) => (
           </TableRow>
         )}
       </TableBody>
-    </Table>
+      </Table>
+    </div>
   </div>
 );

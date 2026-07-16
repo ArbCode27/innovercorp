@@ -1,6 +1,15 @@
 "use client";
 
-import { Check, FileText, RotateCcw, Search, Tag, UserCheck, UserPlus } from "lucide-react";
+import {
+  ArrowLeft,
+  Check,
+  FileText,
+  RotateCcw,
+  Search,
+  Tag,
+  UserCheck,
+  UserPlus,
+} from "lucide-react";
 import type { Agent, Client, Conversation, Label } from "../../_lib/types";
 import { canAssignConversation } from "../../_lib/conversation-permissions";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
@@ -8,12 +17,16 @@ import { AvatarInitials } from "../shared/avatar-initials";
 import { CrmButton } from "../shared/crm-button";
 import { LabelChip } from "../shared/label-chip";
 import { StatusBadge } from "../shared/status-badge";
+import { CrmThemeToggle } from "../shell/crm-theme-toggle";
+import { ConversationActionsDrawer } from "./conversation-actions-drawer";
 
 interface ConversationHeaderProps {
   conversation: Conversation;
   client: Client | null;
   labels: Label[];
   currentAgent: Agent;
+  onBackToList?: () => void;
+  onOpenDetails?: () => void;
   onOpenLabels: () => void;
   onTakeControl: () => void;
   onReactivateBot: () => void;
@@ -29,6 +42,8 @@ export const ConversationHeader = ({
   client,
   labels,
   currentAgent,
+  onBackToList,
+  onOpenDetails,
   onOpenLabels,
   onTakeControl,
   onReactivateBot,
@@ -53,13 +68,41 @@ export const ConversationHeader = ({
       className={`shrink-0 border-b backdrop-blur ${CRM_SURFACES.border} ${CRM_SURFACES.elevatedTranslucent}`}>
       <div className="flex flex-col gap-3 p-4 xl:flex-row xl:items-start">
         <div className="flex min-w-0 flex-1 gap-3">
-          <AvatarInitials
-            name={displayName}
-            initials={client?.initials}
-            color={client?.color || "#f5a524"}
-            bg={client?.bg || "rgba(245,165,36,.15)"}
-            size="lg"
-          />
+          {onBackToList ? (
+            <CrmButton
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="md:hidden"
+              onClick={onBackToList}
+              aria-label="Volver a conversaciones">
+              <ArrowLeft className="size-4" aria-hidden="true" />
+            </CrmButton>
+          ) : null}
+          {onOpenDetails ? (
+            <button
+              type="button"
+              className="rounded-full md:hidden"
+              onClick={onOpenDetails}
+              aria-label="Ver ficha del cliente">
+              <AvatarInitials
+                name={displayName}
+                initials={client?.initials}
+                color={client?.color || "#f5a524"}
+                bg={client?.bg || "rgba(245,165,36,.15)"}
+                size="lg"
+              />
+            </button>
+          ) : null}
+          <div className={onOpenDetails ? "hidden md:block" : ""}>
+            <AvatarInitials
+              name={displayName}
+              initials={client?.initials}
+              color={client?.color || "#f5a524"}
+              bg={client?.bg || "rgba(245,165,36,.15)"}
+              size="lg"
+            />
+          </div>
           <div className="min-w-0 flex-1">
             <h2 className={`truncate text-base font-semibold ${CRM_SURFACES.textPrimary}`}>
               {displayName}
@@ -67,20 +110,38 @@ export const ConversationHeader = ({
             <div
               className={`mt-1 flex flex-wrap items-center gap-2 text-xs ${CRM_SURFACES.textMuted}`}>
               <span>{phone}</span>
-              <StatusBadge status={conversation.status} />
+              <div className="hidden md:block">
+                <StatusBadge status={conversation.status} />
+              </div>
               <StatusBadge status={conversation.human_mode ? "human" : "bot"} />
             </div>
             {labels.length ? (
-              <div className="mt-2 flex flex-wrap gap-1.5">
+              <div className="mt-2 hidden flex-wrap gap-1.5 md:flex">
                 {labels.map((label) => (
                   <LabelChip key={label.id} label={label} />
                 ))}
               </div>
             ) : null}
           </div>
+          <ConversationActionsDrawer
+            isHumanMode={conversation.human_mode}
+            isResolving={isResolving}
+            canAssignAgent={canAssignAgent}
+            assignLabel={assignLabel}
+            showWisproSearch={showWisproSearch}
+            showWisproLink={showWisproLink}
+            onTakeControl={onTakeControl}
+            onReactivateBot={onReactivateBot}
+            onResolve={onResolve}
+            onOpenLabels={onOpenLabels}
+            onOpenNote={onOpenNote}
+            onOpenAssign={onOpenAssign}
+            onOpenWispro={onOpenWispro}
+          />
+          <CrmThemeToggle className="size-8 md:hidden" />
         </div>
         <div
-          className="flex shrink-0 flex-wrap items-center justify-end gap-2"
+          className="hidden shrink-0 flex-wrap items-center justify-end gap-2 md:flex"
           role="toolbar"
           aria-label="Acciones de conversación">
           {conversation.human_mode ? (

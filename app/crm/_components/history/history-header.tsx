@@ -1,6 +1,6 @@
 "use client";
 
-import { Bot, Headphones, Phone, MapPin, CreditCard } from "lucide-react";
+import { ArrowLeft, Bot, CreditCard, Headphones, MapPin, Phone } from "lucide-react";
 import { CRM_BADGE_TONES, CRM_SURFACES } from "../../_lib/crm-theme";
 import { formatCrmDate } from "../../_lib/formatters";
 import { getHistoryMessageCount } from "../../_lib/history-utils";
@@ -14,6 +14,7 @@ interface HistoryHeaderProps {
   resolvedByAgent: Agent | null;
   assignedAgent: Agent | null;
   labels: Label[];
+  onBackToList?: () => void;
 }
 
 export const HistoryHeader = ({
@@ -21,6 +22,7 @@ export const HistoryHeader = ({
   resolvedByAgent,
   assignedAgent,
   labels,
+  onBackToList,
 }: HistoryHeaderProps) => {
   const displayName = entry.client_name || "Número desconocido";
   const phone = entry.client_phone || "Sin identificar";
@@ -30,6 +32,15 @@ export const HistoryHeader = ({
       className={`shrink-0 border-b backdrop-blur ${CRM_SURFACES.border} ${CRM_SURFACES.elevatedTranslucent}`}>
       <div className="flex flex-col gap-3 p-4 xl:flex-row xl:items-start">
         <div className="flex min-w-0 flex-1 gap-3">
+          {onBackToList ? (
+            <button
+              type="button"
+              onClick={onBackToList}
+              className="mt-0.5 inline-flex size-9 shrink-0 items-center justify-center rounded-md border border-slate-200 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 md:hidden dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/10 dark:hover:text-white"
+              aria-label="Volver al historial">
+              <ArrowLeft className="size-4" aria-hidden="true" />
+            </button>
+          ) : null}
           <AvatarInitials
             name={displayName}
             color="#64748b"

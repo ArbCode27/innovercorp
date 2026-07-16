@@ -16,6 +16,14 @@ interface SendMessageResponse {
   message: Message;
 }
 
+interface SendVoiceNoteInput {
+  to: string;
+  conversation_id: number;
+  agent_id: number;
+  audio: Blob;
+  duration_ms: number;
+}
+
 export function useSendMessage() {
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -52,5 +60,46 @@ export function useSendMessage() {
     }
   }, []);
 
-  return { sendMessage, isSending, error };
+  const sendVoiceNote = useCallback(async (input: SendVoiceNoteInput) => {
+    setIsSending(true);
+    setError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("to", input.to);
+      formData.append("conversation_id", String(input.conversation_id));
+      formData.append("duration_ms", String(input.duration_ms));
+
+      formData.append("agent_id", String(input.agent_id));
+
+      const mimeType = input.audio.type || "audio/webm";
+      const extension = mimeType.includes("ogg") ? "ogg" : "webm";
+      const filename = `voice-note.${extension}`;
+      formData.append("audio", input.audio, filename);
+
+      const res = await fetch("/api/whatsapp/send-audio", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Error al enviar nota de voz");
+      }
+
+      return data as SendMessageResponse;
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Error inesperado al enviar nota de voz";
+      setError(message);
+      throw new Error(message);
+    } finally {
+      setIsSending(false);
+    }
+  }, []);
+
+  return { sendMessage, sendVoiceNote, isSending, error };
 }
