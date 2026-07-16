@@ -13,6 +13,7 @@ import type {
 import { formatCrmDate } from "../../_lib/formatters";
 import { AvatarInitials } from "../shared/avatar-initials";
 import { CrmButton } from "../shared/crm-button";
+import { LabelChip } from "../shared/label-chip";
 import { StatusBadge } from "../shared/status-badge";
 import { ClientProfileSection } from "./client-profile-section";
 
@@ -75,6 +76,33 @@ export const ConversationDetails = ({
               </CrmButton>
             ) : null}
           </div>
+        )}
+      </section>
+
+      <section className={`space-y-3 border-b p-4 ${CRM_SURFACES.border}`}>
+        <h3 className={`text-[11px] font-semibold uppercase tracking-wide ${CRM_SURFACES.textMuted}`}>
+          Etiquetas
+        </h3>
+        {labels.length ? (
+          <div className="flex flex-wrap gap-2">
+            {labels.map((label) => (
+              <LabelChip
+                key={label.id}
+                label={label}
+                selected={conversation.label_ids.includes(label.id)}
+                className={
+                  conversation.label_ids.includes(label.id)
+                    ? "opacity-100"
+                    : "opacity-45"
+                }
+                onClick={() => void onToggleLabel(label.id)}
+              />
+            ))}
+          </div>
+        ) : (
+          <p className={`text-xs ${CRM_SURFACES.textLabel}`}>
+            No hay etiquetas creadas.
+          </p>
         )}
       </section>
 

@@ -98,11 +98,6 @@ export const ConversationsView = ({
   onAssociateWispro,
   onOpenSettingsView,
 }: ConversationsViewProps) => {
-  const selectedLabels = selectedConversation
-    ? selectedConversation.label_ids
-        .map((id) => labelsById.get(id))
-        .filter((label): label is Label => Boolean(label))
-    : [];
   const selectedTickets =
     selectedConversation?.client_id
       ? ticketsByClientId.get(selectedConversation.client_id) || []
@@ -153,7 +148,6 @@ export const ConversationsView = ({
           conversation={selectedConversation}
           client={selectedClient}
           wisproSnapshot={selectedWisproSnapshot}
-          labels={selectedLabels}
           allLabels={labels}
           messages={messages}
           agents={agents}

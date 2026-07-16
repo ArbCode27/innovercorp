@@ -6,9 +6,10 @@ interface LabelChipProps {
   label: Label;
   selected?: boolean;
   onClick?: () => void;
+  className?: string;
 }
 
-export const LabelChip = ({ label, selected, onClick }: LabelChipProps) => {
+export const LabelChip = ({ label, selected, onClick, className }: LabelChipProps) => {
   const Component = onClick ? "button" : "span";
 
   return (
@@ -25,6 +26,7 @@ export const LabelChip = ({ label, selected, onClick }: LabelChipProps) => {
           CRM_FOCUS_RING,
           "hover:border-slate-300 hover:bg-slate-200 hover:text-slate-950 dark:hover:border-white/20 dark:hover:bg-white/10 dark:hover:text-white",
         ],
+        className,
       )}
       style={{ borderColor: selected ? label.color : undefined }}>
       <span

@@ -10,12 +10,11 @@ import {
   UserCheck,
   UserPlus,
 } from "lucide-react";
-import type { Agent, Client, Conversation, Label } from "../../_lib/types";
+import type { Agent, Client, Conversation } from "../../_lib/types";
 import { canAssignConversation } from "../../_lib/conversation-permissions";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
 import { AvatarInitials } from "../shared/avatar-initials";
 import { CrmButton } from "../shared/crm-button";
-import { LabelChip } from "../shared/label-chip";
 import { StatusBadge } from "../shared/status-badge";
 import { CrmThemeToggle } from "../shell/crm-theme-toggle";
 import { ConversationActionsDrawer } from "./conversation-actions-drawer";
@@ -23,7 +22,6 @@ import { ConversationActionsDrawer } from "./conversation-actions-drawer";
 interface ConversationHeaderProps {
   conversation: Conversation;
   client: Client | null;
-  labels: Label[];
   currentAgent: Agent;
   onBackToList?: () => void;
   onOpenDetails?: () => void;
@@ -40,7 +38,6 @@ interface ConversationHeaderProps {
 export const ConversationHeader = ({
   conversation,
   client,
-  labels,
   currentAgent,
   onBackToList,
   onOpenDetails,
@@ -107,21 +104,13 @@ export const ConversationHeader = ({
             <h2 className={`truncate text-base font-semibold ${CRM_SURFACES.textPrimary}`}>
               {displayName}
             </h2>
-            <div
-              className={`mt-1 flex flex-wrap items-center gap-2 text-xs ${CRM_SURFACES.textMuted}`}>
+            <div className={`mt-1 text-xs ${CRM_SURFACES.textMuted}`}>
               <span>{phone}</span>
-              <div className="hidden md:block">
-                <StatusBadge status={conversation.status} />
-              </div>
+            </div>
+            <div className="mt-1 flex items-center gap-2">
+              <StatusBadge status={conversation.status} />
               <StatusBadge status={conversation.human_mode ? "human" : "bot"} />
             </div>
-            {labels.length ? (
-              <div className="mt-2 hidden flex-wrap gap-1.5 md:flex">
-                {labels.map((label) => (
-                  <LabelChip key={label.id} label={label} />
-                ))}
-              </div>
-            ) : null}
           </div>
           <ConversationActionsDrawer
             isHumanMode={conversation.human_mode}

@@ -35,7 +35,6 @@ interface ConversationPanelProps {
   conversation: Conversation | null;
   client: Client | null;
   wisproSnapshot?: WisproCustomer | null;
-  labels: Label[];
   allLabels: Label[];
   messages: Message[];
   agents: Agent[];
@@ -65,7 +64,6 @@ export const ConversationPanel = ({
   conversation,
   client,
   wisproSnapshot,
-  labels,
   allLabels,
   messages,
   agents,
@@ -159,7 +157,6 @@ export const ConversationPanel = ({
         <ConversationHeader
           conversation={conversation}
           client={client}
-          labels={labels}
           currentAgent={currentAgent}
           onOpenDetails={() => setIsDetailsSheetOpen(true)}
           onBackToList={onBackToList}

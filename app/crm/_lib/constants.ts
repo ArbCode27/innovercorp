@@ -74,6 +74,8 @@ export const STATUS_LABELS: Record<string, string> = {
   abierto: "Abierto",
   proceso: "En proceso",
   resuelto: "Resuelto",
+  bot: "Bot",
+  human: "Humano",
   online: "En línea",
   busy: "Ocupado",
   offline: "Desconectado",
