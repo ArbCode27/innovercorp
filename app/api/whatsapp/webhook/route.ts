@@ -41,6 +41,10 @@ export async function POST(req: NextRequest) {
       let media_id = null;
       let caption = null;
       let mime_type = null;
+      let latitude = null;
+      let longitude = null;
+      let location_name = null;
+      let location_address = null;
 
       switch (message.type) {
         case "text":
@@ -65,7 +69,26 @@ export async function POST(req: NextRequest) {
           caption = message.document?.caption;
           mime_type = message.document?.mime_type;
           break;
+        case "location":
+          latitude = message.location?.latitude ?? null;
+          longitude = message.location?.longitude ?? null;
+          location_name = message.location?.name || null;
+          location_address = message.location?.address || null;
+          content =
+            location_name ||
+            location_address ||
+            (latitude !== null && longitude !== null
+              ? `${latitude},${longitude}`
+              : null);
+          break;
+        default:
+          break;
       }
+
+      const parsedTimestamp = Number(message.timestamp);
+      const timestamp = Number.isFinite(parsedTimestamp)
+        ? new Date(parsedTimestamp * 1000).toISOString()
+        : new Date().toISOString();
 
       // Payload limpio para Make
       const makePayload = {
@@ -78,7 +101,11 @@ export async function POST(req: NextRequest) {
         media_id: media_id,
         caption: caption,
         mime_type: mime_type,
-        timestamp: new Date(parseInt(message.timestamp) * 1000).toISOString(),
+        latitude: latitude,
+        longitude: longitude,
+        location_name: location_name,
+        location_address: location_address,
+        timestamp: timestamp,
         phone_number_id: metadata?.phone_number_id,
       };
 
