@@ -14,7 +14,12 @@ export type MessageType = "in" | "out" | "note";
 
 export type MessageSenderType = "client" | "agent" | "bot";
 
-export type MessageMediaType = "audio" | "image" | "video" | "document";
+export type MessageMediaType =
+  | "audio"
+  | "image"
+  | "video"
+  | "document"
+  | "location";
 
 export type TicketStatus = "Abierto" | "En proceso" | "Resuelto";
 
@@ -122,6 +127,10 @@ export interface Message {
   content: string;
   media_url?: string | null;
   media_type?: MessageMediaType | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  location_name?: string | null;
+  location_address?: string | null;
   sender_type: MessageSenderType;
   sent_by?: string | null;
   status?: "sent" | "delivered" | "read" | "failed" | null;
@@ -136,6 +145,10 @@ export interface MessageSnapshot {
   sent_by?: string | null;
   media_url?: string | null;
   media_type?: MessageMediaType | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  location_name?: string | null;
+  location_address?: string | null;
   wa_message_id?: string | null;
   status?: "sent" | "delivered" | "read" | "failed" | null;
   created_at: string | null;
@@ -152,6 +165,10 @@ export interface HistoryMessage {
   sent_by?: string | null;
   media_url?: string | null;
   media_type?: MessageMediaType | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  location_name?: string | null;
+  location_address?: string | null;
   wa_message_id?: string | null;
   status?: "sent" | "delivered" | "read" | "failed" | null;
   created_at: string;

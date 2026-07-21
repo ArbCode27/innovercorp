@@ -12,6 +12,7 @@ const MEDIA_TYPES = new Set<MessageMediaType>([
   "image",
   "video",
   "document",
+  "location",
 ]);
 const MESSAGE_STATUSES = new Set([
   "sent",

@@ -29,6 +29,7 @@ export const MessageBubble = ({ message }: MessageBubbleProps) => {
   const isBot = isOutgoing && message.sender_type === "bot";
   const isImageMessage =
     message.media_type === "image" && Boolean(message.media_url?.trim());
+  const isLocationMessage = message.media_type === "location";
   const senderLabel = isOutgoing
     ? isBot
       ? message.sent_by?.trim() || "Bot IA"
@@ -52,7 +53,7 @@ export const MessageBubble = ({ message }: MessageBubbleProps) => {
           </span>
         ) : null}
       </div>
-      {isImageMessage ? (
+      {isImageMessage || isLocationMessage ? (
         <MessageContent message={message} isOutgoing={isOutgoing} />
       ) : (
         <div

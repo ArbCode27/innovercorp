@@ -2,6 +2,7 @@ import { FileWarning } from "lucide-react";
 import type { Message } from "../../_lib/types";
 import { AudioMessage } from "./audio-message";
 import { ImageMessage } from "./image-message";
+import { LocationMessage } from "./location-message";
 
 interface MessageContentProps {
   message: Message;
@@ -29,6 +30,11 @@ const UnsupportedMediaMessage = ({ content }: Pick<Message, "content">) => {
 
 export const MessageContent = ({ message, isOutgoing }: MessageContentProps) => {
   const mediaUrl = message.media_url?.trim();
+  const isLocationMessage = message.media_type === "location";
+
+  if (isLocationMessage) {
+    return <LocationMessage message={message} isOutgoing={isOutgoing} />;
+  }
 
   if (!mediaUrl) {
     return <TextMessage content={message.content} />;
