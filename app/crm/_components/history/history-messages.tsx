@@ -73,7 +73,6 @@ export const HistoryMessages = ({
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const messages = entry.history_messages ?? [];
   const messageGroups = groupMessagesByDay(messages);
-  const agentName = resolvedByAgent?.name || "Agente";
 
   useEffect(() => {
     const scrollContainer = scrollRef.current;
@@ -129,7 +128,6 @@ export const HistoryMessages = ({
                 <MessageBubble
                   key={message.id}
                   message={historyMessageToDisplayMessage(message)}
-                  agentName={agentName}
                 />
               ))}
             </section>

@@ -175,7 +175,6 @@ export const ConversationPanel = ({
         <ConversationMessages
           messages={messages}
           isLoading={isMessagesLoading}
-          agentName={`${currentAgent.name} (tú)`}
         />
         <MessageComposer
           disabled={isSendingMessage}

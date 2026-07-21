@@ -144,7 +144,7 @@ export async function POST(req: NextRequest) {
 
     const { data: agent, error: agentError } = await supabase
       .from("agents")
-      .select("id, status")
+      .select("id, name, status")
       .eq("id", agent_id)
       .maybeSingle();
 
@@ -294,6 +294,7 @@ export async function POST(req: NextRequest) {
         media_url: mediaUrl,
         media_type: "audio",
         sender_type: "agent",
+        sent_by: agent.name,
         status: "sent",
         created_at: new Date().toISOString(),
       })

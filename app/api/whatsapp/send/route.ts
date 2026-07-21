@@ -40,6 +40,7 @@ export async function POST(req: NextRequest) {
 
     const { to, message, conversation_id, agent_id } = payload.data;
     const normalizedTo = normalizeWhatsAppPhone(to);
+    let sentBy: string | null = null;
 
     if (normalizedTo.length < 8 || normalizedTo.length > 15) {
       return NextResponse.json(
@@ -72,6 +73,38 @@ export async function POST(req: NextRequest) {
         { error: "La conversación no existe" },
         { status: 404 },
       );
+    }
+
+    if (agent_id) {
+      const { data: agent, error: agentError } = await supabase
+        .from("agents")
+        .select("id, name, status")
+        .eq("id", agent_id)
+        .maybeSingle();
+
+      if (agentError) {
+        console.error("Error Supabase agent:", agentError);
+        return NextResponse.json(
+          { error: "No se pudo validar el agente" },
+          { status: 500 },
+        );
+      }
+
+      if (!agent) {
+        return NextResponse.json(
+          { error: "El agente no existe" },
+          { status: 404 },
+        );
+      }
+
+      if (agent.status === "inactive") {
+        return NextResponse.json(
+          { error: "El agente está inactivo y no puede enviar mensajes" },
+          { status: 403 },
+        );
+      }
+
+      sentBy = agent.name;
     }
 
     if (conversation.client_id) {
@@ -140,6 +173,7 @@ export async function POST(req: NextRequest) {
         type: "out",
         content: message,
         sender_type: agent_id ? "agent" : "bot",
+        sent_by: sentBy ?? "Bot IA",
         status: "sent",
         created_at: new Date().toISOString(),
       })

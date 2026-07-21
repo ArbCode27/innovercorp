@@ -28,6 +28,7 @@ export const historyMessageToDisplayMessage = (
   type: message.type,
   content: message.content,
   sender_type: message.sender_type,
+  sent_by: message.sent_by,
   media_url: message.media_url,
   media_type: message.media_type,
   wa_message_id: message.wa_message_id,

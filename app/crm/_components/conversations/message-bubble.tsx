@@ -6,7 +6,6 @@ import { MessageContent } from "./message-content";
 
 interface MessageBubbleProps {
   message: Message;
-  agentName: string;
 }
 
 const statusLabel: Record<string, string> = {
@@ -16,7 +15,7 @@ const statusLabel: Record<string, string> = {
   failed: "Falló",
 };
 
-export const MessageBubble = ({ message, agentName }: MessageBubbleProps) => {
+export const MessageBubble = ({ message }: MessageBubbleProps) => {
   if (message.type === "note") {
     return (
       <div className="mx-auto flex max-w-[90%] items-center gap-2 rounded-xl border border-amber-400/30 bg-amber-50 px-4 py-2 text-center text-xs italic text-amber-800 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-300">
@@ -30,7 +29,11 @@ export const MessageBubble = ({ message, agentName }: MessageBubbleProps) => {
   const isBot = isOutgoing && message.sender_type === "bot";
   const isImageMessage =
     message.media_type === "image" && Boolean(message.media_url?.trim());
-  const senderLabel = isOutgoing ? (isBot ? "Bot IA" : agentName) : "Cliente";
+  const senderLabel = isOutgoing
+    ? isBot
+      ? message.sent_by?.trim() || "Bot IA"
+      : message.sent_by?.trim() || "Agente"
+    : "Cliente";
   const status = message.status || "sent";
   const StatusIcon =
     status === "read" ? CheckCheck : status === "failed" ? AlertCircle : Check;

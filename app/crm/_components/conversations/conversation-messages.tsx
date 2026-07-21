@@ -11,13 +11,11 @@ import { MessageBubble } from "./message-bubble";
 interface ConversationMessagesProps {
   messages: Message[];
   isLoading: boolean;
-  agentName: string;
 }
 
 export const ConversationMessages = ({
   messages,
   isLoading,
-  agentName,
 }: ConversationMessagesProps) => {
   const endRef = useRef<HTMLDivElement | null>(null);
 
@@ -45,7 +43,7 @@ export const ConversationMessages = ({
         <span className="h-px flex-1 bg-slate-200 dark:bg-white/10" />
       </div>
       {messages.map((message) => (
-        <MessageBubble key={message.id} message={message} agentName={agentName} />
+        <MessageBubble key={message.id} message={message} />
       ))}
       <div ref={endRef} />
     </div>

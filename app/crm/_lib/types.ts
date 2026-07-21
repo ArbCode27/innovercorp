@@ -123,6 +123,7 @@ export interface Message {
   media_url?: string | null;
   media_type?: MessageMediaType | null;
   sender_type: MessageSenderType;
+  sent_by?: string | null;
   status?: "sent" | "delivered" | "read" | "failed" | null;
   created_at: string | null;
 }
@@ -132,6 +133,7 @@ export interface MessageSnapshot {
   type: MessageType;
   content: string;
   sender_type: MessageSenderType;
+  sent_by?: string | null;
   media_url?: string | null;
   media_type?: MessageMediaType | null;
   wa_message_id?: string | null;
@@ -147,6 +149,7 @@ export interface HistoryMessage {
   type: MessageType;
   content: string;
   sender_type: MessageSenderType;
+  sent_by?: string | null;
   media_url?: string | null;
   media_type?: MessageMediaType | null;
   wa_message_id?: string | null;
