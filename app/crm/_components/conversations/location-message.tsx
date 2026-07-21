@@ -7,6 +7,8 @@ interface LocationMessageProps {
   isOutgoing: boolean;
 }
 
+const DEFAULT_LOCATION_PREVIEW_IMAGE = "/location_pin_on_map.jpg";
+
 const hasValidCoordinates = (latitude: number, longitude: number) =>
   Number.isFinite(latitude) &&
   Number.isFinite(longitude) &&
@@ -37,11 +39,8 @@ export const LocationMessage = ({ message, isOutgoing }: LocationMessageProps) =
     longitude !== null &&
     hasValidCoordinates(latitude, longitude);
 
-  const staticMapUrl = hasCoordinates
-    ? `https://staticmap.openstreetmap.de/staticmap.php?center=${latitude},${longitude}&zoom=16&size=640x360&markers=${latitude},${longitude},red-pushpin`
-    : null;
-
-  const mapPreviewUrl = message.media_url?.trim() || staticMapUrl;
+  const mapPreviewUrl =
+    message.media_url?.trim() || DEFAULT_LOCATION_PREVIEW_IMAGE;
   const mapsUrl = hasCoordinates
     ? `https://www.google.com/maps?q=${latitude},${longitude}`
     : "https://maps.google.com";
