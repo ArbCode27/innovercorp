@@ -38,6 +38,7 @@ export const ConversationListItem = ({
   const hasUnread = hasUnreadMessages(conversation);
   const activityTimestamp = getConversationActivityTimestamp(conversation);
   const agentControlName = conversation.agent_control?.trim() || null;
+  const shouldShowStatusBadge = conversation.status !== "abierto";
 
   return (
     <button
@@ -110,9 +111,9 @@ export const ConversationListItem = ({
                 <CheckCircle2 className="size-3" aria-hidden="true" />
                 Resuelto
               </span>
-            ) : (
+            ) : shouldShowStatusBadge ? (
               <StatusBadge status={conversation.status} />
-            )}
+            ) : null}
             {agentControlName ? (
               <span
                 className={cn(

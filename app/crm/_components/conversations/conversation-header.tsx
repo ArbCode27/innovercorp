@@ -60,6 +60,7 @@ export const ConversationHeader = ({
   const showWisproSearch = !client;
   const showWisproLink = Boolean(client && !client.wispro_id);
   const agentControlName = conversation.agent_control?.trim() || null;
+  const shouldShowStatusBadge = conversation.status !== "abierto";
 
   return (
     <div
@@ -109,7 +110,9 @@ export const ConversationHeader = ({
               <span>{phone}</span>
             </div>
             <div className="mt-1 flex items-center gap-2">
-              <StatusBadge status={conversation.status} />
+              {shouldShowStatusBadge ? (
+                <StatusBadge status={conversation.status} />
+              ) : null}
               <StatusBadge status={conversation.human_mode ? "human" : "bot"} />
               {agentControlName ? (
                 <span
