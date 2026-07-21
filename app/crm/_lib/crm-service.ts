@@ -157,7 +157,12 @@ export const crmService = {
 
   async updateConversation(
     conversationId: number,
-    payload: Partial<Pick<Conversation, "human_mode" | "status" | "label_ids" | "agent_id">>
+    payload: Partial<
+      Pick<
+        Conversation,
+        "human_mode" | "status" | "label_ids" | "agent_id" | "agent_control"
+      >
+    >
   ) {
     const { error } = await db()
       .from("conversations")

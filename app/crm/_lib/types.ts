@@ -113,6 +113,7 @@ export interface Conversation {
   preview: string | null;
   unread: number | null;
   agent_id: number | null;
+  agent_control?: string | null;
   wa_phone_number_id?: string | null;
   last_message_at?: string | null;
   updated_at: string | null;

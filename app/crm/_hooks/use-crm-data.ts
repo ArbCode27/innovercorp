@@ -550,12 +550,20 @@ export const useCrmData = (agent: Agent | null) => {
   };
 
   const takeControl = async () => {
-    if (!selectedConversation) return;
+    if (!selectedConversation || !agent) return;
 
+    const nextConversation = {
+      ...selectedConversation,
+      human_mode: true,
+      agent_id: agent.id,
+      agent_control: agent.name,
+    };
     await crmService.updateConversation(selectedConversation.id, {
       human_mode: true,
+      agent_id: agent.id,
+      agent_control: agent.name,
     });
-    updateConversationLocal({ ...selectedConversation, human_mode: true });
+    updateConversationLocal(nextConversation);
     toast.warning("Control tomado");
   };
 
@@ -564,8 +572,13 @@ export const useCrmData = (agent: Agent | null) => {
 
     await crmService.updateConversation(selectedConversation.id, {
       human_mode: false,
+      agent_control: null,
     });
-    updateConversationLocal({ ...selectedConversation, human_mode: false });
+    updateConversationLocal({
+      ...selectedConversation,
+      human_mode: false,
+      agent_control: null,
+    });
     toast.success("Bot IA reactivado");
   };
 
@@ -628,9 +641,11 @@ export const useCrmData = (agent: Agent | null) => {
   };
 
   const assignAgent = async (conversationId: number, agentId: number) => {
+    const assignedAgent = data.agents.find((item) => item.id === agentId);
     await crmService.updateConversation(conversationId, {
       agent_id: agentId,
       human_mode: true,
+      agent_control: assignedAgent?.name ?? null,
     });
     await loadData();
     toast.success("Conversación asignada");

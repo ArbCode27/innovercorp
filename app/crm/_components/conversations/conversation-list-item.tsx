@@ -37,6 +37,7 @@ export const ConversationListItem = ({
   const unreadCount = getUnreadCount(conversation);
   const hasUnread = hasUnreadMessages(conversation);
   const activityTimestamp = getConversationActivityTimestamp(conversation);
+  const agentControlName = conversation.agent_control?.trim() || null;
 
   return (
     <button
@@ -112,6 +113,16 @@ export const ConversationListItem = ({
             ) : (
               <StatusBadge status={conversation.status} />
             )}
+            {agentControlName ? (
+              <span
+                className={cn(
+                  "inline-flex max-w-[9rem] items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium",
+                  CRM_BADGE_TONES.slate,
+                )}
+                title={agentControlName}>
+                <span className="truncate">{agentControlName}</span>
+              </span>
+            ) : null}
           </div>
           <p
             className={cn(

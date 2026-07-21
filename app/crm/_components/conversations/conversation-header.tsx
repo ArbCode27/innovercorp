@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import type { Agent, Client, Conversation } from "../../_lib/types";
 import { canAssignConversation } from "../../_lib/conversation-permissions";
-import { CRM_SURFACES } from "../../_lib/crm-theme";
+import { CRM_BADGE_TONES, CRM_SURFACES } from "../../_lib/crm-theme";
 import { AvatarInitials } from "../shared/avatar-initials";
 import { CrmButton } from "../shared/crm-button";
 import { StatusBadge } from "../shared/status-badge";
@@ -59,6 +59,7 @@ export const ConversationHeader = ({
     : "Asignar agente";
   const showWisproSearch = !client;
   const showWisproLink = Boolean(client && !client.wispro_id);
+  const agentControlName = conversation.agent_control?.trim() || null;
 
   return (
     <div
@@ -110,6 +111,13 @@ export const ConversationHeader = ({
             <div className="mt-1 flex items-center gap-2">
               <StatusBadge status={conversation.status} />
               <StatusBadge status={conversation.human_mode ? "human" : "bot"} />
+              {agentControlName ? (
+                <span
+                  className={`inline-flex max-w-[10rem] items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${CRM_BADGE_TONES.slate}`}
+                  title={agentControlName}>
+                  <span className="truncate">{agentControlName}</span>
+                </span>
+              ) : null}
             </div>
           </div>
           <ConversationActionsDrawer
