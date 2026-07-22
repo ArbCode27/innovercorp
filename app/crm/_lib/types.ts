@@ -27,6 +27,7 @@ export type CrmView =
   | "conversations"
   | "my-conversations"
   | "history"
+  | "quick-replies"
   | "clients"
   | "tickets"
   | "labels"
@@ -206,6 +207,18 @@ export interface Label {
   created_at: string | null;
 }
 
+export interface QuickReply {
+  id: number;
+  title: string;
+  shortcut: string | null;
+  content: string;
+  category: string | null;
+  is_active: boolean;
+  created_by: number | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
 export interface Ticket {
   id: string;
   client_id: number;
@@ -221,6 +234,7 @@ export interface CrmData {
   clients: Client[];
   conversations: Conversation[];
   labels: Label[];
+  quickReplies: QuickReply[];
   tickets: Ticket[];
 }
 
@@ -243,6 +257,21 @@ export interface CreateLabelInput {
   name: string;
   color: string;
   bg: string;
+}
+
+export interface CreateQuickReplyInput {
+  title: string;
+  shortcut?: string;
+  content: string;
+  category?: string;
+}
+
+export interface UpdateQuickReplyInput {
+  title: string;
+  shortcut?: string;
+  content: string;
+  category?: string;
+  is_active?: boolean;
 }
 
 export interface UpsertAgentInput {

@@ -9,6 +9,7 @@ import type {
   CrmView,
   Label,
   Message,
+  QuickReply,
   Ticket,
   WisproCustomer,
   WisproSearchResult,
@@ -27,6 +28,7 @@ interface ConversationsViewProps {
   clientsById: Map<number, Client>;
   labelsById: Map<number, Label>;
   labels: Label[];
+  quickReplies: QuickReply[];
   agents: Agent[];
   ticketsByClientId: Map<number, Ticket[]>;
   messages: Message[];
@@ -69,6 +71,7 @@ export const ConversationsView = ({
   clientsById,
   labelsById,
   labels,
+  quickReplies,
   agents,
   ticketsByClientId,
   messages,
@@ -151,6 +154,7 @@ export const ConversationsView = ({
           client={selectedClient}
           wisproSnapshot={selectedWisproSnapshot}
           allLabels={labels}
+          quickReplies={quickReplies}
           messages={messages}
           agents={agents}
           conversations={conversations}

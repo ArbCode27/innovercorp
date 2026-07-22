@@ -9,6 +9,7 @@ export const CRM_NAV_ITEMS: Array<{
   { id: "conversations", label: "Conversaciones" },
   { id: "my-conversations", label: "Mis asignadas" },
   { id: "history", label: "Historial" },
+  { id: "quick-replies", label: "Respuestas rápidas" },
   { id: "clients", label: "Clientes" },
   { id: "tickets", label: "Tickets" },
   { id: "labels", label: "Etiquetas" },

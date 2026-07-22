@@ -13,6 +13,7 @@ import { MyConversationsView } from "../conversations/my-conversations-view";
 import { ConversationsView } from "../conversations/conversations-view";
 import { HistoryView } from "../history/history-view";
 import { LabelsView } from "../labels/labels-view";
+import { QuickRepliesView } from "../quick-replies/quick-replies-view";
 import { TicketsView } from "../tickets/tickets-view";
 import { CrmMobileNav, CrmSidebar } from "./crm-sidebar";
 
@@ -88,6 +89,7 @@ export const CrmShell = () => {
                 onSendMessage={crm.sendMessage}
                 onSendVoiceNote={crm.sendVoiceNote}
                 onSendImage={crm.sendImageMessage}
+                quickReplies={crm.quickReplies}
                 onAddNote={crm.addNote}
                 onTakeControl={crm.takeControl}
                 onReactivateBot={crm.reactivateBot}
@@ -125,6 +127,7 @@ export const CrmShell = () => {
                 onSendMessage={crm.sendMessage}
                 onSendVoiceNote={crm.sendVoiceNote}
                 onSendImage={crm.sendImageMessage}
+                quickReplies={crm.quickReplies}
                 onAddNote={crm.addNote}
                 onTakeControl={crm.takeControl}
                 onReactivateBot={crm.reactivateBot}
@@ -148,6 +151,16 @@ export const CrmShell = () => {
                 clients={crm.clients}
                 tickets={crm.tickets}
                 onCreateClient={crm.createClient}
+              />
+            ) : null}
+            {activeView === "quick-replies" ? (
+              <QuickRepliesView
+                currentAgent={auth.agent}
+                quickReplies={crm.quickReplies}
+                onCreateQuickReply={crm.createQuickReply}
+                onUpdateQuickReply={crm.updateQuickReply}
+                onToggleQuickReplyStatus={crm.toggleQuickReplyStatus}
+                onDeleteQuickReply={crm.deleteQuickReply}
               />
             ) : null}
             {activeView === "tickets" ? (

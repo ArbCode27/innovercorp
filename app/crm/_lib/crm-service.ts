@@ -9,13 +9,16 @@ import type {
   Conversation,
   CreateClientInput,
   CreateLabelInput,
+  CreateQuickReplyInput,
   CreateTicketInput,
   CrmData,
   Label,
   Message,
+  QuickReply,
   Ticket,
   Client,
   ConversationHistory,
+  UpdateQuickReplyInput,
   UpsertAgentInput,
 } from "./types";
 
@@ -28,6 +31,18 @@ const throwIfError = (error: unknown) => {
 const ensureData = <T,>(data: T | null, message: string) => {
   if (!data) throw new Error(message);
   return data;
+};
+
+const normalizeShortcut = (value?: string) => {
+  const trimmed = value?.trim().toLowerCase() ?? "";
+  if (!trimmed) return null;
+
+  const normalized = trimmed
+    .replace(/^\/+/, "")
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9_-]/g, "");
+
+  return normalized || null;
 };
 
 export const crmService = {
@@ -60,15 +75,16 @@ export const crmService = {
   },
 
   async loadAll(currentAgent: Agent): Promise<CrmData> {
-    const [labels, clients, tickets, conversations, agents] = await Promise.all([
+    const [labels, clients, tickets, conversations, agents, quickReplies] = await Promise.all([
       db().from("labels").select("*").order("created_at"),
       db().from("clients").select("*").order("created_at"),
       db().from("tickets").select("*").order("created_at", { ascending: false }),
       db().from("conversations").select("*").order("updated_at", { ascending: false }),
       db().from("agents").select("*").order("created_at"),
+      db().from("quick_replies").select("*").order("title"),
     ]);
 
-    [labels, clients, tickets, conversations, agents].forEach((result) =>
+    [labels, clients, tickets, conversations, agents, quickReplies].forEach((result) =>
       throwIfError(result.error)
     );
 
@@ -84,6 +100,7 @@ export const crmService = {
       labels: (labels.data || []) as Label[],
       clients: (clients.data || []) as Client[],
       tickets: (tickets.data || []) as Ticket[],
+      quickReplies: (quickReplies.data || []) as QuickReply[],
       conversations:
         currentAgent.role === "agent"
           ? rawConversations.filter(
@@ -284,6 +301,87 @@ export const crmService = {
 
     throwIfError(error);
     return ensureData(data, "No se pudo crear la etiqueta");
+  },
+
+  async createQuickReply(input: CreateQuickReplyInput, createdBy: number) {
+    const title = input.title.trim();
+    const content = input.content.trim();
+    if (!title) throw new Error("El título es requerido");
+    if (!content) throw new Error("El contenido es requerido");
+
+    const shortcut = normalizeShortcut(input.shortcut);
+    const category = input.category?.trim() || null;
+
+    const { data, error } = await db()
+      .from("quick_replies")
+      .insert({
+        title,
+        content,
+        shortcut,
+        category,
+        is_active: true,
+        created_by: createdBy,
+      })
+      .select()
+      .single<QuickReply>();
+
+    throwIfError(error);
+    return ensureData(data, "No se pudo crear la respuesta rápida");
+  },
+
+  async updateQuickReply(id: number, input: UpdateQuickReplyInput) {
+    const title = input.title.trim();
+    const content = input.content.trim();
+    if (!title) throw new Error("El título es requerido");
+    if (!content) throw new Error("El contenido es requerido");
+
+    const shortcut = normalizeShortcut(input.shortcut);
+    const category = input.category?.trim() || null;
+
+    const payload = {
+      title,
+      content,
+      shortcut,
+      category,
+      ...(typeof input.is_active === "boolean"
+        ? { is_active: input.is_active }
+        : {}),
+      updated_at: new Date().toISOString(),
+    };
+
+    const { data, error } = await db()
+      .from("quick_replies")
+      .update(payload)
+      .eq("id", id)
+      .select()
+      .single<QuickReply>();
+
+    throwIfError(error);
+    return ensureData(data, "No se pudo actualizar la respuesta rápida");
+  },
+
+  async toggleQuickReplyStatus(id: number, isActive: boolean) {
+    const { data, error } = await db()
+      .from("quick_replies")
+      .update({
+        is_active: isActive,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id)
+      .select()
+      .single<QuickReply>();
+
+    throwIfError(error);
+    return ensureData(data, "No se pudo actualizar el estado de la respuesta rápida");
+  },
+
+  async deleteQuickReply(id: number) {
+    const { error } = await db()
+      .from("quick_replies")
+      .delete()
+      .eq("id", id);
+
+    throwIfError(error);
   },
 
   async deleteLabel(labelId: number, conversations: Conversation[]) {

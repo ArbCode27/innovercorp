@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { CRM_DIALOG, CRM_SURFACES } from "../../_lib/crm-theme";
-import type { Agent, Client, Conversation, Label, Message, Ticket, WisproCustomer, WisproSearchResult } from "../../_lib/types";
+import type { Agent, Client, Conversation, Label, Message, QuickReply, Ticket, WisproCustomer, WisproSearchResult } from "../../_lib/types";
 import { AssignAgentDialog } from "../agents/assign-agent-dialog";
 import { LabelPickerDialog } from "../labels/label-picker-dialog";
 import { UnknownClientBanner } from "../wispro/unknown-client-banner";
@@ -36,6 +36,7 @@ interface ConversationPanelProps {
   client: Client | null;
   wisproSnapshot?: WisproCustomer | null;
   allLabels: Label[];
+  quickReplies: QuickReply[];
   messages: Message[];
   agents: Agent[];
   conversations: Conversation[];
@@ -66,6 +67,7 @@ export const ConversationPanel = ({
   client,
   wisproSnapshot,
   allLabels,
+  quickReplies,
   messages,
   agents,
   conversations,
@@ -202,6 +204,7 @@ export const ConversationPanel = ({
           onSend={handleSendMessage}
           onSendVoiceNote={handleSendVoiceNote}
           onSendImage={handleSendImage}
+          quickReplies={quickReplies}
         />
       </div>
       <Sheet open={isDetailsSheetOpen} onOpenChange={setIsDetailsSheetOpen}>

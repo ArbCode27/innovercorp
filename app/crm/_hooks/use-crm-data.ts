@@ -21,11 +21,14 @@ import type {
   ConversationFilter,
   CreateClientInput,
   CreateLabelInput,
+  CreateQuickReplyInput,
   CreateTicketInput,
   CrmData,
   Label,
   Message,
+  QuickReply,
   Ticket,
+  UpdateQuickReplyInput,
   UpsertAgentInput,
   WisproCustomer,
   WisproSearchResult,
@@ -42,6 +45,7 @@ const emptyData: CrmData = {
   clients: [],
   conversations: [],
   labels: [],
+  quickReplies: [],
   tickets: [],
 };
 
@@ -780,6 +784,77 @@ export const useCrmData = (agent: Agent | null) => {
     toast.warning(`"${label.name}" eliminada`);
   };
 
+  const createQuickReply = async (input: CreateQuickReplyInput) => {
+    if (!agent) throw new Error("Debes iniciar sesión para crear respuestas rápidas");
+    if (agent.role !== "admin") {
+      throw new Error("Solo un administrador puede crear respuestas rápidas");
+    }
+
+    const saved = await crmService.createQuickReply(input, agent.id);
+    setData((current) => ({
+      ...current,
+      quickReplies: [...current.quickReplies, saved].sort((left, right) =>
+        left.title.localeCompare(right.title, "es"),
+      ),
+    }));
+    toast.success(`"${saved.title}" creada`);
+  };
+
+  const updateQuickReply = async (quickReplyId: number, input: UpdateQuickReplyInput) => {
+    if (!agent) throw new Error("Debes iniciar sesión para actualizar respuestas rápidas");
+    if (agent.role !== "admin") {
+      throw new Error("Solo un administrador puede editar respuestas rápidas");
+    }
+
+    const saved = await crmService.updateQuickReply(quickReplyId, input);
+    setData((current) => ({
+      ...current,
+      quickReplies: current.quickReplies
+        .map((item) => (item.id === quickReplyId ? saved : item))
+        .sort((left, right) => left.title.localeCompare(right.title, "es")),
+    }));
+    toast.success(`"${saved.title}" actualizada`);
+  };
+
+  const toggleQuickReplyStatus = async (quickReply: QuickReply) => {
+    if (!agent) throw new Error("Debes iniciar sesión para actualizar respuestas rápidas");
+    if (agent.role !== "admin") {
+      throw new Error("Solo un administrador puede editar respuestas rápidas");
+    }
+
+    const saved = await crmService.toggleQuickReplyStatus(
+      quickReply.id,
+      !quickReply.is_active,
+    );
+
+    setData((current) => ({
+      ...current,
+      quickReplies: current.quickReplies.map((item) =>
+        item.id === quickReply.id ? saved : item,
+      ),
+    }));
+
+    toast.info(
+      saved.is_active
+        ? `Respuesta "${saved.title}" activada`
+        : `Respuesta "${saved.title}" desactivada`,
+    );
+  };
+
+  const deleteQuickReply = async (quickReply: QuickReply) => {
+    if (!agent) throw new Error("Debes iniciar sesión para eliminar respuestas rápidas");
+    if (agent.role !== "admin") {
+      throw new Error("Solo un administrador puede eliminar respuestas rápidas");
+    }
+
+    await crmService.deleteQuickReply(quickReply.id);
+    setData((current) => ({
+      ...current,
+      quickReplies: current.quickReplies.filter((item) => item.id !== quickReply.id),
+    }));
+    toast.warning(`"${quickReply.title}" eliminada`);
+  };
+
   const upsertAgent = async (input: UpsertAgentInput) => {
     await crmService.upsertAgent(input, data.agents.length);
     await loadData();
@@ -856,6 +931,10 @@ export const useCrmData = (agent: Agent | null) => {
     createTicket,
     createLabel,
     deleteLabel,
+    createQuickReply,
+    updateQuickReply,
+    toggleQuickReplyStatus,
+    deleteQuickReply,
     upsertAgent,
     toggleAgentStatus,
   };

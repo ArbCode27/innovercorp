@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, ClipboardEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
+import { ChangeEvent, ClipboardEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { ImagePlus, Mic, Send, Square, Trash2, X } from "lucide-react";
 import { CrmButton } from "../shared/crm-button";
 import { Spinner } from "@/components/ui/spinner";
@@ -8,11 +8,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
 import { useVoiceRecorder } from "../../_hooks/use-voice-recorder";
+import type { QuickReply } from "../../_lib/types";
 
 interface MessageComposerProps {
   disabled?: boolean;
   readOnly?: boolean;
   placeholder?: string;
+  quickReplies: QuickReply[];
   onSend: (content: string) => Promise<void>;
   onSendVoiceNote: (
     audioBlob: Blob,
@@ -52,10 +54,27 @@ const isValidImageFile = (file: File) => {
   return { valid: true, error: null as string | null };
 };
 
+const extractQuickReplyContext = (text: string, cursorPosition: number) => {
+  const safeCursorPosition = Math.max(0, Math.min(cursorPosition, text.length));
+  const textBeforeCursor = text.slice(0, safeCursorPosition);
+  const match = textBeforeCursor.match(/(?:^|\s)\/([^\s]*)$/);
+  if (!match) return null;
+
+  const triggerStart = textBeforeCursor.lastIndexOf("/");
+  if (triggerStart < 0) return null;
+
+  return {
+    query: (match[1] || "").trim().toLowerCase(),
+    triggerStart,
+    triggerEnd: safeCursorPosition,
+  };
+};
+
 export const MessageComposer = ({
   disabled,
   readOnly = false,
   placeholder = "Escribe un mensaje...",
+  quickReplies,
   onSend,
   onSendVoiceNote,
   onSendImage,
@@ -67,13 +86,67 @@ export const MessageComposer = ({
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null);
   const [imageError, setImageError] = useState<string | null>(null);
+  const [isQuickReplyMenuOpen, setIsQuickReplyMenuOpen] = useState(false);
+  const [quickReplyQuery, setQuickReplyQuery] = useState("");
+  const [quickReplyTriggerStart, setQuickReplyTriggerStart] = useState<number | null>(null);
+  const [quickReplyTriggerEnd, setQuickReplyTriggerEnd] = useState<number | null>(null);
+  const [highlightedQuickReplyIndex, setHighlightedQuickReplyIndex] = useState(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const recorder = useVoiceRecorder();
   const isBusy = isSending || isSendingVoice || isSendingImage;
   const isInputLocked = disabled || isBusy || readOnly;
   const canStartRecording =
     !isInputLocked && recorder.supportsRecording && recorder.status !== "recording";
   const canOpenImagePicker = !isInputLocked && recorder.status !== "recording";
+  const activeQuickReplies = useMemo(
+    () => quickReplies.filter((quickReply) => quickReply.is_active),
+    [quickReplies],
+  );
+  const filteredQuickReplies = useMemo(() => {
+    const query = quickReplyQuery.trim().toLowerCase();
+    if (!query) return activeQuickReplies;
+
+    return activeQuickReplies.filter((quickReply) => {
+      const searchableFields = [
+        quickReply.shortcut,
+        quickReply.title,
+        quickReply.content,
+        quickReply.category,
+      ]
+        .filter(Boolean)
+        .map((value) => String(value).toLowerCase());
+
+      return searchableFields.some((field) => field.includes(query));
+    });
+  }, [activeQuickReplies, quickReplyQuery]);
+
+  const closeQuickReplyMenu = () => {
+    setIsQuickReplyMenuOpen(false);
+    setQuickReplyQuery("");
+    setQuickReplyTriggerStart(null);
+    setQuickReplyTriggerEnd(null);
+    setHighlightedQuickReplyIndex(0);
+  };
+
+  const updateQuickReplyFromText = (text: string, cursorPosition: number) => {
+    if (isInputLocked || selectedImage || recorder.status === "recording") {
+      closeQuickReplyMenu();
+      return;
+    }
+
+    const context = extractQuickReplyContext(text, cursorPosition);
+    if (!context) {
+      closeQuickReplyMenu();
+      return;
+    }
+
+    setIsQuickReplyMenuOpen(true);
+    setQuickReplyQuery(context.query);
+    setQuickReplyTriggerStart(context.triggerStart);
+    setQuickReplyTriggerEnd(context.triggerEnd);
+    setHighlightedQuickReplyIndex(0);
+  };
 
   useEffect(() => {
     if (!selectedImage) {
@@ -88,6 +161,23 @@ export const MessageComposer = ({
       URL.revokeObjectURL(previewUrl);
     };
   }, [selectedImage]);
+
+  useEffect(() => {
+    if (!isQuickReplyMenuOpen) return;
+    if (!filteredQuickReplies.length) {
+      setHighlightedQuickReplyIndex(0);
+      return;
+    }
+
+    setHighlightedQuickReplyIndex((current) =>
+      Math.min(current, filteredQuickReplies.length - 1),
+    );
+  }, [filteredQuickReplies, isQuickReplyMenuOpen]);
+
+  useEffect(() => {
+    if (!isInputLocked) return;
+    closeQuickReplyMenu();
+  }, [isInputLocked]);
 
   const clearSelectedImage = () => {
     setSelectedImage(null);
@@ -198,10 +288,78 @@ export const MessageComposer = ({
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (readOnly) return;
 
+    if (isQuickReplyMenuOpen) {
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        if (!filteredQuickReplies.length) return;
+        setHighlightedQuickReplyIndex((current) =>
+          (current + 1) % filteredQuickReplies.length,
+        );
+        return;
+      }
+
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        if (!filteredQuickReplies.length) return;
+        setHighlightedQuickReplyIndex((current) =>
+          current === 0 ? filteredQuickReplies.length - 1 : current - 1,
+        );
+        return;
+      }
+
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeQuickReplyMenu();
+        return;
+      }
+
+      if (event.key === "Enter" || event.key === "Tab") {
+        if (!filteredQuickReplies.length) return;
+        event.preventDefault();
+        const selectedQuickReply = filteredQuickReplies[highlightedQuickReplyIndex];
+        if (selectedQuickReply) {
+          handleSelectQuickReply(selectedQuickReply);
+        }
+        return;
+      }
+    }
+
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       handleSendMessage();
     }
+  };
+
+  const handleSelectQuickReply = (quickReply: QuickReply) => {
+    if (quickReplyTriggerStart === null || quickReplyTriggerEnd === null) {
+      closeQuickReplyMenu();
+      return;
+    }
+
+    const replacementContent = quickReply.content.trim();
+    const nextValue =
+      value.slice(0, quickReplyTriggerStart) +
+      replacementContent +
+      value.slice(quickReplyTriggerEnd);
+    const nextCursorPosition = quickReplyTriggerStart + replacementContent.length;
+
+    setValue(nextValue);
+    closeQuickReplyMenu();
+
+    requestAnimationFrame(() => {
+      textareaRef.current?.focus();
+      textareaRef.current?.setSelectionRange(nextCursorPosition, nextCursorPosition);
+    });
+  };
+
+  const handleChangeText = (event: ChangeEvent<HTMLTextAreaElement>) => {
+    const nextValue = event.target.value;
+    setValue(nextValue);
+    updateQuickReplyFromText(nextValue, event.target.selectionStart ?? nextValue.length);
+  };
+
+  const handleUpdateQuickReplyCursor = (target: HTMLTextAreaElement) => {
+    updateQuickReplyFromText(target.value, target.selectionStart ?? target.value.length);
   };
 
   return (
@@ -330,6 +488,52 @@ export const MessageComposer = ({
         </p>
       ) : null}
 
+      {isQuickReplyMenuOpen ? (
+        <div className={`mb-2 rounded-xl border ${CRM_SURFACES.border} ${CRM_SURFACES.elevated}`}>
+          <div className={`border-b px-3 py-2 text-xs font-medium ${CRM_SURFACES.border} ${CRM_SURFACES.textMuted}`}>
+            Respuestas rápidas {quickReplyQuery ? `para "/${quickReplyQuery}"` : ""}
+          </div>
+          <div
+            role="listbox"
+            aria-label="Listado de respuestas rápidas"
+            className="crm-scrollbar max-h-60 overflow-y-auto p-1">
+            {filteredQuickReplies.length ? (
+              filteredQuickReplies.map((quickReply, index) => (
+                <button
+                  key={quickReply.id}
+                  type="button"
+                  role="option"
+                  aria-selected={index === highlightedQuickReplyIndex}
+                  className={`flex w-full flex-col rounded-lg px-3 py-2 text-left transition ${
+                    index === highlightedQuickReplyIndex
+                      ? "bg-blue-100 text-blue-900 dark:bg-blue-600/20 dark:text-blue-100"
+                      : `${CRM_SURFACES.hover} ${CRM_SURFACES.textSecondary}`
+                  }`}
+                  onMouseEnter={() => setHighlightedQuickReplyIndex(index)}
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                    handleSelectQuickReply(quickReply);
+                  }}>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium">{quickReply.title}</span>
+                    {quickReply.shortcut ? (
+                      <span className="rounded bg-blue-600/10 px-1.5 py-0.5 text-[11px] font-semibold text-blue-700 dark:text-blue-200">
+                        /{quickReply.shortcut}
+                      </span>
+                    ) : null}
+                  </div>
+                  <p className="line-clamp-2 text-xs opacity-80">{quickReply.content}</p>
+                </button>
+              ))
+            ) : (
+              <p className={`px-3 py-4 text-xs ${CRM_SURFACES.textMuted}`}>
+                No hay respuestas rápidas para esa búsqueda.
+              </p>
+            )}
+          </div>
+        </div>
+      ) : null}
+
       <div className="flex items-end gap-2">
         <CrmButton
           type="button"
@@ -350,9 +554,13 @@ export const MessageComposer = ({
           <Mic className="size-4" aria-hidden="true" />
         </CrmButton>
         <Textarea
+          ref={textareaRef}
           value={value}
-          onChange={(event) => setValue(event.target.value)}
+          onChange={handleChangeText}
           onKeyDown={handleKeyDown}
+          onKeyUp={(event) => handleUpdateQuickReplyCursor(event.currentTarget)}
+          onClick={(event) => handleUpdateQuickReplyCursor(event.currentTarget)}
+          onSelect={(event) => handleUpdateQuickReplyCursor(event.currentTarget)}
           onPaste={handlePasteImage}
           readOnly={readOnly}
           disabled={disabled || isBusy || recorder.status === "recording"}

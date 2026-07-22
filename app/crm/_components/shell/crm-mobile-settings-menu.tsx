@@ -1,6 +1,6 @@
 "use client";
 
-import { Bot, Settings2, Tags, Ticket, Users } from "lucide-react";
+import { Bot, MessageSquareQuote, Settings2, Tags, Ticket, Users } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,6 +18,7 @@ interface CrmMobileSettingsMenuProps {
 const SETTINGS_ITEMS: Array<{ id: CrmView; label: string; icon: typeof Users }> = [
   { id: "clients", label: "Clientes", icon: Users },
   { id: "tickets", label: "Tickets", icon: Ticket },
+  { id: "quick-replies", label: "Respuestas rápidas", icon: MessageSquareQuote },
   { id: "labels", label: "Etiquetas", icon: Tags },
   { id: "agents", label: "Agentes", icon: Bot },
 ];
