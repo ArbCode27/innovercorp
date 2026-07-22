@@ -3,6 +3,7 @@ import type { Message } from "../../_lib/types";
 import { AudioMessage } from "./audio-message";
 import { ImageMessage } from "./image-message";
 import { LocationMessage } from "./location-message";
+import { VideoMessage } from "./video-message";
 
 interface MessageContentProps {
   message: Message;
@@ -46,6 +47,10 @@ export const MessageContent = ({ message, isOutgoing }: MessageContentProps) => 
 
   if (message.media_type === "image") {
     return <ImageMessage src={mediaUrl} caption={message.content} isOutgoing={isOutgoing} />;
+  }
+
+  if (message.media_type === "video") {
+    return <VideoMessage src={mediaUrl} caption={message.content} isOutgoing={isOutgoing} />;
   }
 
   return <UnsupportedMediaMessage content={message.content} />;
