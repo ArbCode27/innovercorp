@@ -13,6 +13,7 @@ import {
   sortConversationsForInbox,
 } from "../_lib/conversation-inbox-utils";
 import { wisproService } from "../_lib/wispro-service";
+import { isAdminRole } from "../_lib/agent-role-utils";
 import { useSendMessage } from "./use-send-message";
 import type {
   Agent,
@@ -786,7 +787,7 @@ export const useCrmData = (agent: Agent | null) => {
 
   const createQuickReply = async (input: CreateQuickReplyInput) => {
     if (!agent) throw new Error("Debes iniciar sesión para crear respuestas rápidas");
-    if (agent.role !== "admin") {
+    if (!isAdminRole(agent.role)) {
       throw new Error("Solo un administrador puede crear respuestas rápidas");
     }
 
@@ -802,7 +803,7 @@ export const useCrmData = (agent: Agent | null) => {
 
   const updateQuickReply = async (quickReplyId: number, input: UpdateQuickReplyInput) => {
     if (!agent) throw new Error("Debes iniciar sesión para actualizar respuestas rápidas");
-    if (agent.role !== "admin") {
+    if (!isAdminRole(agent.role)) {
       throw new Error("Solo un administrador puede editar respuestas rápidas");
     }
 
@@ -818,7 +819,7 @@ export const useCrmData = (agent: Agent | null) => {
 
   const toggleQuickReplyStatus = async (quickReply: QuickReply) => {
     if (!agent) throw new Error("Debes iniciar sesión para actualizar respuestas rápidas");
-    if (agent.role !== "admin") {
+    if (!isAdminRole(agent.role)) {
       throw new Error("Solo un administrador puede editar respuestas rápidas");
     }
 
@@ -843,7 +844,7 @@ export const useCrmData = (agent: Agent | null) => {
 
   const deleteQuickReply = async (quickReply: QuickReply) => {
     if (!agent) throw new Error("Debes iniciar sesión para eliminar respuestas rápidas");
-    if (agent.role !== "admin") {
+    if (!isAdminRole(agent.role)) {
       throw new Error("Solo un administrador puede eliminar respuestas rápidas");
     }
 

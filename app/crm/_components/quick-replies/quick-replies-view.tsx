@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Plus } from "lucide-react";
 import { CrmButton } from "../shared/crm-button";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
+import { isAdminRole } from "../../_lib/agent-role-utils";
 import type {
   Agent,
   CreateQuickReplyInput,
@@ -41,7 +42,7 @@ export const QuickRepliesView = ({
     [quickReplies],
   );
 
-  const isAdmin = currentAgent.role === "admin";
+  const isAdmin = isAdminRole(currentAgent.role);
 
   const handleCreate = () => {
     setEditingQuickReply(null);

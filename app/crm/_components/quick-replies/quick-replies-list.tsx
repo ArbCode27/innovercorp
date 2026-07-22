@@ -3,6 +3,7 @@
 import { Pencil, Power, Trash2 } from "lucide-react";
 import { CrmButton } from "../shared/crm-button";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
+import { isAdminRole } from "../../_lib/agent-role-utils";
 import type { Agent, QuickReply } from "../../_lib/types";
 
 interface QuickRepliesListProps {
@@ -28,7 +29,7 @@ export const QuickRepliesList = ({
     );
   }
 
-  const isAdmin = currentAgent.role === "admin";
+  const isAdmin = isAdminRole(currentAgent.role);
 
   return (
     <div className={`max-w-5xl overflow-hidden rounded-xl border ${CRM_SURFACES.border} ${CRM_SURFACES.elevated}`}>
