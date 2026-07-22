@@ -24,6 +24,14 @@ interface SendVoiceNoteInput {
   duration_ms: number;
 }
 
+interface SendImageMessageInput {
+  to: string;
+  conversation_id: number;
+  agent_id: number;
+  image: File;
+  caption?: string;
+}
+
 export function useSendMessage() {
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -101,5 +109,50 @@ export function useSendMessage() {
     }
   }, []);
 
-  return { sendMessage, sendVoiceNote, isSending, error };
+  const sendImageMessage = useCallback(async (input: SendImageMessageInput) => {
+    setIsSending(true);
+    setError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("to", input.to);
+      formData.append("conversation_id", String(input.conversation_id));
+      formData.append("agent_id", String(input.agent_id));
+
+      const trimmedCaption = input.caption?.trim();
+      if (trimmedCaption) {
+        formData.append("caption", trimmedCaption);
+      }
+
+      const extension = input.image.type.includes("png")
+        ? "png"
+        : input.image.type.includes("webp")
+          ? "webp"
+          : "jpg";
+      const filename = input.image.name?.trim() || `image.${extension}`;
+      formData.append("image", input.image, filename);
+
+      const res = await fetch("/api/whatsapp/send-image", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Error al enviar imagen");
+      }
+
+      return data as SendMessageResponse;
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Error inesperado al enviar imagen";
+      setError(message);
+      throw new Error(message);
+    } finally {
+      setIsSending(false);
+    }
+  }, []);
+
+  return { sendMessage, sendVoiceNote, sendImageMessage, isSending, error };
 }

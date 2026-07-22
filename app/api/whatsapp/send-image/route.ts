@@ -4,16 +4,20 @@ import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 
 const GRAPH_API_VERSION = "v19.0";
-const MAX_AUDIO_BYTES = 16 * 1024 * 1024;
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const DEFAULT_STORAGE_BUCKET = "whatsapp-media";
-const AUDIO_BUCKET_ENV_KEY = "SUPABASE_WHATSAPP_AUDIO_BUCKET";
+const IMAGE_BUCKET_ENV_KEY = "SUPABASE_WHATSAPP_IMAGE_BUCKET";
 const LEGACY_MEDIA_BUCKET_ENV_KEY = "SUPABASE_WHATSAPP_MEDIA_BUCKET";
 
 const metadataSchema = z.object({
   to: z.string().trim().min(1, "El destinatario es requerido"),
   conversation_id: z.coerce.number().int().positive(),
   agent_id: z.coerce.number().int().positive(),
-  duration_ms: z.coerce.number().int().positive().max(5 * 60 * 1000),
+  caption: z
+    .string()
+    .trim()
+    .max(1024, "El pie de foto no puede superar 1024 caracteres")
+    .optional(),
 });
 
 const normalizeWhatsAppPhone = (phone: string) => phone.replace(/\D/g, "");
@@ -26,32 +30,20 @@ const getServerEnv = (key: string) => {
   return value;
 };
 
-const getMimeExtension = (mimeType: string) => {
-  if (mimeType.includes("ogg")) return "ogg";
-  if (mimeType.includes("mpeg")) return "mp3";
-  if (mimeType.includes("aac")) return "aac";
-  if (mimeType.includes("amr")) return "amr";
-  if (mimeType.includes("mp4")) return "m4a";
-  return "webm";
-};
-
-const buildVoiceNoteLabel = (durationMs: number) => {
-  const totalSeconds = Math.max(0, Math.floor(durationMs / 1000));
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = String(totalSeconds % 60).padStart(2, "0");
-  return `🎤 Nota de voz (${minutes}:${seconds})`;
-};
-
-const isAllowedAudioMime = (mimeType: string) => {
+const isAllowedImageMime = (mimeType: string) => {
   const normalized = mimeType.toLowerCase();
   return (
-    normalized.startsWith("audio/ogg") ||
-    normalized.startsWith("audio/mp4") ||
-    normalized.startsWith("audio/mpeg") ||
-    normalized.startsWith("audio/aac") ||
-    normalized.startsWith("audio/amr") ||
-    normalized.startsWith("audio/webm")
+    normalized === "image/jpeg" ||
+    normalized === "image/jpg" ||
+    normalized === "image/png" ||
+    normalized === "image/webp"
   );
+};
+
+const getMimeExtension = (mimeType: string) => {
+  if (mimeType.includes("png")) return "png";
+  if (mimeType.includes("webp")) return "webp";
+  return "jpg";
 };
 
 export async function POST(req: NextRequest) {
@@ -61,7 +53,7 @@ export async function POST(req: NextRequest) {
       to: formData.get("to"),
       conversation_id: formData.get("conversation_id"),
       agent_id: formData.get("agent_id"),
-      duration_ms: formData.get("duration_ms"),
+      caption: formData.get("caption") ?? undefined,
     });
 
     if (!payload.success) {
@@ -71,39 +63,38 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const audio = formData.get("audio");
-    if (!(audio instanceof File)) {
+    const image = formData.get("image");
+    if (!(image instanceof File)) {
       return NextResponse.json(
-        { error: "Debes adjuntar un archivo de audio" },
+        { error: "Debes adjuntar una imagen" },
         { status: 400 },
       );
     }
 
-    if (audio.size <= 0) {
+    if (image.size <= 0) {
       return NextResponse.json(
-        { error: "La nota de voz no contiene audio válido" },
+        { error: "La imagen no es válida" },
         { status: 400 },
       );
     }
 
-    if (audio.size > MAX_AUDIO_BYTES) {
+    if (image.size > MAX_IMAGE_BYTES) {
       return NextResponse.json(
-        { error: "La nota de voz supera el límite de 16 MB" },
+        { error: "La imagen supera el límite de 5 MB" },
         { status: 400 },
       );
     }
 
-    const normalizedMimeType = (audio.type || "").toLowerCase().trim();
-    if (!isAllowedAudioMime(normalizedMimeType)) {
+    const normalizedMimeType = (image.type || "").toLowerCase().trim();
+    if (!isAllowedImageMime(normalizedMimeType)) {
       return NextResponse.json(
-        { error: "Formato de audio no soportado" },
+        { error: "Formato de imagen no soportado" },
         { status: 400 },
       );
     }
 
-    const { to, conversation_id, agent_id, duration_ms } = payload.data;
+    const { to, conversation_id, agent_id, caption } = payload.data;
     const normalizedTo = normalizeWhatsAppPhone(to);
-
     if (normalizedTo.length < 8 || normalizedTo.length > 15) {
       return NextResponse.json(
         { error: "El número de WhatsApp no tiene un formato válido" },
@@ -139,7 +130,7 @@ export async function POST(req: NextRequest) {
 
     if (!conversation.human_mode) {
       return NextResponse.json(
-        { error: "Debes tomar control de la conversación para enviar audio" },
+        { error: "Debes tomar control de la conversación para enviar imágenes" },
         { status: 403 },
       );
     }
@@ -196,16 +187,16 @@ export async function POST(req: NextRequest) {
     }
 
     const bucket =
-      process.env[AUDIO_BUCKET_ENV_KEY] ||
+      process.env[IMAGE_BUCKET_ENV_KEY] ||
       process.env[LEGACY_MEDIA_BUCKET_ENV_KEY] ||
       DEFAULT_STORAGE_BUCKET;
     const extension = getMimeExtension(normalizedMimeType);
-    const storagePath = `voice-notes/${conversation_id}/${Date.now()}-${randomUUID()}.${extension}`;
-    const audioBuffer = Buffer.from(await audio.arrayBuffer());
+    const storagePath = `images/${conversation_id}/${Date.now()}-${randomUUID()}.${extension}`;
+    const imageBuffer = Buffer.from(await image.arrayBuffer());
 
     const { error: storageError } = await supabase.storage
       .from(bucket)
-      .upload(storagePath, audioBuffer, {
+      .upload(storagePath, imageBuffer, {
         contentType: normalizedMimeType,
         upsert: false,
       });
@@ -213,7 +204,7 @@ export async function POST(req: NextRequest) {
     if (storageError) {
       console.error("Error Supabase storage:", storageError);
       return NextResponse.json(
-        { error: "No se pudo guardar la nota de voz" },
+        { error: "No se pudo guardar la imagen" },
         { status: 500 },
       );
     }
@@ -227,8 +218,8 @@ export async function POST(req: NextRequest) {
     uploadFormData.append("type", normalizedMimeType);
     uploadFormData.append(
       "file",
-      new Blob([audioBuffer], { type: normalizedMimeType }),
-      `voice-note.${extension}`,
+      new Blob([imageBuffer], { type: normalizedMimeType }),
+      `image.${extension}`,
     );
 
     const whatsappToken = getServerEnv("WHATSAPP_TOKEN");
@@ -246,16 +237,15 @@ export async function POST(req: NextRequest) {
     );
 
     const uploadData = await uploadResponse.json();
-
     if (!uploadResponse.ok || uploadData.error || !uploadData.id) {
       console.error("Error Meta media upload:", uploadData.error || uploadData);
       return NextResponse.json(
-        { error: uploadData.error?.message || "No se pudo subir el audio a WhatsApp" },
+        { error: uploadData.error?.message || "No se pudo subir la imagen a WhatsApp" },
         { status: 500 },
       );
     }
 
-    const isVoiceMessage = normalizedMimeType.startsWith("audio/ogg");
+    const trimmedCaption = caption?.trim();
     const sendResponse = await fetch(
       `https://graph.facebook.com/${GRAPH_API_VERSION}/${phoneNumberId}/messages`,
       {
@@ -268,10 +258,10 @@ export async function POST(req: NextRequest) {
           messaging_product: "whatsapp",
           recipient_type: "individual",
           to: normalizedTo,
-          type: "audio",
-          audio: {
+          type: "image",
+          image: {
             id: uploadData.id,
-            ...(isVoiceMessage ? { voice: true } : {}),
+            ...(trimmedCaption ? { caption: trimmedCaption } : {}),
           },
         }),
       },
@@ -279,15 +269,15 @@ export async function POST(req: NextRequest) {
 
     const sendData = await sendResponse.json();
     if (!sendResponse.ok || sendData.error) {
-      console.error("Error Meta send audio:", sendData.error || sendData);
+      console.error("Error Meta send image:", sendData.error || sendData);
       return NextResponse.json(
-        { error: sendData.error?.message || "Error al enviar audio por WhatsApp" },
+        { error: sendData.error?.message || "Error al enviar imagen por WhatsApp" },
         { status: 500 },
       );
     }
 
     const wa_message_id = sendData.messages?.[0]?.id || null;
-    const messageLabel = buildVoiceNoteLabel(duration_ms);
+    const dbContent = trimmedCaption || "Imagen";
 
     const { data: savedMessage, error: dbError } = await supabase
       .from("messages")
@@ -295,9 +285,9 @@ export async function POST(req: NextRequest) {
         conversation_id,
         wa_message_id,
         type: "out",
-        content: messageLabel,
+        content: dbContent,
         media_url: mediaUrl,
-        media_type: "audio",
+        media_type: "image",
         sender_type: "agent",
         sent_by: agent.name,
         status: "sent",
@@ -307,9 +297,9 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (dbError) {
-      console.error("Error Supabase save audio message:", dbError);
+      console.error("Error Supabase save image message:", dbError);
       return NextResponse.json(
-        { error: "Audio enviado pero no registrado en BD" },
+        { error: "Imagen enviada pero no registrada en BD" },
         { status: 500 },
       );
     }
@@ -318,7 +308,7 @@ export async function POST(req: NextRequest) {
     const { error: conversationUpdateError } = await supabase
       .from("conversations")
       .update({
-        preview: messageLabel,
+        preview: dbContent,
         updated_at: now,
         last_message_at: now,
       })
@@ -327,7 +317,7 @@ export async function POST(req: NextRequest) {
     if (conversationUpdateError) {
       console.error("Error Supabase conversation update:", conversationUpdateError);
       return NextResponse.json(
-        { error: "Audio enviado pero no se actualizó la conversación" },
+        { error: "Imagen enviada pero no se actualizó la conversación" },
         { status: 500 },
       );
     }
@@ -338,7 +328,7 @@ export async function POST(req: NextRequest) {
       message: savedMessage,
     });
   } catch (error) {
-    console.error("Error inesperado en send-audio:", error);
+    console.error("Error inesperado en send-image:", error);
     return NextResponse.json(
       { error: "Error interno del servidor" },
       { status: 500 },

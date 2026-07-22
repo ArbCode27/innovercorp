@@ -50,6 +50,7 @@ interface ConversationPanelProps {
     audioBlob: Blob,
     meta: { durationMs: number; mimeType: string },
   ) => Promise<void>;
+  onSendImage: (imageFile: File, caption?: string) => Promise<void>;
   onAddNote: (content: string) => Promise<void>;
   onTakeControl: () => Promise<void>;
   onReactivateBot: () => Promise<void>;
@@ -76,6 +77,7 @@ export const ConversationPanel = ({
   onBackToList,
   onSendMessage,
   onSendVoiceNote,
+  onSendImage,
   onAddNote,
   onTakeControl,
   onReactivateBot,
@@ -148,6 +150,19 @@ export const ConversationPanel = ({
     }
   };
 
+  const handleSendImage = async (imageFile: File, caption?: string) => {
+    try {
+      await onSendImage(imageFile, caption);
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "No se pudo enviar la imagen",
+      );
+      throw error;
+    }
+  };
+
   const showUnknownBanner = !client;
   const showWisproAction = !client || !client.wispro_id;
 
@@ -186,6 +201,7 @@ export const ConversationPanel = ({
           }
           onSend={handleSendMessage}
           onSendVoiceNote={handleSendVoiceNote}
+          onSendImage={handleSendImage}
         />
       </div>
       <Sheet open={isDetailsSheetOpen} onOpenChange={setIsDetailsSheetOpen}>

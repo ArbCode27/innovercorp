@@ -46,6 +46,7 @@ const emptyData: CrmData = {
 };
 
 const MAX_WHATSAPP_AUDIO_BYTES = 16 * 1024 * 1024;
+const MAX_WHATSAPP_IMAGE_BYTES = 5 * 1024 * 1024;
 const formatVoiceNotePreview = (durationMs: number) => {
   const totalSeconds = Math.max(0, Math.floor(durationMs / 1000));
   const minutes = Math.floor(totalSeconds / 60);
@@ -74,6 +75,7 @@ export const useCrmData = (agent: Agent | null) => {
   const {
     sendMessage: sendWhatsAppMessage,
     sendVoiceNote: sendWhatsAppVoiceNote,
+    sendImageMessage: sendWhatsAppImageMessage,
     isSending: isSendingMessage,
   } = useSendMessage();
   const [isResolvingConversation, setIsResolvingConversation] = useState(false);
@@ -532,6 +534,62 @@ export const useCrmData = (agent: Agent | null) => {
     }));
   };
 
+  const sendImageMessage = async (imageFile: File, caption?: string) => {
+    if (!selectedConversation) return;
+    if (!agent) {
+      throw new Error("Debes iniciar sesión como agente para enviar imágenes");
+    }
+    if (!selectedConversation.human_mode) {
+      throw new Error(
+        "Toma control de la conversación antes de enviar una imagen",
+      );
+    }
+
+    if (!(imageFile instanceof File) || imageFile.size <= 0) {
+      throw new Error("Selecciona una imagen válida antes de enviarla");
+    }
+    if (imageFile.size > MAX_WHATSAPP_IMAGE_BYTES) {
+      throw new Error("La imagen supera el límite de 5 MB");
+    }
+
+    const to = selectedClient?.phone || selectedClient?.whatsapp_id || null;
+    if (!to) {
+      throw new Error(
+        "Asocia un cliente con teléfono válido antes de enviar mensajes",
+      );
+    }
+
+    const trimmedCaption = caption?.trim();
+    const response = await sendWhatsAppImageMessage({
+      to,
+      image: imageFile,
+      conversation_id: selectedConversation.id,
+      agent_id: agent.id,
+      caption: trimmedCaption,
+    });
+
+    const preview = trimmedCaption || "Imagen";
+
+    setMessages((current) => {
+      const exists = current.some((message) => message.id === response.message.id);
+      if (exists) return current;
+      return [...current, response.message];
+    });
+
+    setData((current) => ({
+      ...current,
+      conversations: current.conversations.map((conversation) =>
+        conversation.id === selectedConversation.id
+          ? {
+              ...conversation,
+              preview,
+              updated_at: new Date().toISOString(),
+            }
+          : conversation,
+      ),
+    }));
+  };
+
   const addNote = async (content: string) => {
     if (!selectedConversation) return;
 
@@ -785,6 +843,7 @@ export const useCrmData = (agent: Agent | null) => {
     selectConversation,
     sendMessage,
     sendVoiceNote,
+    sendImageMessage,
     addNote,
     takeControl,
     reactivateBot,

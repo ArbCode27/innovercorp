@@ -47,6 +47,7 @@ interface MyConversationsViewProps {
     audioBlob: Blob,
     meta: { durationMs: number; mimeType: string },
   ) => Promise<void>;
+  onSendImage: (imageFile: File, caption?: string) => Promise<void>;
   onAddNote: (content: string) => Promise<void>;
   onTakeControl: () => Promise<void>;
   onReactivateBot: () => Promise<void>;
@@ -82,6 +83,7 @@ export const MyConversationsView = ({
   onSelectConversation,
   onSendMessage,
   onSendVoiceNote,
+  onSendImage,
   onAddNote,
   onTakeControl,
   onReactivateBot,
@@ -170,6 +172,7 @@ export const MyConversationsView = ({
           isResolvingConversation={isResolvingConversation}
           onSendMessage={onSendMessage}
           onSendVoiceNote={onSendVoiceNote}
+          onSendImage={onSendImage}
           onBackToList={() => onSelectConversation(null)}
           onAddNote={onAddNote}
           onTakeControl={onTakeControl}

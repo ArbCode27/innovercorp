@@ -87,6 +87,7 @@ export const CrmShell = () => {
                 onSelectConversation={crm.selectConversation}
                 onSendMessage={crm.sendMessage}
                 onSendVoiceNote={crm.sendVoiceNote}
+                onSendImage={crm.sendImageMessage}
                 onAddNote={crm.addNote}
                 onTakeControl={crm.takeControl}
                 onReactivateBot={crm.reactivateBot}
@@ -123,6 +124,7 @@ export const CrmShell = () => {
                 onSelectConversation={crm.selectConversation}
                 onSendMessage={crm.sendMessage}
                 onSendVoiceNote={crm.sendVoiceNote}
+                onSendImage={crm.sendImageMessage}
                 onAddNote={crm.addNote}
                 onTakeControl={crm.takeControl}
                 onReactivateBot={crm.reactivateBot}
