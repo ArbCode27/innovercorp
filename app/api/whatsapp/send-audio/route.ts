@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
+import { normalizeStorageMimeType } from "../_lib/media-mime";
 
 const GRAPH_API_VERSION = "v19.0";
 const MAX_AUDIO_BYTES = 16 * 1024 * 1024;
@@ -93,13 +94,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const normalizedMimeType = (audio.type || "").toLowerCase().trim();
-    if (!isAllowedAudioMime(normalizedMimeType)) {
+    const inputMimeType = (audio.type || "").toLowerCase().trim();
+    if (!isAllowedAudioMime(inputMimeType)) {
       return NextResponse.json(
         { error: "Formato de audio no soportado" },
         { status: 400 },
       );
     }
+    const normalizedMimeType = normalizeStorageMimeType(inputMimeType, "audio/webm");
 
     const { to, conversation_id, agent_id, duration_ms } = payload.data;
     const normalizedTo = normalizeWhatsAppPhone(to);

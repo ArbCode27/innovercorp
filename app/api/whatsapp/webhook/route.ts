@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { normalizeStorageMimeType } from "../_lib/media-mime";
 
 const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN!;
 const MAKE_WEBHOOK_URL = process.env.MAKE_WEBHOOK_URL;
@@ -164,8 +165,9 @@ const storeIncomingMedia = async (
 ) => {
   const mediaInfo = await fetchWhatsappMediaDownloadUrl(input.mediaId);
   const { buffer, contentType } = await downloadWhatsappMedia(mediaInfo.downloadUrl);
-  const resolvedMimeType =
+  const rawMimeType =
     input.mimeType || mediaInfo.mimeType || contentType || "application/octet-stream";
+  const resolvedMimeType = normalizeStorageMimeType(rawMimeType);
   const extension = inferExtensionFromMime(resolvedMimeType, "bin");
   const mediaFolder =
     input.messageType === "image"
