@@ -120,7 +120,7 @@ export async function POST(req: NextRequest) {
 
     const { data: conversation, error: conversationError } = await supabase
       .from("conversations")
-      .select("id, client_id, human_mode")
+      .select("id, client_id, human_mode, customer_phone")
       .eq("id", conversation_id)
       .maybeSingle();
 
@@ -177,7 +177,7 @@ export async function POST(req: NextRequest) {
     if (conversation.client_id) {
       const { data: client, error: clientError } = await supabase
         .from("clients")
-        .select("phone")
+        .select("phone, whatsapp_id")
         .eq("id", conversation.client_id)
         .maybeSingle();
 
@@ -189,9 +189,29 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      if (client?.phone && normalizeWhatsAppPhone(client.phone) !== normalizedTo) {
+      const knownPhones = [
+        conversation.customer_phone,
+        client?.whatsapp_id,
+        client?.phone,
+      ]
+        .filter((value): value is string => Boolean(value?.trim()))
+        .map((value) => normalizeWhatsAppPhone(value));
+
+      if (
+        knownPhones.length > 0 &&
+        !knownPhones.includes(normalizedTo)
+      ) {
         return NextResponse.json(
-          { error: "El destinatario no coincide con el cliente de la conversación" },
+          { error: "El destinatario no coincide con el contacto de la conversación" },
+          { status: 400 },
+        );
+      }
+    } else if (conversation.customer_phone) {
+      if (
+        normalizeWhatsAppPhone(conversation.customer_phone) !== normalizedTo
+      ) {
+        return NextResponse.json(
+          { error: "El destinatario no coincide con el contacto de la conversación" },
           { status: 400 },
         );
       }

@@ -8,6 +8,7 @@ import {
   filterConversations,
   getConversationFilterCounts,
 } from "../_lib/conversation-filter-utils";
+import { resolveRecipientPhone } from "../_lib/conversation-recipient";
 import {
   applyInboundMessageToConversation,
   sortConversationsForInbox,
@@ -81,6 +82,7 @@ export const useCrmData = (agent: Agent | null) => {
     sendMessage: sendWhatsAppMessage,
     sendVoiceNote: sendWhatsAppVoiceNote,
     sendImageMessage: sendWhatsAppImageMessage,
+    processPaymentReceipt: processPaymentReceiptRequest,
     isSending: isSendingMessage,
   } = useSendMessage();
   const [isResolvingConversation, setIsResolvingConversation] = useState(false);
@@ -443,13 +445,10 @@ export const useCrmData = (agent: Agent | null) => {
       throw new Error("El mensaje no puede estar vacío");
     }
 
-    const to =
-      selectedClient?.phone ||
-      selectedClient?.whatsapp_id ||
-      null;
+    const to = resolveRecipientPhone(selectedClient, selectedConversation);
     if (!to) {
       throw new Error(
-        "Asocia un cliente con teléfono válido antes de enviar mensajes",
+        "No hay un número de WhatsApp disponible para responder esta conversación",
       );
     }
 
@@ -507,10 +506,10 @@ export const useCrmData = (agent: Agent | null) => {
       type: meta.mimeType || audioBlob.type || "audio/webm",
     });
 
-    const to = selectedClient?.phone || selectedClient?.whatsapp_id || null;
+    const to = resolveRecipientPhone(selectedClient, selectedConversation);
     if (!to) {
       throw new Error(
-        "Asocia un cliente con teléfono válido antes de enviar mensajes",
+        "No hay un número de WhatsApp disponible para responder esta conversación",
       );
     }
 
@@ -562,10 +561,10 @@ export const useCrmData = (agent: Agent | null) => {
       throw new Error("La imagen supera el límite de 5 MB");
     }
 
-    const to = selectedClient?.phone || selectedClient?.whatsapp_id || null;
+    const to = resolveRecipientPhone(selectedClient, selectedConversation);
     if (!to) {
       throw new Error(
-        "Asocia un cliente con teléfono válido antes de enviar mensajes",
+        "No hay un número de WhatsApp disponible para responder esta conversación",
       );
     }
 
@@ -598,6 +597,43 @@ export const useCrmData = (agent: Agent | null) => {
           : conversation,
       ),
     }));
+  };
+
+  const processPaymentReceipt = async (messageId: number) => {
+    if (!selectedConversation || !agent) {
+      throw new Error("No hay una conversación activa para procesar el comprobante");
+    }
+
+    const message = messages.find((item) => item.id === messageId);
+    if (!message) {
+      throw new Error("No se encontró el mensaje del comprobante");
+    }
+
+    if (message.type !== "in" || message.media_type !== "image") {
+      throw new Error("Solo se pueden procesar imágenes enviadas por clientes");
+    }
+
+    await processPaymentReceiptRequest({
+      message_id: messageId,
+      conversation_id: selectedConversation.id,
+      agent_id: agent.id,
+    });
+
+    setMessages((current) =>
+      current.map((item) => {
+        if (item.id !== messageId) return item;
+        return {
+          ...item,
+          metadata: {
+            ...(item.metadata || {}),
+            payment_receipt_requested: true,
+            payment_receipt_requested_at: new Date().toISOString(),
+            payment_receipt_requested_by: agent.id,
+          },
+        };
+      }),
+    );
+
   };
 
   const addNote = async (content: string) => {
@@ -931,6 +967,7 @@ export const useCrmData = (agent: Agent | null) => {
     sendMessage,
     sendVoiceNote,
     sendImageMessage,
+    processPaymentReceipt,
     addNote,
     takeControl,
     reactivateBot,

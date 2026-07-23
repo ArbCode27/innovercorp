@@ -50,14 +50,20 @@ export const ConversationHeader = ({
   onOpenWispro,
   isResolving = false,
 }: ConversationHeaderProps) => {
-  const displayName = client?.name || "Número desconocido";
+  const displayName =
+    client?.name ||
+    conversation.customer_phone ||
+    "Número desconocido";
   const phone =
-    client?.phone || client?.whatsapp_id || "Sin identificar";
+    client?.whatsapp_id ||
+    client?.phone ||
+    conversation.customer_phone ||
+    "Sin identificar";
   const canAssignAgent = canAssignConversation(currentAgent);
   const assignLabel = conversation.human_mode
     ? "Transferir conversación"
     : "Asignar agente";
-  const showWisproSearch = !client;
+  const showWisproSearch = !client || !client.wispro_id;
   const showWisproLink = Boolean(client && !client.wispro_id);
   const agentControlName = conversation.agent_control?.trim() || null;
   const shouldShowStatusBadge = conversation.status !== "abierto";

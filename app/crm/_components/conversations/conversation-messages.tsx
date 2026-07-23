@@ -11,11 +11,13 @@ import { MessageBubble } from "./message-bubble";
 interface ConversationMessagesProps {
   messages: Message[];
   isLoading: boolean;
+  onProcessPaymentReceipt: (messageId: number) => Promise<void>;
 }
 
 export const ConversationMessages = ({
   messages,
   isLoading,
+  onProcessPaymentReceipt,
 }: ConversationMessagesProps) => {
   const endRef = useRef<HTMLDivElement | null>(null);
 
@@ -43,7 +45,11 @@ export const ConversationMessages = ({
         <span className="h-px flex-1 bg-slate-200 dark:bg-white/10" />
       </div>
       {messages.map((message) => (
-        <MessageBubble key={message.id} message={message} />
+        <MessageBubble
+          key={message.id}
+          message={message}
+          onProcessPaymentReceipt={onProcessPaymentReceipt}
+        />
       ))}
       <div ref={endRef} />
     </div>

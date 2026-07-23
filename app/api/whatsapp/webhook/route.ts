@@ -287,6 +287,7 @@ const findOrCreateActiveConversation = async (
   clientId: number,
   messageTimestamp: string,
   phoneNumberId: string | null,
+  customerPhone: string,
 ) => {
   const { data: existingConversation, error: existingConversationError } =
     await supabase
@@ -300,6 +301,29 @@ const findOrCreateActiveConversation = async (
 
   if (existingConversationError) throw existingConversationError;
   if (existingConversation) {
+    const needsPhoneUpdate =
+      !String(existingConversation.customer_phone || "").trim() &&
+      Boolean(customerPhone);
+
+    if (needsPhoneUpdate) {
+      const { data: patchedConversation, error: patchError } = await supabase
+        .from("conversations")
+        .update({ customer_phone: customerPhone })
+        .eq("id", existingConversation.id)
+        .select("*")
+        .single();
+
+      if (patchError) throw patchError;
+
+      console.log(`${WEBHOOK_LOG_PREFIX} active_conversation_found`, {
+        conversationId: patchedConversation.id,
+        clientId,
+        status: patchedConversation.status,
+        customerPhonePatched: true,
+      });
+      return patchedConversation;
+    }
+
     console.log(`${WEBHOOK_LOG_PREFIX} active_conversation_found`, {
       conversationId: existingConversation.id,
       clientId,
@@ -320,6 +344,7 @@ const findOrCreateActiveConversation = async (
         label_ids: [],
         agent_id: null,
         agent_control: null,
+        customer_phone: customerPhone,
         wa_phone_number_id: phoneNumberId,
         last_message_at: messageTimestamp,
         updated_at: messageTimestamp,
@@ -392,6 +417,7 @@ const upsertIncomingMessage = async (
     client.id,
     timestamp,
     phoneNumberId,
+    from,
   );
 
   let persistedMediaUrl: string | null = null;
@@ -483,9 +509,10 @@ const upsertIncomingMessage = async (
       updated_at: timestamp,
       last_message_at: timestamp,
       wa_phone_number_id: phoneNumberId,
+      customer_phone: from,
     })
     .eq("id", conversation.id)
-    .select("id, unread, preview, updated_at, last_message_at")
+    .select("id, unread, preview, updated_at, last_message_at, customer_phone")
     .single();
 
   if (updateConversationError) throw updateConversationError;

@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
 
     const { data: conversation, error: conversationError } = await supabase
       .from("conversations")
-      .select("id, client_id")
+      .select("id, client_id, customer_phone")
       .eq("id", conversation_id)
       .maybeSingle();
 
@@ -107,10 +107,15 @@ export async function POST(req: NextRequest) {
       sentBy = agent.name;
     }
 
+    const knownPhones: string[] = [];
+    if (conversation.customer_phone) {
+      knownPhones.push(normalizeWhatsAppPhone(conversation.customer_phone));
+    }
+
     if (conversation.client_id) {
       const { data: client, error: clientError } = await supabase
         .from("clients")
-        .select("phone")
+        .select("phone, whatsapp_id")
         .eq("id", conversation.client_id)
         .maybeSingle();
 
@@ -122,12 +127,23 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      if (client?.phone && normalizeWhatsAppPhone(client.phone) !== normalizedTo) {
-        return NextResponse.json(
-          { error: "El destinatario no coincide con el cliente de la conversación" },
-          { status: 400 },
-        );
+      if (client?.whatsapp_id) {
+        knownPhones.push(normalizeWhatsAppPhone(client.whatsapp_id));
       }
+      if (client?.phone) {
+        knownPhones.push(normalizeWhatsAppPhone(client.phone));
+      }
+    }
+
+    const uniqueKnownPhones = [...new Set(knownPhones.filter(Boolean))];
+    if (
+      uniqueKnownPhones.length > 0 &&
+      !uniqueKnownPhones.includes(normalizedTo)
+    ) {
+      return NextResponse.json(
+        { error: "El destinatario no coincide con el contacto de la conversación" },
+        { status: 400 },
+      );
     }
 
     // 1. Enviar mensaje a WhatsApp Cloud API

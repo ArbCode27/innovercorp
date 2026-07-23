@@ -89,6 +89,7 @@ export const CrmShell = () => {
                 onSendMessage={crm.sendMessage}
                 onSendVoiceNote={crm.sendVoiceNote}
                 onSendImage={crm.sendImageMessage}
+                onProcessPaymentReceipt={crm.processPaymentReceipt}
                 quickReplies={crm.quickReplies}
                 onAddNote={crm.addNote}
                 onTakeControl={crm.takeControl}
@@ -127,6 +128,7 @@ export const CrmShell = () => {
                 onSendMessage={crm.sendMessage}
                 onSendVoiceNote={crm.sendVoiceNote}
                 onSendImage={crm.sendImageMessage}
+                onProcessPaymentReceipt={crm.processPaymentReceipt}
                 quickReplies={crm.quickReplies}
                 onAddNote={crm.addNote}
                 onTakeControl={crm.takeControl}

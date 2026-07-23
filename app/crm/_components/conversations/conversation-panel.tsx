@@ -52,6 +52,7 @@ interface ConversationPanelProps {
     meta: { durationMs: number; mimeType: string },
   ) => Promise<void>;
   onSendImage: (imageFile: File, caption?: string) => Promise<void>;
+  onProcessPaymentReceipt: (messageId: number) => Promise<void>;
   onAddNote: (content: string) => Promise<void>;
   onTakeControl: () => Promise<void>;
   onReactivateBot: () => Promise<void>;
@@ -80,6 +81,7 @@ export const ConversationPanel = ({
   onSendMessage,
   onSendVoiceNote,
   onSendImage,
+  onProcessPaymentReceipt,
   onAddNote,
   onTakeControl,
   onReactivateBot,
@@ -165,7 +167,7 @@ export const ConversationPanel = ({
     }
   };
 
-  const showUnknownBanner = !client;
+  const showUnknownBanner = !client || !client.wispro_id;
   const showWisproAction = !client || !client.wispro_id;
 
   return (
@@ -192,6 +194,7 @@ export const ConversationPanel = ({
         <ConversationMessages
           messages={messages}
           isLoading={isMessagesLoading}
+          onProcessPaymentReceipt={onProcessPaymentReceipt}
         />
         <MessageComposer
           disabled={isSendingMessage}

@@ -53,6 +53,7 @@ interface ConversationsViewProps {
     meta: { durationMs: number; mimeType: string },
   ) => Promise<void>;
   onSendImage: (imageFile: File, caption?: string) => Promise<void>;
+  onProcessPaymentReceipt: (messageId: number) => Promise<void>;
   onAddNote: (content: string) => Promise<void>;
   onTakeControl: () => Promise<void>;
   onReactivateBot: () => Promise<void>;
@@ -93,6 +94,7 @@ export const ConversationsView = ({
   onSendMessage,
   onSendVoiceNote,
   onSendImage,
+  onProcessPaymentReceipt,
   onAddNote,
   onTakeControl,
   onReactivateBot,
@@ -166,6 +168,7 @@ export const ConversationsView = ({
           onSendMessage={onSendMessage}
           onSendVoiceNote={onSendVoiceNote}
           onSendImage={onSendImage}
+          onProcessPaymentReceipt={onProcessPaymentReceipt}
           onBackToList={() => onSelectConversation(null)}
           onAddNote={onAddNote}
           onTakeControl={onTakeControl}

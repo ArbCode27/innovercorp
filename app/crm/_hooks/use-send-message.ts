@@ -32,6 +32,18 @@ interface SendImageMessageInput {
   caption?: string;
 }
 
+interface ProcessPaymentReceiptInput {
+  message_id: number;
+  conversation_id: number;
+  agent_id: number;
+}
+
+interface ProcessPaymentReceiptResponse {
+  success: true;
+  alreadyProcessed: boolean;
+  messageId: number;
+}
+
 export function useSendMessage() {
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -154,5 +166,46 @@ export function useSendMessage() {
     }
   }, []);
 
-  return { sendMessage, sendVoiceNote, sendImageMessage, isSending, error };
+  const processPaymentReceipt = useCallback(async (input: ProcessPaymentReceiptInput) => {
+    setIsSending(true);
+    setError(null);
+
+    try {
+      const res = await fetch("/api/crm/payments/process-receipt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messageId: input.message_id,
+          conversationId: input.conversation_id,
+          agentId: input.agent_id,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "No se pudo procesar el comprobante");
+      }
+
+      return data as ProcessPaymentReceiptResponse;
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Error inesperado al procesar el comprobante";
+      setError(message);
+      throw new Error(message);
+    } finally {
+      setIsSending(false);
+    }
+  }, []);
+
+  return {
+    sendMessage,
+    sendVoiceNote,
+    sendImageMessage,
+    processPaymentReceipt,
+    isSending,
+    error,
+  };
 }

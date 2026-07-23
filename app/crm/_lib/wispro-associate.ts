@@ -143,6 +143,11 @@ export const associateWisproClient = async (
     .from("conversations")
     .update({
       client_id: client.id,
+      ...(conversationPhone?.trim()
+        ? { customer_phone: conversationPhone.trim() }
+        : whatsappId?.trim()
+          ? { customer_phone: whatsappId.trim() }
+          : {}),
       updated_at: new Date().toISOString(),
     })
     .eq("id", conversationId);

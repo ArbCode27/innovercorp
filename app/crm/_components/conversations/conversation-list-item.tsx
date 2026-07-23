@@ -30,7 +30,8 @@ export const ConversationListItem = ({
   isActive,
   onSelect,
 }: ConversationListItemProps) => {
-  const displayName = client?.name || "Número desconocido";
+  const displayName =
+    client?.name || conversation.customer_phone || "Número desconocido";
   const isResolved = conversation.status === "resuelto";
   const isHuman = conversation.human_mode;
   const preview = conversation.preview || "Sin mensajes";

@@ -1,11 +1,15 @@
-import { AlertCircle, Bot, Check, CheckCheck, FileText } from "lucide-react";
+import { useState } from "react";
+import { AlertCircle, Bot, Check, CheckCheck, FileText, HandCoins } from "lucide-react";
+import { toast } from "sonner";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
 import type { Message } from "../../_lib/types";
 import { formatCrmTime } from "../../_lib/formatters";
 import { MessageContent } from "./message-content";
+import { CrmButton } from "../shared/crm-button";
 
 interface MessageBubbleProps {
   message: Message;
+  onProcessPaymentReceipt?: (messageId: number) => Promise<void>;
 }
 
 const statusLabel: Record<string, string> = {
@@ -15,7 +19,15 @@ const statusLabel: Record<string, string> = {
   failed: "Falló",
 };
 
-export const MessageBubble = ({ message }: MessageBubbleProps) => {
+const hasRequestedPaymentReceipt = (message: Message) => {
+  const value = message.metadata?.payment_receipt_requested;
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") return value.toLowerCase() === "true";
+  return false;
+};
+
+export const MessageBubble = ({ message, onProcessPaymentReceipt }: MessageBubbleProps) => {
+  const [isProcessingPaymentReceipt, setIsProcessingPaymentReceipt] = useState(false);
   if (message.type === "note") {
     return (
       <div className="mx-auto flex max-w-[90%] items-center gap-2 rounded-xl border border-amber-400/30 bg-amber-50 px-4 py-2 text-center text-xs italic text-amber-800 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-300">
@@ -29,6 +41,9 @@ export const MessageBubble = ({ message }: MessageBubbleProps) => {
   const isBot = isOutgoing && message.sender_type === "bot";
   const isImageMessage =
     message.media_type === "image" && Boolean(message.media_url?.trim());
+  const canProcessPaymentReceipt =
+    Boolean(onProcessPaymentReceipt) && !isOutgoing && isImageMessage;
+  const paymentReceiptRequested = hasRequestedPaymentReceipt(message);
   const isLocationMessage = message.media_type === "location";
   const senderLabel = isOutgoing
     ? isBot
@@ -38,6 +53,23 @@ export const MessageBubble = ({ message }: MessageBubbleProps) => {
   const status = message.status || "sent";
   const StatusIcon =
     status === "read" ? CheckCheck : status === "failed" ? AlertCircle : Check;
+  const handleProcessPaymentReceipt = async () => {
+    if (!onProcessPaymentReceipt) return;
+
+    setIsProcessingPaymentReceipt(true);
+    try {
+      await onProcessPaymentReceipt(message.id);
+      toast.success("Comprobante enviado a procesamiento");
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "No se pudo procesar el comprobante",
+      );
+    } finally {
+      setIsProcessingPaymentReceipt(false);
+    }
+  };
 
   return (
     <div
@@ -83,6 +115,22 @@ export const MessageBubble = ({ message }: MessageBubbleProps) => {
           </>
         ) : null}
       </span>
+      {canProcessPaymentReceipt ? (
+        <CrmButton
+          type="button"
+          size="sm"
+          variant="secondary"
+          disabled={isProcessingPaymentReceipt || paymentReceiptRequested}
+          onClick={handleProcessPaymentReceipt}
+          className="mt-1 h-7 px-2.5 text-[11px]">
+          <HandCoins className="size-3" aria-hidden="true" />
+          {paymentReceiptRequested
+            ? "Comprobante enviado"
+            : isProcessingPaymentReceipt
+              ? "Procesando..."
+              : "Registrar pago"}
+        </CrmButton>
+      ) : null}
     </div>
   );
 };
