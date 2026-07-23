@@ -372,7 +372,15 @@ const upsertIncomingMessage = async (
       messageId,
       messageType,
     });
-    return { ignored: true as const };
+    return {
+      ignored: true as const,
+      reason: "duplicate_before_processing",
+      messageType,
+      messageId,
+      clientId: null as number | null,
+      conversationId: null as number | null,
+      dbMessageId: null as number | null,
+    };
   }
 
   const client = await findOrCreateClient(supabase, from, waName);
@@ -445,7 +453,15 @@ const upsertIncomingMessage = async (
       String((insertMessageError as { code?: string }).code) === "23505";
 
     if (!duplicateMessage) throw insertMessageError;
-    return { ignored: true as const };
+    return {
+      ignored: true as const,
+      reason: "duplicate_on_insert",
+      messageType,
+      messageId,
+      clientId: client.id,
+      conversationId: conversation.id,
+      dbMessageId: null as number | null,
+    };
   }
   console.log(`${WEBHOOK_LOG_PREFIX} message_inserted`, {
     messageId: insertedMessage?.id,
@@ -488,7 +504,15 @@ const upsertIncomingMessage = async (
     preview,
   });
 
-  return { ignored: false as const };
+  return {
+    ignored: false as const,
+    reason: "saved",
+    messageType,
+    messageId,
+    clientId: client.id,
+    conversationId: conversation.id,
+    dbMessageId: insertedMessage?.id ?? null,
+  };
 };
 
 export async function GET(req: NextRequest) {
@@ -505,6 +529,30 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const requestSummary: {
+    eventType: "message" | "status_update" | "unrecognized" | "invalid";
+    messageType: string | null;
+    messageId: string | null;
+    saved: boolean;
+    ignored: boolean;
+    reason: string | null;
+    clientId: number | null;
+    conversationId: number | null;
+    dbMessageId: number | null;
+    status: string | null;
+  } = {
+    eventType: "invalid",
+    messageType: null,
+    messageId: null,
+    saved: false,
+    ignored: false,
+    reason: null,
+    clientId: null,
+    conversationId: null,
+    dbMessageId: null,
+    status: null,
+  };
+
   try {
     console.log(`${WEBHOOK_LOG_PREFIX} request_received`, {
       method: req.method,
@@ -520,6 +568,9 @@ export async function POST(req: NextRequest) {
     const value = changes?.value;
 
     if (!value) {
+      requestSummary.eventType = "invalid";
+      requestSummary.ignored = true;
+      requestSummary.reason = "payload_without_value";
       console.log(`${WEBHOOK_LOG_PREFIX} payload_without_value_ignored`, {
         hasEntry: Boolean(entry),
         hasChanges: Boolean(changes),
@@ -535,12 +586,15 @@ export async function POST(req: NextRequest) {
 
     // ── CASO 1: Mensaje entrante ──────────────────────────
     if (value.messages && value.messages.length > 0) {
+      requestSummary.eventType = "message";
       const message = value.messages[0];
       const contact = value.contacts?.[0];
       const metadata = value.metadata;
       const normalizedFrom = normalizePhone(message.from || "");
       const messageId = String(message.id || "").trim();
       const messageType = String(message.type || "").trim() as SupportedIncomingMessageType;
+      requestSummary.messageType = messageType || null;
+      requestSummary.messageId = messageId || null;
       const waName = contact?.profile?.name || null;
       const timestamp = parseWhatsappTimestamp(message.timestamp);
 
@@ -554,6 +608,8 @@ export async function POST(req: NextRequest) {
       });
 
       if (!normalizedFrom || !messageId) {
+        requestSummary.ignored = true;
+        requestSummary.reason = "invalid_message_payload";
         console.log(`${WEBHOOK_LOG_PREFIX} invalid_message_ignored`, {
           hasFrom: Boolean(normalizedFrom),
           hasMessageId: Boolean(messageId),
@@ -571,6 +627,8 @@ export async function POST(req: NextRequest) {
         "location",
       ].includes(messageType);
       if (!isSupportedType) {
+        requestSummary.ignored = true;
+        requestSummary.reason = "unsupported_type";
         console.log(`${WEBHOOK_LOG_PREFIX} unsupported_type_ignored`, {
           messageId,
           messageType,
@@ -640,6 +698,8 @@ export async function POST(req: NextRequest) {
       }
 
       if (!content.trim()) {
+        requestSummary.ignored = true;
+        requestSummary.reason = "empty_content";
         console.log(`${WEBHOOK_LOG_PREFIX} empty_content_ignored`, {
           messageId,
           messageType,
@@ -651,6 +711,8 @@ export async function POST(req: NextRequest) {
         ["image", "audio", "video", "document"].includes(messageType) &&
         !mediaId
       ) {
+        requestSummary.ignored = true;
+        requestSummary.reason = "missing_media_id";
         console.log(`${WEBHOOK_LOG_PREFIX} missing_media_id_ignored`, {
           messageId,
           messageType,
@@ -658,7 +720,7 @@ export async function POST(req: NextRequest) {
         return new NextResponse("OK", { status: 200 });
       }
 
-      await upsertIncomingMessage(supabase, {
+      const messageResult = await upsertIncomingMessage(supabase, {
         messageId,
         messageType,
         from: normalizedFrom,
@@ -677,14 +739,27 @@ export async function POST(req: NextRequest) {
         timestamp,
         phoneNumberId: metadata?.phone_number_id || null,
       });
+
+      requestSummary.messageType = messageResult.messageType;
+      requestSummary.messageId = messageResult.messageId;
+      requestSummary.reason = messageResult.reason;
+      requestSummary.clientId = messageResult.clientId;
+      requestSummary.conversationId = messageResult.conversationId;
+      requestSummary.dbMessageId = messageResult.dbMessageId;
+      requestSummary.ignored = messageResult.ignored;
+      requestSummary.saved = !messageResult.ignored;
     }
 
     // ── CASO 2: Status update (delivered/read/failed) ─────
     else if (value.statuses && value.statuses.length > 0) {
+      requestSummary.eventType = "status_update";
       const status = value.statuses[0];
 
       const waMessageId = String(status.id || "").trim();
       const nextStatus = String(status.status || "").trim();
+      requestSummary.messageId = waMessageId || null;
+      requestSummary.status = nextStatus || null;
+      requestSummary.messageType = "status_update";
 
       console.log(`${WEBHOOK_LOG_PREFIX} status_update_received`, {
         waMessageId,
@@ -703,11 +778,15 @@ export async function POST(req: NextRequest) {
 
         if (statusUpdateError) {
           console.error(`${WEBHOOK_LOG_PREFIX} status_update_failed`, statusUpdateError);
+          requestSummary.saved = false;
+          requestSummary.reason = "status_update_failed";
         } else {
           console.log(`${WEBHOOK_LOG_PREFIX} status_update_saved`, {
             waMessageId,
             nextStatus,
           });
+          requestSummary.saved = true;
+          requestSummary.reason = "status_update_saved";
         }
       }
 
@@ -727,12 +806,16 @@ export async function POST(req: NextRequest) {
         });
       }
     } else {
+      requestSummary.eventType = "unrecognized";
+      requestSummary.ignored = true;
+      requestSummary.reason = "unrecognized_event";
       console.log(`${WEBHOOK_LOG_PREFIX} unrecognized_event_ignored`);
     }
 
-    console.log(`${WEBHOOK_LOG_PREFIX} request_completed`);
+    console.log(`${WEBHOOK_LOG_PREFIX} request_completed`, requestSummary);
     return new NextResponse("OK", { status: 200 });
   } catch (error) {
+    console.error(`${WEBHOOK_LOG_PREFIX} request_summary_on_error`, requestSummary);
     console.error(`${WEBHOOK_LOG_PREFIX} request_failed`, error);
     return new NextResponse("Error", { status: 500 });
   }
