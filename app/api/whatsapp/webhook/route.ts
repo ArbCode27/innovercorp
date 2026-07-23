@@ -1,7 +1,425 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 
 const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN!;
-const MAKE_WEBHOOK_URL = process.env.MAKE_WEBHOOK_URL!;
+const MAKE_WEBHOOK_URL = process.env.MAKE_WEBHOOK_URL;
+const GRAPH_API_VERSION = "v19.0";
+const DEFAULT_STORAGE_BUCKET = "whatsapp-media";
+
+const DEFAULT_CLIENT_COLOR = "#4f8ef7";
+const DEFAULT_CLIENT_BG = "rgba(79,142,247,.15)";
+
+type SupportedIncomingMessageType =
+  | "text"
+  | "image"
+  | "audio"
+  | "video"
+  | "document"
+  | "location";
+
+type IncomingPayload = {
+  messageId: string;
+  messageType: SupportedIncomingMessageType;
+  from: string;
+  content: string;
+  preview: string;
+  waName: string | null;
+  mediaId: string | null;
+  mediaType: "audio" | "image" | "video" | "document" | "location" | null;
+  mimeType: string | null;
+  caption: string | null;
+  metadata: Record<string, unknown> | null;
+  latitude: number | null;
+  longitude: number | null;
+  locationName: string | null;
+  locationAddress: string | null;
+  timestamp: string;
+  phoneNumberId: string | null;
+};
+
+const normalizePhone = (value: string) => value.replace(/\D/g, "");
+
+const getServerEnv = (key: string) => {
+  const value = process.env[key];
+  if (!value) {
+    throw new Error(`Missing environment variable: ${key}`);
+  }
+  return value;
+};
+
+const parseWhatsappTimestamp = (value: unknown) => {
+  const parsedTimestamp = Number(value);
+  return Number.isFinite(parsedTimestamp)
+    ? new Date(parsedTimestamp * 1000).toISOString()
+    : new Date().toISOString();
+};
+
+const getInitials = (name: string) => {
+  const initials = name
+    .trim()
+    .split(/\s+/)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+
+  return initials || "??";
+};
+
+const getSupabaseServerClient = () =>
+  createClient(
+    getServerEnv("NEXT_PUBLIC_SUPABASE_URL"),
+    getServerEnv("SUPABASE_SERVICE_ROLE_KEY"),
+  );
+
+const sanitizePathSegment = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+
+const inferExtensionFromMime = (mimeType: string | null, fallback = "bin") => {
+  const normalizedMimeType = (mimeType || "").toLowerCase();
+  if (!normalizedMimeType.includes("/")) return fallback;
+  const [, subtype] = normalizedMimeType.split("/");
+  if (!subtype) return fallback;
+  return subtype.split(";")[0].replace(/[^a-z0-9]/g, "") || fallback;
+};
+
+const resolveMediaBucket = (messageType: SupportedIncomingMessageType) => {
+  const legacy = process.env.SUPABASE_WHATSAPP_MEDIA_BUCKET;
+  switch (messageType) {
+    case "audio":
+      return process.env.SUPABASE_WHATSAPP_AUDIO_BUCKET || legacy || DEFAULT_STORAGE_BUCKET;
+    case "image":
+      return process.env.SUPABASE_WHATSAPP_IMAGE_BUCKET || legacy || DEFAULT_STORAGE_BUCKET;
+    case "video":
+      return process.env.SUPABASE_WHATSAPP_VIDEO_BUCKET || legacy || DEFAULT_STORAGE_BUCKET;
+    case "document":
+      return process.env.SUPABASE_WHATSAPP_DOCUMENT_BUCKET || legacy || DEFAULT_STORAGE_BUCKET;
+    default:
+      return legacy || DEFAULT_STORAGE_BUCKET;
+  }
+};
+
+const fetchWhatsappMediaDownloadUrl = async (mediaId: string) => {
+  const whatsappToken = getServerEnv("WHATSAPP_TOKEN");
+  const mediaResponse = await fetch(
+    `https://graph.facebook.com/${GRAPH_API_VERSION}/${mediaId}`,
+    {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${whatsappToken}`,
+      },
+    },
+  );
+
+  const mediaData = await mediaResponse.json();
+  if (!mediaResponse.ok || mediaData.error || !mediaData.url) {
+    throw new Error(
+      mediaData.error?.message || "No se pudo obtener la URL de descarga del archivo",
+    );
+  }
+
+  return {
+    downloadUrl: mediaData.url as string,
+    mimeType: (mediaData.mime_type as string | undefined) || null,
+  };
+};
+
+const downloadWhatsappMedia = async (downloadUrl: string) => {
+  const whatsappToken = getServerEnv("WHATSAPP_TOKEN");
+  const fileResponse = await fetch(downloadUrl, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${whatsappToken}`,
+    },
+  });
+
+  if (!fileResponse.ok) {
+    throw new Error("No se pudo descargar el archivo multimedia desde WhatsApp");
+  }
+
+  const contentType = fileResponse.headers.get("content-type");
+  const buffer = Buffer.from(await fileResponse.arrayBuffer());
+  return { buffer, contentType };
+};
+
+const storeIncomingMedia = async (
+  supabase: ReturnType<typeof getSupabaseServerClient>,
+  input: {
+    conversationId: number;
+    messageType: SupportedIncomingMessageType;
+    mediaId: string;
+    mimeType: string | null;
+    originalFilename?: string | null;
+  },
+) => {
+  const mediaInfo = await fetchWhatsappMediaDownloadUrl(input.mediaId);
+  const { buffer, contentType } = await downloadWhatsappMedia(mediaInfo.downloadUrl);
+  const resolvedMimeType =
+    input.mimeType || mediaInfo.mimeType || contentType || "application/octet-stream";
+  const extension = inferExtensionFromMime(resolvedMimeType, "bin");
+  const mediaFolder =
+    input.messageType === "image"
+      ? "images"
+      : input.messageType === "audio"
+        ? "audio"
+        : input.messageType === "video"
+          ? "videos"
+          : "documents";
+
+  const safeOriginalFilename = sanitizePathSegment(input.originalFilename || "");
+  const filename = safeOriginalFilename
+    ? `${Date.now()}-${safeOriginalFilename}`
+    : `${Date.now()}-${input.mediaId}.${extension}`;
+  const storagePath = `${mediaFolder}/${input.conversationId}/${filename}`;
+
+  const bucket = resolveMediaBucket(input.messageType);
+  const { error: storageError } = await supabase.storage
+    .from(bucket)
+    .upload(storagePath, buffer, {
+      contentType: resolvedMimeType,
+      upsert: false,
+    });
+
+  if (storageError) throw storageError;
+
+  const {
+    data: { publicUrl },
+  } = supabase.storage.from(bucket).getPublicUrl(storagePath);
+
+  return {
+    publicUrl,
+    mimeType: resolvedMimeType,
+    storagePath,
+    bucket,
+    sizeBytes: buffer.byteLength,
+  };
+};
+
+const findOrCreateClient = async (
+  supabase: ReturnType<typeof getSupabaseServerClient>,
+  from: string,
+  waName: string | null,
+) => {
+  const { data: byWhatsappId, error: byWhatsappIdError } = await supabase
+    .from("clients")
+    .select("*")
+    .eq("whatsapp_id", from)
+    .limit(1)
+    .maybeSingle();
+
+  if (byWhatsappIdError) throw byWhatsappIdError;
+  if (byWhatsappId) return byWhatsappId;
+
+  const { data: byPhone, error: byPhoneError } = await supabase
+    .from("clients")
+    .select("*")
+    .eq("phone", from)
+    .limit(1)
+    .maybeSingle();
+
+  if (byPhoneError) throw byPhoneError;
+  if (byPhone) {
+    const { data: updatedClient, error: updateClientError } = await supabase
+      .from("clients")
+      .update({
+        whatsapp_id: byPhone.whatsapp_id || from,
+        wa_name: byPhone.wa_name || waName,
+      })
+      .eq("id", byPhone.id)
+      .select("*")
+      .single();
+
+    if (updateClientError) throw updateClientError;
+    return updatedClient;
+  }
+
+  const safeName = (waName || "").trim() || "Número desconocido";
+  const { data: createdClient, error: createClientError } = await supabase
+    .from("clients")
+    .insert({
+      name: safeName,
+      phone: from,
+      whatsapp_id: from,
+      wa_name: waName,
+      account: "Prospecto",
+      plan: null,
+      zone: null,
+      color: DEFAULT_CLIENT_COLOR,
+      bg: DEFAULT_CLIENT_BG,
+      initials: getInitials(safeName),
+      created_at: new Date().toISOString(),
+    })
+    .select("*")
+    .single();
+
+  if (createClientError) throw createClientError;
+  return createdClient;
+};
+
+const findOrCreateActiveConversation = async (
+  supabase: ReturnType<typeof getSupabaseServerClient>,
+  clientId: number,
+  messageTimestamp: string,
+  phoneNumberId: string | null,
+) => {
+  const { data: existingConversation, error: existingConversationError } =
+    await supabase
+      .from("conversations")
+      .select("*")
+      .eq("client_id", clientId)
+      .in("status", ["abierto", "proceso"])
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+  if (existingConversationError) throw existingConversationError;
+  if (existingConversation) return existingConversation;
+
+  const { data: createdConversation, error: createConversationError } =
+    await supabase
+      .from("conversations")
+      .insert({
+        client_id: clientId,
+        status: "abierto",
+        human_mode: false,
+        unread: 0,
+        preview: null,
+        label_ids: [],
+        agent_id: null,
+        agent_control: null,
+        wa_phone_number_id: phoneNumberId,
+        last_message_at: messageTimestamp,
+        updated_at: messageTimestamp,
+        created_at: messageTimestamp,
+      })
+      .select("*")
+      .single();
+
+  if (createConversationError) throw createConversationError;
+  return createdConversation;
+};
+
+const upsertIncomingMessage = async (
+  supabase: ReturnType<typeof getSupabaseServerClient>,
+  payload: IncomingPayload,
+) => {
+  const {
+    messageId,
+    messageType,
+    from,
+    content,
+    preview,
+    waName,
+    mediaId,
+    mediaType,
+    mimeType,
+    caption,
+    metadata,
+    latitude,
+    longitude,
+    locationName,
+    locationAddress,
+    timestamp,
+    phoneNumberId,
+  } = payload;
+
+  const { data: existingMessage, error: existingMessageError } = await supabase
+    .from("messages")
+    .select("id")
+    .eq("wa_message_id", messageId)
+    .limit(1)
+    .maybeSingle();
+
+  if (existingMessageError) throw existingMessageError;
+  if (existingMessage) return { ignored: true as const };
+
+  const client = await findOrCreateClient(supabase, from, waName);
+  const conversation = await findOrCreateActiveConversation(
+    supabase,
+    client.id,
+    timestamp,
+    phoneNumberId,
+  );
+
+  let persistedMediaUrl: string | null = null;
+  let persistedMimeType: string | null = mimeType;
+  let mergedMetadata: Record<string, unknown> | null = metadata;
+
+  if (
+    mediaId &&
+    mediaType &&
+    ["audio", "image", "video", "document"].includes(mediaType)
+  ) {
+    const originalFilename =
+      typeof metadata?.filename === "string" ? String(metadata.filename) : null;
+    const storedMedia = await storeIncomingMedia(supabase, {
+      conversationId: conversation.id,
+      messageType,
+      mediaId,
+      mimeType,
+      originalFilename,
+    });
+
+    persistedMediaUrl = storedMedia.publicUrl;
+    persistedMimeType = storedMedia.mimeType;
+    mergedMetadata = {
+      ...(metadata || {}),
+      media_id: mediaId,
+      storage_path: storedMedia.storagePath,
+      storage_bucket: storedMedia.bucket,
+      size_bytes: storedMedia.sizeBytes,
+    };
+  }
+
+  const { error: insertMessageError } = await supabase.from("messages").insert({
+    conversation_id: conversation.id,
+    wa_message_id: messageId,
+    type: "in",
+    content,
+    sender_type: "client",
+    sent_by: waName,
+    status: "delivered",
+    media_url: persistedMediaUrl,
+    media_type: mediaType,
+    mime_type: persistedMimeType,
+    caption,
+    metadata: mergedMetadata,
+    latitude,
+    longitude,
+    location_name: locationName,
+    location_address: locationAddress,
+    created_at: timestamp,
+  });
+
+  if (insertMessageError) {
+    const duplicateMessage =
+      insertMessageError &&
+      typeof insertMessageError === "object" &&
+      "code" in insertMessageError &&
+      String((insertMessageError as { code?: string }).code) === "23505";
+
+    if (!duplicateMessage) throw insertMessageError;
+    return { ignored: true as const };
+  }
+
+  const { error: updateConversationError } = await supabase
+    .from("conversations")
+    .update({
+      preview,
+      unread: (conversation.unread ?? 0) + 1,
+      updated_at: timestamp,
+      last_message_at: timestamp,
+      wa_phone_number_id: phoneNumberId,
+    })
+    .eq("id", conversation.id);
+
+  if (updateConversationError) throw updateConversationError;
+  return { ignored: false as const };
+};
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -18,6 +436,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const supabase = getSupabaseServerClient();
     const rawBody = await req.json();
 
     // Extraer el valor principal
@@ -35,86 +454,122 @@ export async function POST(req: NextRequest) {
       const message = value.messages[0];
       const contact = value.contacts?.[0];
       const metadata = value.metadata;
+      const normalizedFrom = normalizePhone(message.from || "");
+      const messageId = String(message.id || "").trim();
+      const messageType = String(message.type || "").trim() as SupportedIncomingMessageType;
+      const waName = contact?.profile?.name || null;
+      const timestamp = parseWhatsappTimestamp(message.timestamp);
 
-      // Extraer contenido según tipo de mensaje
-      let content = null;
-      let media_id = null;
-      let caption = null;
-      let mime_type = null;
-      let latitude = null;
-      let longitude = null;
-      let location_name = null;
-      let location_address = null;
-
-      switch (message.type) {
-        case "text":
-          content = message.text?.body;
-          break;
-        case "image":
-          media_id = message.image?.id;
-          caption = message.image?.caption;
-          mime_type = message.image?.mime_type;
-          break;
-        case "audio":
-          media_id = message.audio?.id;
-          mime_type = message.audio?.mime_type;
-          break;
-        case "video":
-          media_id = message.video?.id;
-          caption = message.video?.caption;
-          mime_type = message.video?.mime_type;
-          break;
-        case "document":
-          media_id = message.document?.id;
-          caption = message.document?.caption;
-          mime_type = message.document?.mime_type;
-          break;
-        case "location":
-          latitude = message.location?.latitude ?? null;
-          longitude = message.location?.longitude ?? null;
-          location_name = message.location?.name || null;
-          location_address = message.location?.address || null;
-          content =
-            location_name ||
-            location_address ||
-            (latitude !== null && longitude !== null
-              ? `${latitude},${longitude}`
-              : null);
-          break;
-        default:
-          break;
+      if (!normalizedFrom || !messageId) {
+        console.log("⚠️ Mensaje entrante inválido, ignorando");
+        return new NextResponse("OK", { status: 200 });
       }
 
-      const parsedTimestamp = Number(message.timestamp);
-      const timestamp = Number.isFinite(parsedTimestamp)
-        ? new Date(parsedTimestamp * 1000).toISOString()
-        : new Date().toISOString();
+      const isSupportedType = [
+        "text",
+        "image",
+        "audio",
+        "video",
+        "document",
+        "location",
+      ].includes(messageType);
+      if (!isSupportedType) {
+        console.log(`ℹ️ Tipo no soportado (${messageType}), ignorando`);
+        return new NextResponse("OK", { status: 200 });
+      }
 
-      // Payload limpio para Make
-      const makePayload = {
-        event_type: "message",
-        wa_message_id: message.id,
-        from: message.from,
-        wa_name: contact?.profile?.name || null,
-        message_type: message.type,
-        content: content,
-        media_id: media_id,
-        caption: caption,
-        mime_type: mime_type,
-        latitude: latitude,
-        longitude: longitude,
-        location_name: location_name,
-        location_address: location_address,
-        timestamp: timestamp,
-        phone_number_id: metadata?.phone_number_id,
-      };
+      let content = "";
+      let preview = "";
+      let mediaId: string | null = null;
+      let mediaType: IncomingPayload["mediaType"] = null;
+      let mimeType: string | null = null;
+      let caption: string | null = null;
+      let incomingMetadata: Record<string, unknown> | null = null;
+      let latitude: number | null = null;
+      let longitude: number | null = null;
+      let locationName: string | null = null;
+      let locationAddress: string | null = null;
 
-      console.log("📨 Mensaje entrante:", makePayload);
+      if (messageType === "text") {
+        const body = String(message.text?.body || "").trim();
+        content = body;
+        preview = body;
+      } else if (messageType === "image") {
+        mediaId = String(message.image?.id || "").trim() || null;
+        caption = String(message.image?.caption || "").trim() || null;
+        mimeType = String(message.image?.mime_type || "").trim() || null;
+        mediaType = "image";
+        content = caption || "Imagen";
+        preview = content;
+      } else if (messageType === "audio") {
+        mediaId = String(message.audio?.id || "").trim() || null;
+        mimeType = String(message.audio?.mime_type || "").trim() || null;
+        mediaType = "audio";
+        content = "Audio";
+        preview = "Audio";
+      } else if (messageType === "video") {
+        mediaId = String(message.video?.id || "").trim() || null;
+        caption = String(message.video?.caption || "").trim() || null;
+        mimeType = String(message.video?.mime_type || "").trim() || null;
+        mediaType = "video";
+        content = caption || "Video";
+        preview = content;
+      } else if (messageType === "document") {
+        mediaId = String(message.document?.id || "").trim() || null;
+        caption = String(message.document?.caption || "").trim() || null;
+        const filename = String(message.document?.filename || "").trim() || null;
+        mimeType = String(message.document?.mime_type || "").trim() || null;
+        mediaType = "document";
+        incomingMetadata = filename ? { filename } : null;
+        content = caption || filename || "Documento";
+        preview = content;
+      } else if (messageType === "location") {
+        mediaType = "location";
+        latitude =
+          typeof message.location?.latitude === "number"
+            ? message.location.latitude
+            : null;
+        longitude =
+          typeof message.location?.longitude === "number"
+            ? message.location.longitude
+            : null;
+        locationName = String(message.location?.name || "").trim() || null;
+        locationAddress = String(message.location?.address || "").trim() || null;
+        content = locationName || locationAddress || "Ubicación compartida";
+        preview = "Ubicación compartida";
+      }
 
-      await fetch(MAKE_WEBHOOK_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(makePayload),
+      if (!content.trim()) {
+        console.log("⚠️ Mensaje entrante sin contenido útil, ignorando");
+        return new NextResponse("OK", { status: 200 });
+      }
+
+      if (
+        ["image", "audio", "video", "document"].includes(messageType) &&
+        !mediaId
+      ) {
+        console.log("⚠️ Mensaje multimedia sin media_id, ignorando");
+        return new NextResponse("OK", { status: 200 });
+      }
+
+      await upsertIncomingMessage(supabase, {
+        messageId,
+        messageType,
+        from: normalizedFrom,
+        content: content.trim(),
+        preview: (preview || content).trim(),
+        waName,
+        mediaId,
+        mediaType,
+        mimeType,
+        caption,
+        metadata: incomingMetadata,
+        latitude,
+        longitude,
+        locationName,
+        locationAddress,
+        timestamp,
+        phoneNumberId: metadata?.phone_number_id || null,
       });
     }
 
@@ -122,21 +577,38 @@ export async function POST(req: NextRequest) {
     else if (value.statuses && value.statuses.length > 0) {
       const status = value.statuses[0];
 
-      const makePayload = {
-        event_type: "status_update",
-        wa_message_id: status.id,
-        status: status.status, // sent, delivered, read, failed
-        timestamp: status.timestamp,
-        recipient_id: status.recipient_id,
-      };
+      const waMessageId = String(status.id || "").trim();
+      const nextStatus = String(status.status || "").trim();
 
-      console.log("📊 Status update:", makePayload);
+      if (
+        waMessageId &&
+        ["sent", "delivered", "read", "failed"].includes(nextStatus)
+      ) {
+        const { error: statusUpdateError } = await supabase
+          .from("messages")
+          .update({ status: nextStatus })
+          .eq("wa_message_id", waMessageId);
 
-      await fetch(MAKE_WEBHOOK_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(makePayload),
-      });
+        if (statusUpdateError) {
+          console.error("❌ Error actualizando status de mensaje:", statusUpdateError);
+        }
+      }
+
+      if (MAKE_WEBHOOK_URL) {
+        const makePayload = {
+          event_type: "status_update",
+          wa_message_id: status.id,
+          status: status.status, // sent, delivered, read, failed
+          timestamp: status.timestamp,
+          recipient_id: status.recipient_id,
+        };
+
+        await fetch(MAKE_WEBHOOK_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(makePayload),
+        });
+      }
     } else {
       console.log("⚠️ Evento no reconocido, ignorando");
     }

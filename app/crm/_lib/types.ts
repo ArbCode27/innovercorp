@@ -129,6 +129,9 @@ export interface Message {
   content: string;
   media_url?: string | null;
   media_type?: MessageMediaType | null;
+  mime_type?: string | null;
+  caption?: string | null;
+  metadata?: Record<string, unknown> | null;
   latitude?: number | null;
   longitude?: number | null;
   location_name?: string | null;
@@ -147,6 +150,9 @@ export interface MessageSnapshot {
   sent_by?: string | null;
   media_url?: string | null;
   media_type?: MessageMediaType | null;
+  mime_type?: string | null;
+  caption?: string | null;
+  metadata?: Record<string, unknown> | null;
   latitude?: number | null;
   longitude?: number | null;
   location_name?: string | null;
@@ -167,6 +173,9 @@ export interface HistoryMessage {
   sent_by?: string | null;
   media_url?: string | null;
   media_type?: MessageMediaType | null;
+  mime_type?: string | null;
+  caption?: string | null;
+  metadata?: Record<string, unknown> | null;
   latitude?: number | null;
   longitude?: number | null;
   location_name?: string | null;
