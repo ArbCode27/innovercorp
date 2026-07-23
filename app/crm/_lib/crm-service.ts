@@ -189,6 +189,33 @@ export const crmService = {
     throwIfError(error);
   },
 
+  async takeControlConversation(conversationId: number, agent: Pick<Agent, "id" | "name">) {
+    const { data, error } = await db()
+      .from("conversations")
+      .update({
+        human_mode: true,
+        agent_id: agent.id,
+        agent_control: agent.name,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", conversationId)
+      .or(`agent_id.is.null,agent_id.eq.${agent.id}`)
+      .select("*")
+      .maybeSingle<Conversation>();
+
+    throwIfError(error);
+
+    if (!data) {
+      throw new Error("La conversación ya está asignada a otro asesor");
+    }
+
+    return {
+      ...data,
+      label_ids: data.label_ids || [],
+      human_mode: Boolean(data.human_mode),
+    } as Conversation;
+  },
+
   async resolveTicketForClient(clientId: number | null) {
     if (!clientId) return;
 

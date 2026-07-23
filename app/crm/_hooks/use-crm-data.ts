@@ -359,10 +359,15 @@ export const useCrmData = (agent: Agent | null) => {
     [myAssignedConversations],
   );
 
+  const unassignedConversations = useMemo(
+    () => data.conversations.filter((conversation) => !conversation.agent_id),
+    [data.conversations],
+  );
+
   const filteredConversations = useMemo(
     () =>
       sortConversationsForInbox(
-        filterConversations(data.conversations, clientsById, {
+        filterConversations(unassignedConversations, clientsById, {
           searchTerm,
           selectedLabelId,
           modeFilter: conversationFilter,
@@ -371,21 +376,21 @@ export const useCrmData = (agent: Agent | null) => {
     [
       clientsById,
       conversationFilter,
-      data.conversations,
       searchTerm,
       selectedLabelId,
+      unassignedConversations,
     ],
   );
 
   const conversationFilterCounts = useMemo(
     () =>
       getConversationFilterCounts(
-        data.conversations,
+        unassignedConversations,
         clientsById,
         searchTerm,
         selectedLabelId,
       ),
-    [clientsById, data.conversations, searchTerm, selectedLabelId],
+    [clientsById, searchTerm, selectedLabelId, unassignedConversations],
   );
 
   const selectConversation = async (conversationId: number | null) => {
@@ -614,20 +619,28 @@ export const useCrmData = (agent: Agent | null) => {
 
   const takeControl = async () => {
     if (!selectedConversation || !agent) return;
+    if (selectedConversation.agent_id && selectedConversation.agent_id !== agent.id) {
+      toast.error("Esta conversación ya está asignada a otro asesor");
+      return;
+    }
 
-    const nextConversation = {
-      ...selectedConversation,
-      human_mode: true,
-      agent_id: agent.id,
-      agent_control: agent.name,
-    };
-    await crmService.updateConversation(selectedConversation.id, {
-      human_mode: true,
-      agent_id: agent.id,
-      agent_control: agent.name,
-    });
-    updateConversationLocal(nextConversation);
-    toast.warning("Control tomado");
+    try {
+      const updatedConversation = await crmService.takeControlConversation(
+        selectedConversation.id,
+        {
+          id: agent.id,
+          name: agent.name,
+        },
+      );
+      updateConversationLocal(updatedConversation);
+      toast.warning("Control tomado");
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "No se pudo tomar control de la conversación",
+      );
+    }
   };
 
   const reactivateBot = async () => {
@@ -635,12 +648,10 @@ export const useCrmData = (agent: Agent | null) => {
 
     await crmService.updateConversation(selectedConversation.id, {
       human_mode: false,
-      agent_control: null,
     });
     updateConversationLocal({
       ...selectedConversation,
       human_mode: false,
-      agent_control: null,
     });
     toast.success("Bot IA reactivado");
   };
