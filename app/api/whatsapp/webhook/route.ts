@@ -8,6 +8,7 @@ const DEFAULT_STORAGE_BUCKET = "whatsapp-media";
 
 const DEFAULT_CLIENT_COLOR = "#4f8ef7";
 const DEFAULT_CLIENT_BG = "rgba(79,142,247,.15)";
+const WEBHOOK_LOG_PREFIX = "[WHATSAPP_WEBHOOK]";
 
 type SupportedIncomingMessageType =
   | "text"
@@ -38,6 +39,11 @@ type IncomingPayload = {
 };
 
 const normalizePhone = (value: string) => value.replace(/\D/g, "");
+
+const maskPhone = (value: string) => {
+  if (value.length <= 4) return value;
+  return `${"*".repeat(Math.max(0, value.length - 4))}${value.slice(-4)}`;
+};
 
 const getServerEnv = (key: string) => {
   const value = process.env[key];
@@ -212,7 +218,13 @@ const findOrCreateClient = async (
     .maybeSingle();
 
   if (byWhatsappIdError) throw byWhatsappIdError;
-  if (byWhatsappId) return byWhatsappId;
+  if (byWhatsappId) {
+    console.log(`${WEBHOOK_LOG_PREFIX} client_found_by_whatsapp_id`, {
+      clientId: byWhatsappId.id,
+      from: maskPhone(from),
+    });
+    return byWhatsappId;
+  }
 
   const { data: byPhone, error: byPhoneError } = await supabase
     .from("clients")
@@ -234,6 +246,10 @@ const findOrCreateClient = async (
       .single();
 
     if (updateClientError) throw updateClientError;
+    console.log(`${WEBHOOK_LOG_PREFIX} client_found_by_phone_and_updated`, {
+      clientId: updatedClient.id,
+      from: maskPhone(from),
+    });
     return updatedClient;
   }
 
@@ -257,6 +273,10 @@ const findOrCreateClient = async (
     .single();
 
   if (createClientError) throw createClientError;
+  console.log(`${WEBHOOK_LOG_PREFIX} client_created`, {
+    clientId: createdClient.id,
+    from: maskPhone(from),
+  });
   return createdClient;
 };
 
@@ -277,7 +297,14 @@ const findOrCreateActiveConversation = async (
       .maybeSingle();
 
   if (existingConversationError) throw existingConversationError;
-  if (existingConversation) return existingConversation;
+  if (existingConversation) {
+    console.log(`${WEBHOOK_LOG_PREFIX} active_conversation_found`, {
+      conversationId: existingConversation.id,
+      clientId,
+      status: existingConversation.status,
+    });
+    return existingConversation;
+  }
 
   const { data: createdConversation, error: createConversationError } =
     await supabase
@@ -300,6 +327,11 @@ const findOrCreateActiveConversation = async (
       .single();
 
   if (createConversationError) throw createConversationError;
+  console.log(`${WEBHOOK_LOG_PREFIX} active_conversation_created`, {
+    conversationId: createdConversation.id,
+    clientId,
+    status: createdConversation.status,
+  });
   return createdConversation;
 };
 
@@ -335,7 +367,13 @@ const upsertIncomingMessage = async (
     .maybeSingle();
 
   if (existingMessageError) throw existingMessageError;
-  if (existingMessage) return { ignored: true as const };
+  if (existingMessage) {
+    console.log(`${WEBHOOK_LOG_PREFIX} duplicate_message_ignored`, {
+      messageId,
+      messageType,
+    });
+    return { ignored: true as const };
+  }
 
   const client = await findOrCreateClient(supabase, from, waName);
   const conversation = await findOrCreateActiveConversation(
@@ -375,25 +413,29 @@ const upsertIncomingMessage = async (
     };
   }
 
-  const { error: insertMessageError } = await supabase.from("messages").insert({
-    conversation_id: conversation.id,
-    wa_message_id: messageId,
-    type: "in",
-    content,
-    sender_type: "client",
-    sent_by: waName,
-    status: "delivered",
-    media_url: persistedMediaUrl,
-    media_type: mediaType,
-    mime_type: persistedMimeType,
-    caption,
-    metadata: mergedMetadata,
-    latitude,
-    longitude,
-    location_name: locationName,
-    location_address: locationAddress,
-    created_at: timestamp,
-  });
+  const { data: insertedMessage, error: insertMessageError } = await supabase
+    .from("messages")
+    .insert({
+      conversation_id: conversation.id,
+      wa_message_id: messageId,
+      type: "in",
+      content,
+      sender_type: "client",
+      sent_by: waName,
+      status: "delivered",
+      media_url: persistedMediaUrl,
+      media_type: mediaType,
+      mime_type: persistedMimeType,
+      caption,
+      metadata: mergedMetadata,
+      latitude,
+      longitude,
+      location_name: locationName,
+      location_address: locationAddress,
+      created_at: timestamp,
+    })
+    .select("id, conversation_id, wa_message_id")
+    .single();
 
   if (insertMessageError) {
     const duplicateMessage =
@@ -405,19 +447,47 @@ const upsertIncomingMessage = async (
     if (!duplicateMessage) throw insertMessageError;
     return { ignored: true as const };
   }
+  console.log(`${WEBHOOK_LOG_PREFIX} message_inserted`, {
+    messageId: insertedMessage?.id,
+    waMessageId: insertedMessage?.wa_message_id,
+    conversationId: insertedMessage?.conversation_id,
+    messageType,
+  });
 
-  const { error: updateConversationError } = await supabase
+  const expectedUnread = (conversation.unread ?? 0) + 1;
+  const { data: updatedConversation, error: updateConversationError } = await supabase
     .from("conversations")
     .update({
       preview,
-      unread: (conversation.unread ?? 0) + 1,
+      unread: expectedUnread,
       updated_at: timestamp,
       last_message_at: timestamp,
       wa_phone_number_id: phoneNumberId,
     })
-    .eq("id", conversation.id);
+    .eq("id", conversation.id)
+    .select("id, unread, preview, updated_at, last_message_at")
+    .single();
 
   if (updateConversationError) throw updateConversationError;
+  console.log(`${WEBHOOK_LOG_PREFIX} conversation_updated_after_message`, {
+    conversationId: updatedConversation?.id,
+    unread: updatedConversation?.unread,
+    expectedUnread,
+    preview: updatedConversation?.preview,
+    updatedAt: updatedConversation?.updated_at,
+    lastMessageAt: updatedConversation?.last_message_at,
+  });
+
+  console.log(`${WEBHOOK_LOG_PREFIX} message_saved`, {
+    messageId,
+    messageType,
+    clientId: client.id,
+    conversationId: conversation.id,
+    mediaType,
+    hasMediaUrl: Boolean(persistedMediaUrl),
+    preview,
+  });
+
   return { ignored: false as const };
 };
 
@@ -436,6 +506,11 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    console.log(`${WEBHOOK_LOG_PREFIX} request_received`, {
+      method: req.method,
+      url: req.url,
+    });
+
     const supabase = getSupabaseServerClient();
     const rawBody = await req.json();
 
@@ -445,9 +520,18 @@ export async function POST(req: NextRequest) {
     const value = changes?.value;
 
     if (!value) {
-      console.log("⚠️ Payload sin value, ignorando");
+      console.log(`${WEBHOOK_LOG_PREFIX} payload_without_value_ignored`, {
+        hasEntry: Boolean(entry),
+        hasChanges: Boolean(changes),
+      });
       return new NextResponse("OK", { status: 200 });
     }
+
+    console.log(`${WEBHOOK_LOG_PREFIX} payload_received`, {
+      hasMessages: Boolean(value.messages?.length),
+      hasStatuses: Boolean(value.statuses?.length),
+      phoneNumberId: value.metadata?.phone_number_id || null,
+    });
 
     // ── CASO 1: Mensaje entrante ──────────────────────────
     if (value.messages && value.messages.length > 0) {
@@ -460,8 +544,21 @@ export async function POST(req: NextRequest) {
       const waName = contact?.profile?.name || null;
       const timestamp = parseWhatsappTimestamp(message.timestamp);
 
+      console.log(`${WEBHOOK_LOG_PREFIX} incoming_message_received`, {
+        messageId,
+        messageType,
+        from: maskPhone(normalizedFrom),
+        waName,
+        timestamp,
+        phoneNumberId: metadata?.phone_number_id || null,
+      });
+
       if (!normalizedFrom || !messageId) {
-        console.log("⚠️ Mensaje entrante inválido, ignorando");
+        console.log(`${WEBHOOK_LOG_PREFIX} invalid_message_ignored`, {
+          hasFrom: Boolean(normalizedFrom),
+          hasMessageId: Boolean(messageId),
+          rawType: message.type,
+        });
         return new NextResponse("OK", { status: 200 });
       }
 
@@ -474,7 +571,10 @@ export async function POST(req: NextRequest) {
         "location",
       ].includes(messageType);
       if (!isSupportedType) {
-        console.log(`ℹ️ Tipo no soportado (${messageType}), ignorando`);
+        console.log(`${WEBHOOK_LOG_PREFIX} unsupported_type_ignored`, {
+          messageId,
+          messageType,
+        });
         return new NextResponse("OK", { status: 200 });
       }
 
@@ -540,7 +640,10 @@ export async function POST(req: NextRequest) {
       }
 
       if (!content.trim()) {
-        console.log("⚠️ Mensaje entrante sin contenido útil, ignorando");
+        console.log(`${WEBHOOK_LOG_PREFIX} empty_content_ignored`, {
+          messageId,
+          messageType,
+        });
         return new NextResponse("OK", { status: 200 });
       }
 
@@ -548,7 +651,10 @@ export async function POST(req: NextRequest) {
         ["image", "audio", "video", "document"].includes(messageType) &&
         !mediaId
       ) {
-        console.log("⚠️ Mensaje multimedia sin media_id, ignorando");
+        console.log(`${WEBHOOK_LOG_PREFIX} missing_media_id_ignored`, {
+          messageId,
+          messageType,
+        });
         return new NextResponse("OK", { status: 200 });
       }
 
@@ -580,6 +686,12 @@ export async function POST(req: NextRequest) {
       const waMessageId = String(status.id || "").trim();
       const nextStatus = String(status.status || "").trim();
 
+      console.log(`${WEBHOOK_LOG_PREFIX} status_update_received`, {
+        waMessageId,
+        nextStatus,
+        recipientId: status.recipient_id || null,
+      });
+
       if (
         waMessageId &&
         ["sent", "delivered", "read", "failed"].includes(nextStatus)
@@ -590,7 +702,12 @@ export async function POST(req: NextRequest) {
           .eq("wa_message_id", waMessageId);
 
         if (statusUpdateError) {
-          console.error("❌ Error actualizando status de mensaje:", statusUpdateError);
+          console.error(`${WEBHOOK_LOG_PREFIX} status_update_failed`, statusUpdateError);
+        } else {
+          console.log(`${WEBHOOK_LOG_PREFIX} status_update_saved`, {
+            waMessageId,
+            nextStatus,
+          });
         }
       }
 
@@ -610,12 +727,13 @@ export async function POST(req: NextRequest) {
         });
       }
     } else {
-      console.log("⚠️ Evento no reconocido, ignorando");
+      console.log(`${WEBHOOK_LOG_PREFIX} unrecognized_event_ignored`);
     }
 
+    console.log(`${WEBHOOK_LOG_PREFIX} request_completed`);
     return new NextResponse("OK", { status: 200 });
   } catch (error) {
-    console.error("❌ Error en webhook:", error);
+    console.error(`${WEBHOOK_LOG_PREFIX} request_failed`, error);
     return new NextResponse("Error", { status: 500 });
   }
 }
