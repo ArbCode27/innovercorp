@@ -380,6 +380,7 @@ const upsertIncomingMessage = async (
       clientId: null as number | null,
       conversationId: null as number | null,
       dbMessageId: null as number | null,
+      humanMode: null as boolean | null,
     };
   }
 
@@ -461,6 +462,7 @@ const upsertIncomingMessage = async (
       clientId: client.id,
       conversationId: conversation.id,
       dbMessageId: null as number | null,
+      humanMode: Boolean(conversation.human_mode),
     };
   }
   console.log(`${WEBHOOK_LOG_PREFIX} message_inserted`, {
@@ -512,6 +514,7 @@ const upsertIncomingMessage = async (
     clientId: client.id,
     conversationId: conversation.id,
     dbMessageId: insertedMessage?.id ?? null,
+    humanMode: Boolean(conversation.human_mode),
   };
 };
 
@@ -539,6 +542,7 @@ export async function POST(req: NextRequest) {
     clientId: number | null;
     conversationId: number | null;
     dbMessageId: number | null;
+    humanMode: boolean | null;
     status: string | null;
   } = {
     eventType: "invalid",
@@ -550,6 +554,7 @@ export async function POST(req: NextRequest) {
     clientId: null,
     conversationId: null,
     dbMessageId: null,
+    humanMode: null,
     status: null,
   };
 
@@ -746,6 +751,7 @@ export async function POST(req: NextRequest) {
       requestSummary.clientId = messageResult.clientId;
       requestSummary.conversationId = messageResult.conversationId;
       requestSummary.dbMessageId = messageResult.dbMessageId;
+      requestSummary.humanMode = messageResult.humanMode;
       requestSummary.ignored = messageResult.ignored;
       requestSummary.saved = !messageResult.ignored;
 
@@ -772,6 +778,7 @@ export async function POST(req: NextRequest) {
           client_id: messageResult.clientId,
           conversation_id: messageResult.conversationId,
           message_id: messageResult.dbMessageId,
+          human_mode: messageResult.humanMode,
           saved: !messageResult.ignored,
           ignored: messageResult.ignored,
           reason: messageResult.reason,
