@@ -748,6 +748,41 @@ export async function POST(req: NextRequest) {
       requestSummary.dbMessageId = messageResult.dbMessageId;
       requestSummary.ignored = messageResult.ignored;
       requestSummary.saved = !messageResult.ignored;
+
+      if (MAKE_WEBHOOK_URL) {
+        const makePayload = {
+          event_type: "message",
+          wa_message_id: messageId,
+          message_type: messageType,
+          from: normalizedFrom,
+          wa_name: waName,
+          content: content.trim(),
+          preview: (preview || content).trim(),
+          media_id: mediaId,
+          media_url: null,
+          media_type: mediaType,
+          mime_type: mimeType,
+          caption,
+          latitude,
+          longitude,
+          location_name: locationName,
+          location_address: locationAddress,
+          timestamp,
+          phone_number_id: metadata?.phone_number_id || null,
+          client_id: messageResult.clientId,
+          conversation_id: messageResult.conversationId,
+          message_id: messageResult.dbMessageId,
+          saved: !messageResult.ignored,
+          ignored: messageResult.ignored,
+          reason: messageResult.reason,
+        };
+
+        await fetch(MAKE_WEBHOOK_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(makePayload),
+        });
+      }
     }
 
     // ── CASO 2: Status update (delivered/read/failed) ─────
