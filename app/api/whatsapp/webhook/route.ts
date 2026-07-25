@@ -408,6 +408,7 @@ const upsertIncomingMessage = async (
       conversationId: null as number | null,
       dbMessageId: null as number | null,
       humanMode: null as boolean | null,
+      mediaUrl: null as string | null,
     };
   }
 
@@ -491,6 +492,7 @@ const upsertIncomingMessage = async (
       conversationId: conversation.id,
       dbMessageId: null as number | null,
       humanMode: Boolean(conversation.human_mode),
+      mediaUrl: persistedMediaUrl,
     };
   }
   console.log(`${WEBHOOK_LOG_PREFIX} message_inserted`, {
@@ -544,6 +546,7 @@ const upsertIncomingMessage = async (
     conversationId: conversation.id,
     dbMessageId: insertedMessage?.id ?? null,
     humanMode: Boolean(conversation.human_mode),
+    mediaUrl: persistedMediaUrl,
   };
 };
 
@@ -794,7 +797,7 @@ export async function POST(req: NextRequest) {
           content: content.trim(),
           preview: (preview || content).trim(),
           media_id: mediaId,
-          media_url: null,
+          media_url: messageResult.mediaUrl,
           media_type: mediaType,
           mime_type: mimeType,
           caption,
