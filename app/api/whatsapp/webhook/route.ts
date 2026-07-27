@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { normalizeStorageMimeType } from "../_lib/media-mime";
+import {
+  validateMakeMessagePayload,
+  type MakeMessagePayload,
+} from "../_lib/make-payload";
 
 const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN!;
 const MAKE_WEBHOOK_URL = process.env.MAKE_WEBHOOK_URL;
@@ -85,6 +89,55 @@ const sanitizePathSegment = (value: string) =>
     .replace(/[^a-z0-9._-]/g, "-")
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "");
+
+const ensureConversationContactPhone = async (
+  supabase: ReturnType<typeof getSupabaseServerClient>,
+  conversationId: number,
+  clientId: number,
+  customerPhone: string,
+) => {
+  const normalizedPhone = normalizePhone(customerPhone);
+  if (!normalizedPhone) {
+    return { ok: false as const, reason: "invalid_customer_phone" };
+  }
+
+  const { data: conversation, error: conversationError } = await supabase
+    .from("conversations")
+    .update({
+      customer_phone: normalizedPhone,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", conversationId)
+    .select("id, customer_phone")
+    .maybeSingle();
+
+  if (conversationError) {
+    console.error(`${WEBHOOK_LOG_PREFIX} ensure_customer_phone_failed`, conversationError);
+    return { ok: false as const, reason: "customer_phone_update_failed" };
+  }
+
+  if (!conversation?.customer_phone) {
+    return { ok: false as const, reason: "customer_phone_missing_after_update" };
+  }
+
+  const { error: clientError } = await supabase
+    .from("clients")
+    .update({
+      phone: normalizedPhone,
+      whatsapp_id: normalizedPhone,
+    })
+    .eq("id", clientId);
+
+  if (clientError) {
+    console.error(`${WEBHOOK_LOG_PREFIX} ensure_client_phone_failed`, clientError);
+    // No bloqueamos el notify a Make si la conversación ya tiene customer_phone.
+  }
+
+  return {
+    ok: true as const,
+    customerPhone: String(conversation.customer_phone),
+  };
+};
 
 const inferExtensionFromMime = (mimeType: string | null, fallback = "bin") => {
   const normalizedMimeType = (mimeType || "").toLowerCase();
@@ -788,7 +841,27 @@ export async function POST(req: NextRequest) {
       requestSummary.saved = !messageResult.ignored;
 
       if (MAKE_WEBHOOK_URL) {
-        const makePayload = {
+        let contactPhoneReady = true;
+        let contactPhoneReason: string | null = null;
+
+        if (
+          !messageResult.ignored &&
+          messageResult.conversationId &&
+          messageResult.clientId
+        ) {
+          const contactPhoneResult = await ensureConversationContactPhone(
+            supabase,
+            messageResult.conversationId,
+            messageResult.clientId,
+            normalizedFrom,
+          );
+          contactPhoneReady = contactPhoneResult.ok;
+          contactPhoneReason = contactPhoneResult.ok
+            ? null
+            : contactPhoneResult.reason;
+        }
+
+        const makePayload: MakeMessagePayload = {
           event_type: "message",
           wa_message_id: messageId,
           message_type: messageType,
@@ -816,11 +889,39 @@ export async function POST(req: NextRequest) {
           reason: messageResult.reason,
         };
 
-        await fetch(MAKE_WEBHOOK_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(makePayload),
-        });
+        const validation = validateMakeMessagePayload(makePayload);
+        if (!contactPhoneReady) {
+          validation.errors.push(contactPhoneReason || "contact_phone_not_ready");
+        }
+
+        if (!validation.ok || !contactPhoneReady) {
+          console.log(`${WEBHOOK_LOG_PREFIX} make_payload_skipped`, {
+            messageId,
+            conversationId: messageResult.conversationId,
+            clientId: messageResult.clientId,
+            errors: validation.errors,
+          });
+        } else {
+          const makeResponse = await fetch(MAKE_WEBHOOK_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(makePayload),
+          });
+
+          if (!makeResponse.ok) {
+            console.error(`${WEBHOOK_LOG_PREFIX} make_notify_failed`, {
+              status: makeResponse.status,
+              messageId,
+              conversationId: messageResult.conversationId,
+            });
+          } else {
+            console.log(`${WEBHOOK_LOG_PREFIX} make_notify_sent`, {
+              messageId,
+              conversationId: messageResult.conversationId,
+              clientId: messageResult.clientId,
+            });
+          }
+        }
       }
     }
 

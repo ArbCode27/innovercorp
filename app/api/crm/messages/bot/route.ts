@@ -217,13 +217,46 @@ export async function POST(req: NextRequest) {
     }
 
     if (uniqueKnownPhones.length === 0) {
-      return NextResponse.json(
-        {
-          error:
-            "La conversación no tiene un teléfono de contacto para validar el mensaje",
-        },
-        { status: 400 },
-      );
+      const { error: backfillError } = await supabase
+        .from("conversations")
+        .update({
+          customer_phone: normalizedFrom,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", conversation_id);
+
+      if (backfillError) {
+        console.error(`${LOG_PREFIX} customer_phone_backfill_failed`, backfillError);
+        return NextResponse.json(
+          {
+            error:
+              "La conversación no tiene un teléfono de contacto para validar el mensaje",
+          },
+          { status: 400 },
+        );
+      }
+
+      if (conversation.client_id) {
+        const { error: clientBackfillError } = await supabase
+          .from("clients")
+          .update({
+            phone: normalizedFrom,
+            whatsapp_id: normalizedFrom,
+          })
+          .eq("id", conversation.client_id);
+
+        if (clientBackfillError) {
+          console.error(
+            `${LOG_PREFIX} client_phone_backfill_failed`,
+            clientBackfillError,
+          );
+        }
+      }
+
+      console.log(`${LOG_PREFIX} customer_phone_backfilled`, {
+        conversationId: conversation_id,
+        from: normalizedFrom,
+      });
     }
 
     const now = new Date().toISOString();
