@@ -12,12 +12,14 @@ interface ConversationMessagesProps {
   messages: Message[];
   isLoading: boolean;
   onProcessPaymentReceipt: (messageId: number) => Promise<void>;
+  onResendMessage: (messageId: number) => Promise<void>;
 }
 
 export const ConversationMessages = ({
   messages,
   isLoading,
   onProcessPaymentReceipt,
+  onResendMessage,
 }: ConversationMessagesProps) => {
   const endRef = useRef<HTMLDivElement | null>(null);
 
@@ -49,6 +51,7 @@ export const ConversationMessages = ({
           key={message.id}
           message={message}
           onProcessPaymentReceipt={onProcessPaymentReceipt}
+          onResendMessage={onResendMessage}
         />
       ))}
       <div ref={endRef} />

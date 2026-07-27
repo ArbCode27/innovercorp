@@ -53,6 +53,7 @@ interface ConversationPanelProps {
   ) => Promise<void>;
   onSendImage: (imageFile: File, caption?: string) => Promise<void>;
   onProcessPaymentReceipt: (messageId: number) => Promise<void>;
+  onResendMessage: (messageId: number) => Promise<void>;
   onAddNote: (content: string) => Promise<void>;
   onTakeControl: () => Promise<void>;
   onReactivateBot: () => Promise<void>;
@@ -82,6 +83,7 @@ export const ConversationPanel = ({
   onSendVoiceNote,
   onSendImage,
   onProcessPaymentReceipt,
+  onResendMessage,
   onAddNote,
   onTakeControl,
   onReactivateBot,
@@ -195,6 +197,7 @@ export const ConversationPanel = ({
           messages={messages}
           isLoading={isMessagesLoading}
           onProcessPaymentReceipt={onProcessPaymentReceipt}
+          onResendMessage={onResendMessage}
         />
         <MessageComposer
           disabled={isSendingMessage}

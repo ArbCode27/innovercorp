@@ -83,6 +83,7 @@ export const useCrmData = (agent: Agent | null) => {
     sendVoiceNote: sendWhatsAppVoiceNote,
     sendImageMessage: sendWhatsAppImageMessage,
     processPaymentReceipt: processPaymentReceiptRequest,
+    resendMessage: resendWhatsAppMessage,
     isSending: isSendingMessage,
   } = useSendMessage();
   const [isResolvingConversation, setIsResolvingConversation] = useState(false);
@@ -636,6 +637,54 @@ export const useCrmData = (agent: Agent | null) => {
 
   };
 
+  const resendMessage = async (messageId: number) => {
+    if (!selectedConversation || !agent) {
+      throw new Error("No hay una conversación activa para reenviar el mensaje");
+    }
+
+    if (!selectedConversation.human_mode) {
+      throw new Error("Toma control de la conversación antes de reenviar mensajes");
+    }
+
+    const message = messages.find((item) => item.id === messageId);
+    if (!message) {
+      throw new Error("No se encontró el mensaje a reenviar");
+    }
+
+    if (message.type !== "out" || message.status !== "failed") {
+      throw new Error("Solo se pueden reenviar mensajes salientes fallidos");
+    }
+
+    if (message.media_type) {
+      throw new Error("Por ahora solo se pueden reenviar mensajes de texto");
+    }
+
+    const response = await resendWhatsAppMessage({
+      message_id: messageId,
+      conversation_id: selectedConversation.id,
+      agent_id: agent.id,
+    });
+
+    setMessages((current) =>
+      current.map((item) =>
+        item.id === messageId ? { ...item, ...response.message } : item,
+      ),
+    );
+
+    setData((current) => ({
+      ...current,
+      conversations: current.conversations.map((conversation) =>
+        conversation.id === selectedConversation.id
+          ? {
+              ...conversation,
+              preview: response.message.content || conversation.preview,
+              updated_at: new Date().toISOString(),
+            }
+          : conversation,
+      ),
+    }));
+  };
+
   const addNote = async (content: string) => {
     if (!selectedConversation) return;
 
@@ -968,6 +1017,7 @@ export const useCrmData = (agent: Agent | null) => {
     sendVoiceNote,
     sendImageMessage,
     processPaymentReceipt,
+    resendMessage,
     addNote,
     takeControl,
     reactivateBot,

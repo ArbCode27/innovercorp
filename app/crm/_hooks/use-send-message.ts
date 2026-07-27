@@ -44,6 +44,18 @@ interface ProcessPaymentReceiptResponse {
   messageId: number;
 }
 
+interface ResendMessageInput {
+  message_id: number;
+  conversation_id: number;
+  agent_id: number;
+}
+
+interface ResendMessageResponse {
+  success: true;
+  wa_message_id: string | null;
+  message: Message;
+}
+
 export function useSendMessage() {
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -200,11 +212,46 @@ export function useSendMessage() {
     }
   }, []);
 
+  const resendMessage = useCallback(async (input: ResendMessageInput) => {
+    setIsSending(true);
+    setError(null);
+
+    try {
+      const res = await fetch("/api/whatsapp/resend", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message_id: input.message_id,
+          conversation_id: input.conversation_id,
+          agent_id: input.agent_id,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "No se pudo reenviar el mensaje");
+      }
+
+      return data as ResendMessageResponse;
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Error inesperado al reenviar el mensaje";
+      setError(message);
+      throw new Error(message);
+    } finally {
+      setIsSending(false);
+    }
+  }, []);
+
   return {
     sendMessage,
     sendVoiceNote,
     sendImageMessage,
     processPaymentReceipt,
+    resendMessage,
     isSending,
     error,
   };
