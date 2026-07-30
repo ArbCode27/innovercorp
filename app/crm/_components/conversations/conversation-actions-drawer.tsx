@@ -28,7 +28,6 @@ interface ConversationActionsDrawerProps {
   canAssignAgent: boolean;
   assignLabel: string;
   showWisproSearch: boolean;
-  showWisproLink: boolean;
   onTakeControl: () => void;
   onReactivateBot: () => void;
   onResolve: () => void;
@@ -44,7 +43,6 @@ export const ConversationActionsDrawer = ({
   canAssignAgent,
   assignLabel,
   showWisproSearch,
-  showWisproLink,
   onTakeControl,
   onReactivateBot,
   onResolve,
@@ -147,7 +145,7 @@ export const ConversationActionsDrawer = ({
           </DrawerClose>
         ) : null}
 
-        {showWisproSearch || showWisproLink ? (
+        {showWisproSearch ? (
           <DrawerClose asChild>
             <CrmButton
               type="button"
@@ -155,7 +153,7 @@ export const ConversationActionsDrawer = ({
               className="w-full justify-start"
               onClick={onOpenWispro}>
               <Search className="size-4" aria-hidden="true" />
-              {showWisproSearch ? "Buscar en Wispro" : "Wispro"}
+              Buscar en Wispro
             </CrmButton>
           </DrawerClose>
         ) : null}
