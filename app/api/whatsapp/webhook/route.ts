@@ -5,6 +5,12 @@ import {
   validateMakeMessagePayload,
   type MakeMessagePayload,
 } from "../_lib/make-payload";
+import {
+  findConversationEngineByWaMessageId,
+  notifyMakeWebhook,
+  resolveBotRouteContext,
+} from "../_lib/make-gate";
+import { replyToConversationWithGemini } from "@/app/api/crm/ai/_lib/reply-to-conversation";
 
 const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN!;
 const MAKE_WEBHOOK_URL = process.env.MAKE_WEBHOOK_URL;
@@ -461,6 +467,7 @@ const upsertIncomingMessage = async (
       conversationId: null as number | null,
       dbMessageId: null as number | null,
       humanMode: null as boolean | null,
+      botEngine: null as string | null,
       mediaUrl: null as string | null,
     };
   }
@@ -545,6 +552,10 @@ const upsertIncomingMessage = async (
       conversationId: conversation.id,
       dbMessageId: null as number | null,
       humanMode: Boolean(conversation.human_mode),
+      botEngine:
+        typeof conversation.bot_engine === "string"
+          ? conversation.bot_engine
+          : null,
       mediaUrl: persistedMediaUrl,
     };
   }
@@ -599,6 +610,10 @@ const upsertIncomingMessage = async (
     conversationId: conversation.id,
     dbMessageId: insertedMessage?.id ?? null,
     humanMode: Boolean(conversation.human_mode),
+    botEngine:
+      typeof conversation.bot_engine === "string"
+        ? conversation.bot_engine
+        : null,
     mediaUrl: persistedMediaUrl,
   };
 };
@@ -840,87 +855,135 @@ export async function POST(req: NextRequest) {
       requestSummary.ignored = messageResult.ignored;
       requestSummary.saved = !messageResult.ignored;
 
-      if (MAKE_WEBHOOK_URL) {
-        let contactPhoneReady = true;
-        let contactPhoneReason: string | null = null;
+      // Route bot reply with a single gate: Gemini XOR Make (never both).
+      if (!messageResult.ignored && messageResult.conversationId) {
+        try {
+          const route = await resolveBotRouteContext(supabase, {
+            humanMode: messageResult.humanMode,
+            conversationBotEngine: messageResult.botEngine,
+          });
 
-        if (
-          !messageResult.ignored &&
-          messageResult.conversationId &&
-          messageResult.clientId
-        ) {
-          const contactPhoneResult = await ensureConversationContactPhone(
-            supabase,
-            messageResult.conversationId,
-            messageResult.clientId,
-            normalizedFrom,
-          );
-          contactPhoneReady = contactPhoneResult.ok;
-          contactPhoneReason = contactPhoneResult.ok
-            ? null
-            : contactPhoneResult.reason;
-        }
-
-        const makePayload: MakeMessagePayload = {
-          event_type: "message",
-          wa_message_id: messageId,
-          message_type: messageType,
-          from: normalizedFrom,
-          wa_name: waName,
-          content: content.trim(),
-          preview: (preview || content).trim(),
-          media_id: mediaId,
-          media_url: messageResult.mediaUrl,
-          media_type: mediaType,
-          mime_type: mimeType,
-          caption,
-          latitude,
-          longitude,
-          location_name: locationName,
-          location_address: locationAddress,
-          timestamp,
-          phone_number_id: metadata?.phone_number_id || null,
-          client_id: messageResult.clientId,
-          conversation_id: messageResult.conversationId,
-          message_id: messageResult.dbMessageId,
-          human_mode: messageResult.humanMode,
-          saved: !messageResult.ignored,
-          ignored: messageResult.ignored,
-          reason: messageResult.reason,
-        };
-
-        const validation = validateMakeMessagePayload(makePayload);
-        if (!contactPhoneReady) {
-          validation.errors.push(contactPhoneReason || "contact_phone_not_ready");
-        }
-
-        if (!validation.ok || !contactPhoneReady) {
-          console.log(`${WEBHOOK_LOG_PREFIX} make_payload_skipped`, {
+          console.log(`${WEBHOOK_LOG_PREFIX} bot_engine_resolved`, {
             messageId,
             conversationId: messageResult.conversationId,
-            clientId: messageResult.clientId,
-            errors: validation.errors,
-          });
-        } else {
-          const makeResponse = await fetch(MAKE_WEBHOOK_URL, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(makePayload),
+            messageType,
+            botEngine: route.engine,
+            allowMake: route.allowMake,
+            conversationOverride: messageResult.botEngine,
+            globalEngine: route.globalBotEngine,
+            humanMode: route.humanMode,
           });
 
-          if (!makeResponse.ok) {
-            console.error(`${WEBHOOK_LOG_PREFIX} make_notify_failed`, {
-              status: makeResponse.status,
+          if (route.humanMode) {
+            console.log(`${WEBHOOK_LOG_PREFIX} bot_reply_skipped_human_mode`, {
               messageId,
               conversationId: messageResult.conversationId,
             });
-          } else {
-            console.log(`${WEBHOOK_LOG_PREFIX} make_notify_sent`, {
+          } else if (route.engine === "gemini") {
+            // Zero Make calls in Gemini mode (text + media + later statuses).
+            if (messageType === "text") {
+              void replyToConversationWithGemini(supabase, {
+                conversationId: messageResult.conversationId,
+                triggerMessageId: messageResult.dbMessageId,
+              }).catch((error) => {
+                console.error(`${WEBHOOK_LOG_PREFIX} gemini_reply_failed`, {
+                  messageId,
+                  conversationId: messageResult.conversationId,
+                  error:
+                    error instanceof Error ? error.message : "unknown_error",
+                });
+              });
+            } else {
+              console.log(`${WEBHOOK_LOG_PREFIX} gemini_media_skipped_no_make`, {
+                messageId,
+                conversationId: messageResult.conversationId,
+                messageType,
+              });
+            }
+          } else if (route.allowMake && MAKE_WEBHOOK_URL) {
+            let contactPhoneReady = true;
+            let contactPhoneReason: string | null = null;
+
+            if (messageResult.clientId) {
+              const contactPhoneResult = await ensureConversationContactPhone(
+                supabase,
+                messageResult.conversationId,
+                messageResult.clientId,
+                normalizedFrom,
+              );
+              contactPhoneReady = contactPhoneResult.ok;
+              contactPhoneReason = contactPhoneResult.ok
+                ? null
+                : contactPhoneResult.reason;
+            }
+
+            const makePayload: MakeMessagePayload = {
+              event_type: "message",
+              wa_message_id: messageId,
+              message_type: messageType,
+              from: normalizedFrom,
+              wa_name: waName,
+              content: content.trim(),
+              preview: (preview || content).trim(),
+              media_id: mediaId,
+              media_url: messageResult.mediaUrl,
+              media_type: mediaType,
+              mime_type: mimeType,
+              caption,
+              latitude,
+              longitude,
+              location_name: locationName,
+              location_address: locationAddress,
+              timestamp,
+              phone_number_id: metadata?.phone_number_id || null,
+              client_id: messageResult.clientId,
+              conversation_id: messageResult.conversationId,
+              message_id: messageResult.dbMessageId,
+              human_mode: messageResult.humanMode,
+              saved: !messageResult.ignored,
+              ignored: messageResult.ignored,
+              reason: messageResult.reason,
+            };
+
+            const validation = validateMakeMessagePayload(makePayload);
+            if (!contactPhoneReady) {
+              validation.errors.push(
+                contactPhoneReason || "contact_phone_not_ready",
+              );
+            }
+
+            if (!validation.ok || !contactPhoneReady) {
+              console.log(`${WEBHOOK_LOG_PREFIX} make_payload_skipped`, {
+                messageId,
+                conversationId: messageResult.conversationId,
+                clientId: messageResult.clientId,
+                errors: validation.errors,
+              });
+            } else {
+              await notifyMakeWebhook(MAKE_WEBHOOK_URL, makePayload, {
+                eventType: "message",
+                context: {
+                  messageId,
+                  conversationId: messageResult.conversationId,
+                  clientId: messageResult.clientId,
+                },
+              });
+            }
+          } else if (route.engine === "make" && !MAKE_WEBHOOK_URL) {
+            console.log(`${WEBHOOK_LOG_PREFIX} make_url_missing`, {
               messageId,
               conversationId: messageResult.conversationId,
-              clientId: messageResult.clientId,
             });
           }
+        } catch (routingError) {
+          console.error(`${WEBHOOK_LOG_PREFIX} bot_routing_failed`, {
+            messageId,
+            conversationId: messageResult.conversationId,
+            error:
+              routingError instanceof Error
+                ? routingError.message
+                : "unknown_error",
+          });
         }
       }
     }
@@ -965,20 +1028,52 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      if (MAKE_WEBHOOK_URL) {
-        const makePayload = {
-          event_type: "status_update",
-          wa_message_id: status.id,
-          status: status.status, // sent, delivered, read, failed
-          timestamp: status.timestamp,
-          recipient_id: status.recipient_id,
-        };
+      // Make status notifications only when the related conversation uses Make.
+      if (MAKE_WEBHOOK_URL && waMessageId) {
+        const conversationEngine = await findConversationEngineByWaMessageId(
+          supabase,
+          waMessageId,
+        );
 
-        await fetch(MAKE_WEBHOOK_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(makePayload),
-        });
+        if (!conversationEngine) {
+          // Safe default: do not notify Make if we cannot resolve the engine.
+          console.log(`${WEBHOOK_LOG_PREFIX} make_status_skipped_unresolved`, {
+            waMessageId,
+          });
+        } else {
+          const route = await resolveBotRouteContext(supabase, {
+            humanMode: conversationEngine.humanMode,
+            conversationBotEngine: conversationEngine.botEngine,
+          });
+
+          if (!route.allowMake) {
+            console.log(`${WEBHOOK_LOG_PREFIX} make_status_skipped`, {
+              waMessageId,
+              conversationId: conversationEngine.conversationId,
+              botEngine: route.engine,
+              humanMode: route.humanMode,
+            });
+          } else {
+            await notifyMakeWebhook(
+              MAKE_WEBHOOK_URL,
+              {
+                event_type: "status_update",
+                wa_message_id: status.id,
+                status: status.status,
+                timestamp: status.timestamp,
+                recipient_id: status.recipient_id,
+              },
+              {
+                eventType: "status_update",
+                context: {
+                  waMessageId,
+                  conversationId: conversationEngine.conversationId,
+                  botEngine: route.engine,
+                },
+              },
+            );
+          }
+        }
       }
     } else {
       requestSummary.eventType = "unrecognized";

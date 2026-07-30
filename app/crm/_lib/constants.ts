@@ -14,6 +14,7 @@ export const CRM_NAV_ITEMS: Array<{
   { id: "tickets", label: "Tickets" },
   { id: "labels", label: "Etiquetas" },
   { id: "agents", label: "Agentes" },
+  { id: "settings", label: "Ajustes" },
 ];
 
 export const CONVERSATION_FILTERS: Array<{

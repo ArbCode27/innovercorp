@@ -18,6 +18,7 @@ import { isAdminRole } from "../_lib/agent-role-utils";
 import { useSendMessage } from "./use-send-message";
 import type {
   Agent,
+  BotEngine,
   Client,
   Conversation,
   ConversationFilter,
@@ -35,6 +36,7 @@ import type {
   WisproCustomer,
   WisproSearchResult,
 } from "../_lib/types";
+import { DEFAULT_BOT_ENGINE } from "../_lib/bot-engine";
 
 // ── Supabase client para Realtime ─────────────────────────
 const supabase = createClient(
@@ -49,6 +51,14 @@ const emptyData: CrmData = {
   labels: [],
   quickReplies: [],
   tickets: [],
+  settings: {
+    id: 1,
+    bot_engine: DEFAULT_BOT_ENGINE,
+    gemini_model: "gemini-2.0-flash",
+    ai_system_prompt: null,
+    updated_at: null,
+    updated_by: null,
+  },
 };
 
 const MAX_WHATSAPP_AUDIO_BYTES = 16 * 1024 * 1024;
@@ -741,6 +751,42 @@ export const useCrmData = (agent: Agent | null) => {
     toast.success("Bot IA reactivado");
   };
 
+  const updateGlobalBotEngine = async (botEngine: BotEngine) => {
+    if (!agent) return;
+    if (!isAdminRole(agent.role)) {
+      toast.error("Solo un administrador puede cambiar el motor global");
+      return;
+    }
+
+    const settings = await crmService.updateGlobalBotEngine(botEngine, agent.id);
+    setData((current) => ({ ...current, settings }));
+    toast.success(
+      botEngine === "gemini"
+        ? "Motor global: Gemini (backend)"
+        : "Motor global: Make",
+    );
+  };
+
+  const updateConversationBotEngine = async (botEngine: BotEngine | null) => {
+    if (!selectedConversation) return;
+
+    const updated = await crmService.updateConversationBotEngine(
+      selectedConversation.id,
+      botEngine,
+    );
+    updateConversationLocal({
+      ...selectedConversation,
+      bot_engine: updated.bot_engine ?? null,
+    });
+    toast.success(
+      botEngine === null
+        ? "Motor de esta conversación: usar global"
+        : botEngine === "gemini"
+          ? "Motor de esta conversación: Gemini"
+          : "Motor de esta conversación: Make",
+    );
+  };
+
   const resolveConversation = async () => {
     if (!selectedConversation || !agent) return;
 
@@ -1021,6 +1067,8 @@ export const useCrmData = (agent: Agent | null) => {
     addNote,
     takeControl,
     reactivateBot,
+    updateGlobalBotEngine,
+    updateConversationBotEngine,
     resolveConversation,
     updateLabels,
     quickToggleLabel,

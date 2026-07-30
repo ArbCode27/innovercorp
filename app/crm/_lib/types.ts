@@ -31,9 +31,21 @@ export type CrmView =
   | "clients"
   | "tickets"
   | "labels"
-  | "agents";
+  | "agents"
+  | "settings";
 
 export type ConversationFilter = "all" | "unread" | "bot" | "human";
+
+export type BotEngine = "gemini" | "make";
+
+export interface CrmSettings {
+  id: number;
+  bot_engine: BotEngine;
+  gemini_model: string;
+  ai_system_prompt: string | null;
+  updated_at: string | null;
+  updated_by: number | null;
+}
 
 export interface Agent {
   id: number;
@@ -110,6 +122,7 @@ export interface Conversation {
   client_id: number | null;
   status: ConversationStatus;
   human_mode: boolean;
+  bot_engine?: BotEngine | null;
   label_ids: number[];
   preview: string | null;
   unread: number | null;
@@ -246,6 +259,7 @@ export interface CrmData {
   labels: Label[];
   quickReplies: QuickReply[];
   tickets: Ticket[];
+  settings: CrmSettings;
 }
 
 export interface CreateClientInput {

@@ -21,6 +21,7 @@ const SETTINGS_ITEMS: Array<{ id: CrmView; label: string; icon: typeof Users }> 
   { id: "quick-replies", label: "Respuestas rápidas", icon: MessageSquareQuote },
   { id: "labels", label: "Etiquetas", icon: Tags },
   { id: "agents", label: "Agentes", icon: Bot },
+  { id: "settings", label: "Ajustes IA", icon: Settings2 },
 ];
 
 export const CrmMobileSettingsMenu = ({

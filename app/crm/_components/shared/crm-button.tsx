@@ -31,7 +31,7 @@ const crmButtonVariants = cva(
   },
 );
 
-type CrmButtonProps = ComponentProps<typeof Button> &
+type CrmButtonProps = Omit<ComponentProps<typeof Button>, "variant"> &
   VariantProps<typeof crmButtonVariants>;
 
 export const CrmButton = ({

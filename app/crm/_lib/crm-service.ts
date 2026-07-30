@@ -6,12 +6,14 @@ import { getSupabaseClient } from "./supabase";
 import type {
   Agent,
   AgentStatus,
+  BotEngine,
   Conversation,
   CreateClientInput,
   CreateLabelInput,
   CreateQuickReplyInput,
   CreateTicketInput,
   CrmData,
+  CrmSettings,
   Label,
   Message,
   QuickReply,
@@ -21,6 +23,7 @@ import type {
   UpdateQuickReplyInput,
   UpsertAgentInput,
 } from "./types";
+import { DEFAULT_BOT_ENGINE, normalizeBotEngine } from "./bot-engine";
 
 const db = () => getSupabaseClient();
 
@@ -75,26 +78,55 @@ export const crmService = {
   },
 
   async loadAll(currentAgent: Agent): Promise<CrmData> {
-    const [labels, clients, tickets, conversations, agents, quickReplies] = await Promise.all([
-      db().from("labels").select("*").order("created_at"),
-      db().from("clients").select("*").order("created_at"),
-      db().from("tickets").select("*").order("created_at", { ascending: false }),
-      db().from("conversations").select("*").order("updated_at", { ascending: false }),
-      db().from("agents").select("*").order("created_at"),
-      db().from("quick_replies").select("*").order("title"),
-    ]);
+    const [labels, clients, tickets, conversations, agents, quickReplies, settings] =
+      await Promise.all([
+        db().from("labels").select("*").order("created_at"),
+        db().from("clients").select("*").order("created_at"),
+        db().from("tickets").select("*").order("created_at", { ascending: false }),
+        db().from("conversations").select("*").order("updated_at", { ascending: false }),
+        db().from("agents").select("*").order("created_at"),
+        db().from("quick_replies").select("*").order("title"),
+        db().from("crm_settings").select("*").eq("id", 1).maybeSingle(),
+      ]);
 
     [labels, clients, tickets, conversations, agents, quickReplies].forEach((result) =>
       throwIfError(result.error)
     );
+
+    // Settings table may not exist until migration; soft-fail to Make default.
+    if (settings.error) {
+      console.warn("[crm_settings] load_failed", settings.error.message);
+    }
 
     const rawConversations = ((conversations.data || []) as Conversation[]).map(
       (conversation) => ({
         ...conversation,
         label_ids: conversation.label_ids || [],
         human_mode: Boolean(conversation.human_mode),
+        bot_engine: conversation.bot_engine
+          ? normalizeBotEngine(conversation.bot_engine)
+          : null,
       })
     );
+
+    const settingsRow = settings.data as CrmSettings | null;
+    const crmSettings: CrmSettings = settingsRow
+      ? {
+          id: settingsRow.id || 1,
+          bot_engine: normalizeBotEngine(settingsRow.bot_engine),
+          gemini_model: settingsRow.gemini_model || "gemini-2.0-flash",
+          ai_system_prompt: settingsRow.ai_system_prompt ?? null,
+          updated_at: settingsRow.updated_at ?? null,
+          updated_by: settingsRow.updated_by ?? null,
+        }
+      : {
+          id: 1,
+          bot_engine: DEFAULT_BOT_ENGINE,
+          gemini_model: "gemini-2.0-flash",
+          ai_system_prompt: null,
+          updated_at: null,
+          updated_by: null,
+        };
 
     return {
       labels: (labels.data || []) as Label[],
@@ -109,7 +141,55 @@ export const crmService = {
             )
           : rawConversations,
       agents: (agents.data || []) as Agent[],
+      settings: crmSettings,
     };
+  },
+
+  async updateGlobalBotEngine(
+    botEngine: BotEngine,
+    agentId: number,
+    extras?: { gemini_model?: string; ai_system_prompt?: string | null },
+  ) {
+    const response = await fetch("/api/crm/settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        bot_engine: botEngine,
+        agent_id: agentId,
+        gemini_model: extras?.gemini_model,
+        ai_system_prompt: extras?.ai_system_prompt,
+      }),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "No se pudo actualizar el motor global");
+    }
+
+    return data.settings as CrmSettings;
+  },
+
+  async updateConversationBotEngine(
+    conversationId: number,
+    botEngine: BotEngine | null,
+  ) {
+    const response = await fetch(
+      `/api/crm/conversations/${conversationId}/bot-engine`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bot_engine: botEngine }),
+      },
+    );
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(
+        data.error || "No se pudo actualizar el motor de la conversación",
+      );
+    }
+
+    return data.conversation as Conversation;
   },
 
   async loadMessages(conversationId: number) {

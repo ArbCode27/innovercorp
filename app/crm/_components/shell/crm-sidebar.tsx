@@ -8,6 +8,7 @@ import {
   Layers,
   MessageSquareQuote,
   LogOut,
+  Settings2,
   Tags,
   Ticket,
   Users,
@@ -46,6 +47,7 @@ const icons = {
   tickets: Ticket,
   labels: Tags,
   agents: Bot,
+  settings: Settings2,
 } as const;
 
 const MOBILE_PRIMARY_NAV_ITEMS: CrmView[] = [

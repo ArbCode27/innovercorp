@@ -10,19 +10,21 @@ import {
   UserCheck,
   UserPlus,
 } from "lucide-react";
-import type { Agent, Client, Conversation } from "../../_lib/types";
+import type { Agent, BotEngine, Client, Conversation } from "../../_lib/types";
 import { canAssignConversation } from "../../_lib/conversation-permissions";
 import { CRM_BADGE_TONES, CRM_SURFACES } from "../../_lib/crm-theme";
 import { AvatarInitials } from "../shared/avatar-initials";
 import { CrmButton } from "../shared/crm-button";
 import { StatusBadge } from "../shared/status-badge";
 import { CrmThemeToggle } from "../shell/crm-theme-toggle";
+import { BotEngineSwitcher } from "./bot-engine-switcher";
 import { ConversationActionsDrawer } from "./conversation-actions-drawer";
 
 interface ConversationHeaderProps {
   conversation: Conversation;
   client: Client | null;
   currentAgent: Agent;
+  globalBotEngine: BotEngine;
   onBackToList?: () => void;
   onOpenDetails?: () => void;
   onOpenLabels: () => void;
@@ -33,12 +35,14 @@ interface ConversationHeaderProps {
   onOpenNote: () => void;
   onOpenAssign: () => void;
   onOpenWispro: () => void;
+  onChangeBotEngine: (engine: BotEngine | null) => Promise<void>;
 }
 
 export const ConversationHeader = ({
   conversation,
   client,
   currentAgent,
+  globalBotEngine,
   onBackToList,
   onOpenDetails,
   onOpenLabels,
@@ -48,6 +52,7 @@ export const ConversationHeader = ({
   onOpenNote,
   onOpenAssign,
   onOpenWispro,
+  onChangeBotEngine,
   isResolving = false,
 }: ConversationHeaderProps) => {
   const displayName =
@@ -150,6 +155,12 @@ export const ConversationHeader = ({
           className="hidden shrink-0 flex-wrap items-center justify-end gap-2 md:flex"
           role="toolbar"
           aria-label="Acciones de conversación">
+          <BotEngineSwitcher
+            humanMode={conversation.human_mode}
+            conversationBotEngine={conversation.bot_engine}
+            globalBotEngine={globalBotEngine}
+            onChange={onChangeBotEngine}
+          />
           {conversation.human_mode ? (
             <CrmButton type="button" variant="violet" size="sm" onClick={onReactivateBot}>
               <RotateCcw className="size-3" aria-hidden="true" />

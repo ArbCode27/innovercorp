@@ -14,6 +14,7 @@ import { ConversationsView } from "../conversations/conversations-view";
 import { HistoryView } from "../history/history-view";
 import { LabelsView } from "../labels/labels-view";
 import { QuickRepliesView } from "../quick-replies/quick-replies-view";
+import { SettingsView } from "../settings/settings-view";
 import { TicketsView } from "../tickets/tickets-view";
 import { CrmMobileNav, CrmSidebar } from "./crm-sidebar";
 
@@ -95,6 +96,8 @@ export const CrmShell = () => {
                 onAddNote={crm.addNote}
                 onTakeControl={crm.takeControl}
                 onReactivateBot={crm.reactivateBot}
+                onChangeBotEngine={crm.updateConversationBotEngine}
+                globalBotEngine={crm.settings.bot_engine}
                 onResolve={crm.resolveConversation}
                 onUpdateLabels={crm.updateLabels}
                 onQuickToggleLabel={crm.quickToggleLabel}
@@ -135,6 +138,8 @@ export const CrmShell = () => {
                 onAddNote={crm.addNote}
                 onTakeControl={crm.takeControl}
                 onReactivateBot={crm.reactivateBot}
+                onChangeBotEngine={crm.updateConversationBotEngine}
+                globalBotEngine={crm.settings.bot_engine}
                 onResolve={crm.resolveConversation}
                 onUpdateLabels={crm.updateLabels}
                 onQuickToggleLabel={crm.quickToggleLabel}
@@ -191,6 +196,13 @@ export const CrmShell = () => {
                 conversations={crm.conversations}
                 onSaveAgent={crm.upsertAgent}
                 onToggleAgentStatus={crm.toggleAgentStatus}
+              />
+            ) : null}
+            {activeView === "settings" ? (
+              <SettingsView
+                currentAgent={auth.agent}
+                settings={crm.settings}
+                onUpdateGlobalBotEngine={crm.updateGlobalBotEngine}
               />
             ) : null}
           </>
