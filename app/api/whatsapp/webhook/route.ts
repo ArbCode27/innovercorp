@@ -1,4 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
+// ⚠️ Si tu Next.js es 14.1–14.x (no 15+), `after` todavía es experimental:
+//    import { NextRequest, NextResponse, unstable_after as after } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { normalizeStorageMimeType } from "../_lib/media-mime";
 import {
@@ -11,6 +13,10 @@ import {
   resolveBotRouteContext,
 } from "../_lib/make-gate";
 import { replyToConversationWithGemini } from "@/app/api/crm/ai/_lib/reply-to-conversation";
+
+// Fuerza runtime Node.js explícitamente: el handler usa Buffer y fetch a Graph API,
+// y `after()` se comporta de forma más predecible si esto está declarado a propósito.
+export const runtime = "nodejs";
 
 const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN!;
 const MAKE_WEBHOOK_URL = process.env.MAKE_WEBHOOK_URL;
@@ -118,12 +124,18 @@ const ensureConversationContactPhone = async (
     .maybeSingle();
 
   if (conversationError) {
-    console.error(`${WEBHOOK_LOG_PREFIX} ensure_customer_phone_failed`, conversationError);
+    console.error(
+      `${WEBHOOK_LOG_PREFIX} ensure_customer_phone_failed`,
+      conversationError,
+    );
     return { ok: false as const, reason: "customer_phone_update_failed" };
   }
 
   if (!conversation?.customer_phone) {
-    return { ok: false as const, reason: "customer_phone_missing_after_update" };
+    return {
+      ok: false as const,
+      reason: "customer_phone_missing_after_update",
+    };
   }
 
   const { error: clientError } = await supabase
@@ -135,7 +147,10 @@ const ensureConversationContactPhone = async (
     .eq("id", clientId);
 
   if (clientError) {
-    console.error(`${WEBHOOK_LOG_PREFIX} ensure_client_phone_failed`, clientError);
+    console.error(
+      `${WEBHOOK_LOG_PREFIX} ensure_client_phone_failed`,
+      clientError,
+    );
     // No bloqueamos el notify a Make si la conversación ya tiene customer_phone.
   }
 
@@ -157,13 +172,29 @@ const resolveMediaBucket = (messageType: SupportedIncomingMessageType) => {
   const legacy = process.env.SUPABASE_WHATSAPP_MEDIA_BUCKET;
   switch (messageType) {
     case "audio":
-      return process.env.SUPABASE_WHATSAPP_AUDIO_BUCKET || legacy || DEFAULT_STORAGE_BUCKET;
+      return (
+        process.env.SUPABASE_WHATSAPP_AUDIO_BUCKET ||
+        legacy ||
+        DEFAULT_STORAGE_BUCKET
+      );
     case "image":
-      return process.env.SUPABASE_WHATSAPP_IMAGE_BUCKET || legacy || DEFAULT_STORAGE_BUCKET;
+      return (
+        process.env.SUPABASE_WHATSAPP_IMAGE_BUCKET ||
+        legacy ||
+        DEFAULT_STORAGE_BUCKET
+      );
     case "video":
-      return process.env.SUPABASE_WHATSAPP_VIDEO_BUCKET || legacy || DEFAULT_STORAGE_BUCKET;
+      return (
+        process.env.SUPABASE_WHATSAPP_VIDEO_BUCKET ||
+        legacy ||
+        DEFAULT_STORAGE_BUCKET
+      );
     case "document":
-      return process.env.SUPABASE_WHATSAPP_DOCUMENT_BUCKET || legacy || DEFAULT_STORAGE_BUCKET;
+      return (
+        process.env.SUPABASE_WHATSAPP_DOCUMENT_BUCKET ||
+        legacy ||
+        DEFAULT_STORAGE_BUCKET
+      );
     default:
       return legacy || DEFAULT_STORAGE_BUCKET;
   }
@@ -184,7 +215,8 @@ const fetchWhatsappMediaDownloadUrl = async (mediaId: string) => {
   const mediaData = await mediaResponse.json();
   if (!mediaResponse.ok || mediaData.error || !mediaData.url) {
     throw new Error(
-      mediaData.error?.message || "No se pudo obtener la URL de descarga del archivo",
+      mediaData.error?.message ||
+        "No se pudo obtener la URL de descarga del archivo",
     );
   }
 
@@ -204,7 +236,9 @@ const downloadWhatsappMedia = async (downloadUrl: string) => {
   });
 
   if (!fileResponse.ok) {
-    throw new Error("No se pudo descargar el archivo multimedia desde WhatsApp");
+    throw new Error(
+      "No se pudo descargar el archivo multimedia desde WhatsApp",
+    );
   }
 
   const contentType = fileResponse.headers.get("content-type");
@@ -223,9 +257,14 @@ const storeIncomingMedia = async (
   },
 ) => {
   const mediaInfo = await fetchWhatsappMediaDownloadUrl(input.mediaId);
-  const { buffer, contentType } = await downloadWhatsappMedia(mediaInfo.downloadUrl);
+  const { buffer, contentType } = await downloadWhatsappMedia(
+    mediaInfo.downloadUrl,
+  );
   const rawMimeType =
-    input.mimeType || mediaInfo.mimeType || contentType || "application/octet-stream";
+    input.mimeType ||
+    mediaInfo.mimeType ||
+    contentType ||
+    "application/octet-stream";
   const resolvedMimeType = normalizeStorageMimeType(rawMimeType);
   const extension = inferExtensionFromMime(resolvedMimeType, "bin");
   const mediaFolder =
@@ -237,7 +276,9 @@ const storeIncomingMedia = async (
           ? "videos"
           : "documents";
 
-  const safeOriginalFilename = sanitizePathSegment(input.originalFilename || "");
+  const safeOriginalFilename = sanitizePathSegment(
+    input.originalFilename || "",
+  );
   const filename = safeOriginalFilename
     ? `${Date.now()}-${safeOriginalFilename}`
     : `${Date.now()}-${input.mediaId}.${extension}`;
@@ -567,19 +608,22 @@ const upsertIncomingMessage = async (
   });
 
   const expectedUnread = (conversation.unread ?? 0) + 1;
-  const { data: updatedConversation, error: updateConversationError } = await supabase
-    .from("conversations")
-    .update({
-      preview,
-      unread: expectedUnread,
-      updated_at: timestamp,
-      last_message_at: timestamp,
-      wa_phone_number_id: phoneNumberId,
-      customer_phone: from,
-    })
-    .eq("id", conversation.id)
-    .select("id, unread, preview, updated_at, last_message_at, customer_phone")
-    .single();
+  const { data: updatedConversation, error: updateConversationError } =
+    await supabase
+      .from("conversations")
+      .update({
+        preview,
+        unread: expectedUnread,
+        updated_at: timestamp,
+        last_message_at: timestamp,
+        wa_phone_number_id: phoneNumberId,
+        customer_phone: from,
+      })
+      .eq("id", conversation.id)
+      .select(
+        "id, unread, preview, updated_at, last_message_at, customer_phone",
+      )
+      .single();
 
   if (updateConversationError) throw updateConversationError;
   console.log(`${WEBHOOK_LOG_PREFIX} conversation_updated_after_message`, {
@@ -697,7 +741,9 @@ export async function POST(req: NextRequest) {
       const metadata = value.metadata;
       const normalizedFrom = normalizePhone(message.from || "");
       const messageId = String(message.id || "").trim();
-      const messageType = String(message.type || "").trim() as SupportedIncomingMessageType;
+      const messageType = String(
+        message.type || "",
+      ).trim() as SupportedIncomingMessageType;
       requestSummary.messageType = messageType || null;
       requestSummary.messageId = messageId || null;
       const waName = contact?.profile?.name || null;
@@ -780,7 +826,8 @@ export async function POST(req: NextRequest) {
       } else if (messageType === "document") {
         mediaId = String(message.document?.id || "").trim() || null;
         caption = String(message.document?.caption || "").trim() || null;
-        const filename = String(message.document?.filename || "").trim() || null;
+        const filename =
+          String(message.document?.filename || "").trim() || null;
         mimeType = String(message.document?.mime_type || "").trim() || null;
         mediaType = "document";
         incomingMetadata = filename ? { filename } : null;
@@ -797,7 +844,8 @@ export async function POST(req: NextRequest) {
             ? message.location.longitude
             : null;
         locationName = String(message.location?.name || "").trim() || null;
-        locationAddress = String(message.location?.address || "").trim() || null;
+        locationAddress =
+          String(message.location?.address || "").trim() || null;
         content = locationName || locationAddress || "Ubicación compartida";
         preview = "Ubicación compartida";
       }
@@ -882,17 +930,33 @@ export async function POST(req: NextRequest) {
           } else if (route.engine === "gemini") {
             // Zero Make calls in Gemini mode (text + media + later statuses).
             if (messageType === "text") {
-              void replyToConversationWithGemini(supabase, {
-                conversationId: messageResult.conversationId,
-                triggerMessageId: messageResult.dbMessageId,
-              })
-                .then((result) => {
+              const conversationIdForGemini = messageResult.conversationId;
+              const dbMessageIdForGemini = messageResult.dbMessageId;
+
+              console.log(`${WEBHOOK_LOG_PREFIX} gemini_reply_scheduled`, {
+                messageId,
+                conversationId: conversationIdForGemini,
+              });
+
+              // FIX: antes esto era `void promise.then().catch()` (fire-and-forget).
+              // En runtimes serverless, la instancia de la función puede
+              // congelarse/matarse apenas se devuelve el NextResponse de más abajo,
+              // cortando esta promesa antes de que sus callbacks (y sus console.log)
+              // lleguen a ejecutarse. `after()` mantiene viva la invocación hasta
+              // que este callback termine, sin retrasar la respuesta a Meta.
+              after(async () => {
+                try {
+                  const result = await replyToConversationWithGemini(supabase, {
+                    conversationId: conversationIdForGemini,
+                    triggerMessageId: dbMessageIdForGemini,
+                  });
+
                   if (!result.ok) {
                     console.error(
                       `${WEBHOOK_LOG_PREFIX} gemini_reply_no_response`,
                       {
                         messageId,
-                        conversationId: messageResult.conversationId,
+                        conversationId: conversationIdForGemini,
                         skipped: result.skipped ?? false,
                         reason: result.reason,
                         willReplyToClient: false,
@@ -903,22 +967,22 @@ export async function POST(req: NextRequest) {
 
                   console.log(`${WEBHOOK_LOG_PREFIX} gemini_reply_ok`, {
                     messageId,
-                    conversationId: messageResult.conversationId,
+                    conversationId: conversationIdForGemini,
                     action: result.action ?? null,
                     reason: result.reason,
                     dbMessageId: result.messageId ?? null,
                     willReplyToClient: true,
                   });
-                })
-                .catch((error) => {
+                } catch (error) {
                   console.error(`${WEBHOOK_LOG_PREFIX} gemini_reply_failed`, {
                     messageId,
-                    conversationId: messageResult.conversationId,
+                    conversationId: conversationIdForGemini,
                     error:
                       error instanceof Error ? error.message : "unknown_error",
                     willReplyToClient: false,
                   });
-                });
+                }
+              });
             } else {
               console.warn(`${WEBHOOK_LOG_PREFIX} gemini_media_no_reply`, {
                 messageId,
@@ -1043,7 +1107,10 @@ export async function POST(req: NextRequest) {
           .eq("wa_message_id", waMessageId);
 
         if (statusUpdateError) {
-          console.error(`${WEBHOOK_LOG_PREFIX} status_update_failed`, statusUpdateError);
+          console.error(
+            `${WEBHOOK_LOG_PREFIX} status_update_failed`,
+            statusUpdateError,
+          );
           requestSummary.saved = false;
           requestSummary.reason = "status_update_failed";
         } else {
@@ -1113,7 +1180,10 @@ export async function POST(req: NextRequest) {
     console.log(`${WEBHOOK_LOG_PREFIX} request_completed`, requestSummary);
     return new NextResponse("OK", { status: 200 });
   } catch (error) {
-    console.error(`${WEBHOOK_LOG_PREFIX} request_summary_on_error`, requestSummary);
+    console.error(
+      `${WEBHOOK_LOG_PREFIX} request_summary_on_error`,
+      requestSummary,
+    );
     console.error(`${WEBHOOK_LOG_PREFIX} request_failed`, error);
     return new NextResponse("Error", { status: 500 });
   }
