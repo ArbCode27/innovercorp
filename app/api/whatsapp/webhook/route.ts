@@ -885,19 +885,47 @@ export async function POST(req: NextRequest) {
               void replyToConversationWithGemini(supabase, {
                 conversationId: messageResult.conversationId,
                 triggerMessageId: messageResult.dbMessageId,
-              }).catch((error) => {
-                console.error(`${WEBHOOK_LOG_PREFIX} gemini_reply_failed`, {
-                  messageId,
-                  conversationId: messageResult.conversationId,
-                  error:
-                    error instanceof Error ? error.message : "unknown_error",
+              })
+                .then((result) => {
+                  if (!result.ok) {
+                    console.error(
+                      `${WEBHOOK_LOG_PREFIX} gemini_reply_no_response`,
+                      {
+                        messageId,
+                        conversationId: messageResult.conversationId,
+                        skipped: result.skipped ?? false,
+                        reason: result.reason,
+                        willReplyToClient: false,
+                      },
+                    );
+                    return;
+                  }
+
+                  console.log(`${WEBHOOK_LOG_PREFIX} gemini_reply_ok`, {
+                    messageId,
+                    conversationId: messageResult.conversationId,
+                    action: result.action ?? null,
+                    reason: result.reason,
+                    dbMessageId: result.messageId ?? null,
+                    willReplyToClient: true,
+                  });
+                })
+                .catch((error) => {
+                  console.error(`${WEBHOOK_LOG_PREFIX} gemini_reply_failed`, {
+                    messageId,
+                    conversationId: messageResult.conversationId,
+                    error:
+                      error instanceof Error ? error.message : "unknown_error",
+                    willReplyToClient: false,
+                  });
                 });
-              });
             } else {
-              console.log(`${WEBHOOK_LOG_PREFIX} gemini_media_skipped_no_make`, {
+              console.warn(`${WEBHOOK_LOG_PREFIX} gemini_media_no_reply`, {
                 messageId,
                 conversationId: messageResult.conversationId,
                 messageType,
+                reason: "gemini_v1_text_only",
+                willReplyToClient: false,
               });
             }
           } else if (route.allowMake && MAKE_WEBHOOK_URL) {

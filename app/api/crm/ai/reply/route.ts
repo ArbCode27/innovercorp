@@ -45,9 +45,30 @@ export async function POST(req: NextRequest) {
       triggerMessageId: payload.data.message_id ?? null,
     });
 
+    if (!result.ok) {
+      console.error(`${LOG_PREFIX} gemini_no_reply`, {
+        conversationId: payload.data.conversation_id,
+        messageId: payload.data.message_id ?? null,
+        skipped: result.skipped ?? false,
+        reason: result.reason,
+        willReplyToClient: false,
+      });
+    } else {
+      console.log(`${LOG_PREFIX} gemini_ok`, {
+        conversationId: payload.data.conversation_id,
+        action: result.action ?? null,
+        reason: result.reason,
+        messageId: result.messageId ?? null,
+        willReplyToClient: true,
+      });
+    }
+
     return NextResponse.json(result);
   } catch (error) {
-    console.error(`${LOG_PREFIX} unexpected_error`, error);
+    console.error(`${LOG_PREFIX} unexpected_error`, {
+      error: error instanceof Error ? error.message : "unknown_error",
+      willReplyToClient: false,
+    });
     return NextResponse.json(
       {
         error:

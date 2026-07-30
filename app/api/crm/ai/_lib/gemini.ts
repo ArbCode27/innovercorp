@@ -10,6 +10,7 @@ type GeminiContent = {
   parts: GeminiContentPart[];
 };
 
+const LOG_PREFIX = "[GEMINI]";
 const DEFAULT_MODEL = "gemini-2.0-flash";
 
 export const getGeminiApiKey = () => {
@@ -30,15 +31,24 @@ export const generateGeminiText = async (input: {
 }): Promise<GeminiGenerateResult> => {
   const apiKey = getGeminiApiKey();
   if (!apiKey) {
+    console.error(`${LOG_PREFIX} missing_api_key`, {
+      hint: "Configura GEMINI_API_KEY en .env y reinicia el servidor",
+    });
     throw new Error("GEMINI_API_KEY no está configurada en el servidor");
   }
 
   const model = (input.model || DEFAULT_MODEL).trim() || DEFAULT_MODEL;
   const controller = new AbortController();
-  const timeout = setTimeout(
-    () => controller.abort(),
-    input.timeoutMs ?? 15000,
-  );
+  const timeoutMs = input.timeoutMs ?? 15000;
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  console.log(`${LOG_PREFIX} request_started`, {
+    model,
+    contentsCount: input.contents.length,
+    timeoutMs,
+    apiKeyPresent: true,
+    apiKeyPrefix: `${apiKey.slice(0, 6)}...`,
+  });
 
   try {
     const response = await fetch(
@@ -64,7 +74,7 @@ export const generateGeminiText = async (input: {
     );
 
     const raw = await response.json();
-    console.log("[GEMINI] raw_response", {
+    console.log(`${LOG_PREFIX} raw_response`, {
       model,
       ok: response.ok,
       status: response.status,
@@ -75,6 +85,13 @@ export const generateGeminiText = async (input: {
       const message =
         raw?.error?.message ||
         `Gemini respondió con estado ${response.status}`;
+      console.error(`${LOG_PREFIX} api_error`, {
+        model,
+        status: response.status,
+        code: raw?.error?.code ?? null,
+        statusText: raw?.error?.status ?? null,
+        message,
+      });
       throw new Error(message);
     }
 
@@ -84,13 +101,45 @@ export const generateGeminiText = async (input: {
         .join("") || "",
     ).trim();
 
-    console.log("[GEMINI] text_response", { model, text });
+    const finishReason = raw?.candidates?.[0]?.finishReason ?? null;
+    console.log(`${LOG_PREFIX} text_response`, {
+      model,
+      text,
+      finishReason,
+      hasText: Boolean(text),
+    });
 
     if (!text) {
+      console.error(`${LOG_PREFIX} empty_text`, {
+        model,
+        finishReason,
+        candidates: raw?.candidates ?? null,
+      });
       throw new Error("Gemini no devolvió texto útil");
     }
 
     return { text, raw };
+  } catch (error) {
+    const isAbort =
+      error instanceof Error &&
+      (error.name === "AbortError" ||
+        error.message.toLowerCase().includes("abort"));
+
+    console.error(`${LOG_PREFIX} request_failed`, {
+      model,
+      isTimeout: isAbort,
+      timeoutMs,
+      error: error instanceof Error ? error.message : "unknown_error",
+      name: error instanceof Error ? error.name : typeof error,
+    });
+
+    if (isAbort) {
+      throw new Error(
+        `Gemini timeout: no respondió en ${timeoutMs}ms (modelo ${model})`,
+      );
+    }
+
+    throw error;
   } finally {
     clearTimeout(timeout);
   }
@@ -130,8 +179,13 @@ export const parseGeminiReplyDecision = (
         "Un asesor de nuestro equipo continuará contigo en breve.",
       reason: parsed.reason ? String(parsed.reason) : undefined,
     };
-  } catch {
-    // Fallback: treat plain text as a reply unless handoff keywords appear.
+  } catch (parseError) {
+    console.warn(`${LOG_PREFIX} decision_parse_fallback`, {
+      parseError:
+        parseError instanceof Error ? parseError.message : "parse_failed",
+      rawTextPreview: trimmed.slice(0, 280),
+    });
+
     const lower = trimmed.toLowerCase();
     const wantsHandoff =
       lower.includes("asesor") &&
