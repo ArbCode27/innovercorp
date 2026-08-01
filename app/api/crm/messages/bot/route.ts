@@ -72,6 +72,98 @@ const isDuplicateError = (error: unknown) =>
       String((error as { code?: string }).code) === "23505",
   );
 
+type PhoneMatchKind = "customer_phone" | "whatsapp_id" | "client_phone" | "none";
+
+type PhoneValidationResult = {
+  match: PhoneMatchKind;
+  customerPhone: string | null;
+  whatsappId: string | null;
+  clientPhone: string | null;
+  warnings: string[];
+  shouldBackfillCustomerPhone: boolean;
+};
+
+/**
+ * Phone mismatch must never block bot message registration.
+ * Trust conversation_id + human_mode; WhatsApp customer_phone is preferred.
+ */
+const resolvePhoneValidation = (input: {
+  from: string;
+  customerPhone: string | null | undefined;
+  whatsappId: string | null | undefined;
+  clientPhone: string | null | undefined;
+}): PhoneValidationResult => {
+  const customerPhone = input.customerPhone
+    ? normalizeWhatsAppPhone(input.customerPhone)
+    : null;
+  const whatsappId = input.whatsappId
+    ? normalizeWhatsAppPhone(input.whatsappId)
+    : null;
+  const clientPhone = input.clientPhone
+    ? normalizeWhatsAppPhone(input.clientPhone)
+    : null;
+  const warnings: string[] = [];
+
+  if (customerPhone && customerPhone === input.from) {
+    return {
+      match: "customer_phone",
+      customerPhone,
+      whatsappId,
+      clientPhone,
+      warnings,
+      shouldBackfillCustomerPhone: false,
+    };
+  }
+
+  if (whatsappId && whatsappId === input.from) {
+    if (customerPhone && customerPhone !== input.from) {
+      warnings.push("phone_match_whatsapp_id_customer_phone_differs");
+    }
+    return {
+      match: "whatsapp_id",
+      customerPhone,
+      whatsappId,
+      clientPhone,
+      warnings,
+      shouldBackfillCustomerPhone: !customerPhone,
+    };
+  }
+
+  if (clientPhone && clientPhone === input.from) {
+    warnings.push("phone_match_wispro_only");
+    return {
+      match: "client_phone",
+      customerPhone,
+      whatsappId,
+      clientPhone,
+      warnings,
+      shouldBackfillCustomerPhone: !customerPhone,
+    };
+  }
+
+  if (!customerPhone && !whatsappId && !clientPhone) {
+    warnings.push("phone_missing_backfill_from");
+    return {
+      match: "none",
+      customerPhone,
+      whatsappId,
+      clientPhone,
+      warnings,
+      shouldBackfillCustomerPhone: true,
+    };
+  }
+
+  warnings.push("phone_mismatch_allowed");
+  return {
+    match: "none",
+    customerPhone,
+    whatsappId,
+    clientPhone,
+    warnings,
+    shouldBackfillCustomerPhone: !customerPhone,
+  };
+};
+
 export async function POST(req: NextRequest) {
   try {
     const parsedPayload = payloadSchema.safeParse(await req.json());
@@ -174,13 +266,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const knownPhones: string[] = [];
-    if (conversation.customer_phone) {
-      knownPhones.push(normalizeWhatsAppPhone(conversation.customer_phone));
-    }
-
+    let client: DbClient | null = null;
     if (conversation.client_id) {
-      const { data: client, error: clientError } = await supabase
+      const { data: clientRow, error: clientError } = await supabase
         .from("clients")
         .select("id, phone, whatsapp_id")
         .eq("id", conversation.client_id)
@@ -188,35 +276,40 @@ export async function POST(req: NextRequest) {
 
       if (clientError) {
         console.error(`${LOG_PREFIX} client_lookup_failed`, clientError);
-        return NextResponse.json(
-          { error: "No se pudo validar el cliente de la conversación" },
-          { status: 500 },
-        );
-      }
-
-      if (client?.whatsapp_id) {
-        knownPhones.push(normalizeWhatsAppPhone(client.whatsapp_id));
-      }
-      if (client?.phone) {
-        knownPhones.push(normalizeWhatsAppPhone(client.phone));
+        // Do not block bot registration on client lookup failure.
+      } else {
+        client = clientRow;
       }
     }
 
-    const uniqueKnownPhones = [...new Set(knownPhones.filter(Boolean))];
-    if (
-      uniqueKnownPhones.length > 0 &&
-      !uniqueKnownPhones.includes(normalizedFrom)
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            "El número from no coincide con el contacto de la conversación",
-        },
-        { status: 400 },
-      );
+    const phoneValidation = resolvePhoneValidation({
+      from: normalizedFrom,
+      customerPhone: conversation.customer_phone,
+      whatsappId: client?.whatsapp_id,
+      clientPhone: client?.phone,
+    });
+
+    if (phoneValidation.warnings.length > 0) {
+      console.warn(`${LOG_PREFIX} phone_validation_warning`, {
+        conversationId: conversation_id,
+        clientId: conversation.client_id,
+        from: normalizedFrom,
+        match: phoneValidation.match,
+        customerPhone: phoneValidation.customerPhone,
+        whatsappId: phoneValidation.whatsappId,
+        clientPhone: phoneValidation.clientPhone,
+        warnings: phoneValidation.warnings,
+      });
+    } else {
+      console.log(`${LOG_PREFIX} phone_validation_ok`, {
+        conversationId: conversation_id,
+        from: normalizedFrom,
+        match: phoneValidation.match,
+      });
     }
 
-    if (uniqueKnownPhones.length === 0) {
+    // Backfill WhatsApp contact phone only when missing. Never overwrite Wispro phone.
+    if (phoneValidation.shouldBackfillCustomerPhone) {
       const { error: backfillError } = await supabase
         .from("conversations")
         .update({
@@ -226,37 +319,35 @@ export async function POST(req: NextRequest) {
         .eq("id", conversation_id);
 
       if (backfillError) {
-        console.error(`${LOG_PREFIX} customer_phone_backfill_failed`, backfillError);
-        return NextResponse.json(
-          {
-            error:
-              "La conversación no tiene un teléfono de contacto para validar el mensaje",
-          },
-          { status: 400 },
-        );
+        console.error(`${LOG_PREFIX} customer_phone_backfill_failed`, {
+          conversationId: conversation_id,
+          from: normalizedFrom,
+          error: backfillError,
+        });
+        // Continue anyway: conversation_id is already trusted.
+      } else {
+        console.log(`${LOG_PREFIX} customer_phone_backfilled`, {
+          conversationId: conversation_id,
+          from: normalizedFrom,
+        });
       }
 
-      if (conversation.client_id) {
+      if (conversation.client_id && !phoneValidation.whatsappId) {
         const { error: clientBackfillError } = await supabase
           .from("clients")
           .update({
-            phone: normalizedFrom,
             whatsapp_id: normalizedFrom,
           })
           .eq("id", conversation.client_id);
 
         if (clientBackfillError) {
-          console.error(
-            `${LOG_PREFIX} client_phone_backfill_failed`,
-            clientBackfillError,
-          );
+          console.error(`${LOG_PREFIX} client_whatsapp_backfill_failed`, {
+            clientId: conversation.client_id,
+            from: normalizedFrom,
+            error: clientBackfillError,
+          });
         }
       }
-
-      console.log(`${LOG_PREFIX} customer_phone_backfilled`, {
-        conversationId: conversation_id,
-        from: normalizedFrom,
-      });
     }
 
     const now = new Date().toISOString();
@@ -334,6 +425,8 @@ export async function POST(req: NextRequest) {
       messageId: savedMessage.id,
       conversationId: conversation_id,
       waMessageId: wa_message_id,
+      phoneMatch: phoneValidation.match,
+      warnings: phoneValidation.warnings,
     });
 
     return NextResponse.json({
@@ -342,6 +435,8 @@ export async function POST(req: NextRequest) {
       message_id: savedMessage.id,
       conversation_id,
       wa_message_id,
+      phone_match: phoneValidation.match,
+      warnings: phoneValidation.warnings,
     });
   } catch (error) {
     if (
