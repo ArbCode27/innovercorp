@@ -7,6 +7,8 @@ import { crmService } from "../_lib/crm-service";
 import {
   filterConversations,
   getConversationFilterCounts,
+  matchesConversationLabel,
+  matchesConversationSearch,
 } from "../_lib/conversation-filter-utils";
 import { resolveRecipientPhone } from "../_lib/conversation-recipient";
 import {
@@ -85,6 +87,9 @@ export const useCrmData = (agent: Agent | null) => {
   const [myAssignedSearchTerm, setMyAssignedSearchTerm] = useState("");
   const [myAssignedIncludeResolved, setMyAssignedIncludeResolved] =
     useState(false);
+  const [myAssignedSelectedLabelId, setMyAssignedSelectedLabelId] = useState<
+    number | null
+  >(null);
   const [wisproSnapshotsByClientId, setWisproSnapshotsByClientId] = useState<
     Record<number, WisproCustomer>
   >({});
@@ -332,36 +337,34 @@ export const useCrmData = (agent: Agent | null) => {
   }, [agent, data.conversations]);
 
   const filteredMyAssignedConversations = useMemo(() => {
-    const query = myAssignedSearchTerm.trim().toLowerCase();
-
     return sortConversationsForInbox(
       myAssignedConversations.filter((conversation) => {
-      if (
-        !myAssignedIncludeResolved &&
-        conversation.status === "resuelto"
-      ) {
-        return false;
-      }
+        if (
+          !myAssignedIncludeResolved &&
+          conversation.status === "resuelto"
+        ) {
+          return false;
+        }
 
-      const client = data.clients.find(
-        (item) => item.id === conversation.client_id,
-      );
-      const name = client?.name || "Número desconocido";
+        if (
+          !matchesConversationLabel(conversation, myAssignedSelectedLabelId)
+        ) {
+          return false;
+        }
 
-      if (!query) return true;
-
-      return (
-        name.toLowerCase().includes(query) ||
-        (client?.phone || "").toLowerCase().includes(query) ||
-        (client?.whatsapp_id || "").toLowerCase().includes(query)
-      );
-    }),
+        return matchesConversationSearch(
+          conversation,
+          clientsById,
+          myAssignedSearchTerm,
+        );
+      }),
     );
   }, [
-    data.clients,
+    clientsById,
     myAssignedConversations,
     myAssignedIncludeResolved,
     myAssignedSearchTerm,
+    myAssignedSelectedLabelId,
   ]);
 
   const myActiveAssignedCount = useMemo(
@@ -1042,8 +1045,10 @@ export const useCrmData = (agent: Agent | null) => {
     myActiveAssignedCount,
     myAssignedSearchTerm,
     myAssignedIncludeResolved,
+    myAssignedSelectedLabelId,
     setMyAssignedSearchTerm,
     setMyAssignedIncludeResolved,
+    setMyAssignedSelectedLabelId,
     clientsById,
     labelsById,
     ticketsByClientId,

@@ -42,8 +42,10 @@ interface MyConversationsViewProps {
   isResolvingConversation?: boolean;
   searchTerm: string;
   includeResolved: boolean;
+  selectedLabelId: number | null;
   onSearchChange: (value: string) => void;
   onIncludeResolvedChange: (value: boolean) => void;
+  onLabelFilterChange: (value: number | null) => void;
   onSelectConversation: (id: number | null) => void;
   onSendMessage: (content: string) => Promise<void>;
   onSendVoiceNote: (
@@ -86,8 +88,10 @@ export const MyConversationsView = ({
   isResolvingConversation,
   searchTerm,
   includeResolved,
+  selectedLabelId,
   onSearchChange,
   onIncludeResolvedChange,
+  onLabelFilterChange,
   onSelectConversation,
   onSendMessage,
   onSendVoiceNote,
@@ -111,9 +115,11 @@ export const MyConversationsView = ({
       ? ticketsByClientId.get(selectedConversation.client_id) || []
       : [];
 
-  const activeCount = assignedConversations.filter(
-    (conversation) => conversation.status !== "resuelto",
-  ).length;
+  const scopeConversations = includeResolved
+    ? assignedConversations
+    : assignedConversations.filter(
+        (conversation) => conversation.status !== "resuelto",
+      );
   const isConversationOpen = selectedConversationId !== null;
 
   return (
@@ -133,19 +139,20 @@ export const MyConversationsView = ({
             </div>
           </div>
           <p className={`mt-1 text-xs ${CRM_SURFACES.textMuted}`}>
-            {filteredConversations.length} de {assignedConversations.length}{" "}
-            asignadas
-            {!includeResolved && activeCount !== assignedConversations.length
-              ? ` · ${activeCount} activas`
-              : ""}
+            {filteredConversations.length} de {scopeConversations.length}{" "}
+            {includeResolved ? "asignadas" : "activas"}
+            {selectedLabelId !== null ? " · filtro de etiqueta" : ""}
           </p>
         </div>
 
         <MyConversationsFilters
           searchTerm={searchTerm}
           includeResolved={includeResolved}
+          labels={labels}
+          selectedLabelId={selectedLabelId}
           onSearchChange={onSearchChange}
           onIncludeResolvedChange={onIncludeResolvedChange}
+          onLabelChange={onLabelFilterChange}
         />
 
         {assignedConversations.length ? (

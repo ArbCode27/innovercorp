@@ -3,21 +3,29 @@
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { CRM_FOCUS_RING, CRM_SURFACES } from "../../_lib/crm-theme";
+import { CRM_SURFACES } from "../../_lib/crm-theme";
+import type { Label } from "../../_lib/types";
 import { CrmFilterChip } from "../shared/crm-filter-chip";
+import { ConversationLabelFilter } from "./conversation-label-filter";
 
 interface MyConversationsFiltersProps {
   searchTerm: string;
   includeResolved: boolean;
+  labels: Label[];
+  selectedLabelId: number | null;
   onSearchChange: (value: string) => void;
   onIncludeResolvedChange: (value: boolean) => void;
+  onLabelChange: (value: number | null) => void;
 }
 
 export const MyConversationsFilters = ({
   searchTerm,
   includeResolved,
+  labels,
+  selectedLabelId,
   onSearchChange,
   onIncludeResolvedChange,
+  onLabelChange,
 }: MyConversationsFiltersProps) => (
   <div className={`space-y-3 border-b p-4 ${CRM_SURFACES.border}`}>
     <div>
@@ -57,5 +65,11 @@ export const MyConversationsFilters = ({
         onClick={() => onIncludeResolvedChange(true)}
       />
     </div>
+
+    <ConversationLabelFilter
+      labels={labels}
+      selectedLabelId={selectedLabelId}
+      onLabelChange={onLabelChange}
+    />
   </div>
 );

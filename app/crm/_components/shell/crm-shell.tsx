@@ -126,8 +126,10 @@ export const CrmShell = () => {
                 isResolvingConversation={crm.isResolvingConversation}
                 searchTerm={crm.myAssignedSearchTerm}
                 includeResolved={crm.myAssignedIncludeResolved}
+                selectedLabelId={crm.myAssignedSelectedLabelId}
                 onSearchChange={crm.setMyAssignedSearchTerm}
                 onIncludeResolvedChange={crm.setMyAssignedIncludeResolved}
+                onLabelFilterChange={crm.setMyAssignedSelectedLabelId}
                 onSelectConversation={crm.selectConversation}
                 onSendMessage={crm.sendMessage}
                 onSendVoiceNote={crm.sendVoiceNote}
