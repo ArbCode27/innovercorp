@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { parseWisproSearchResults } from "@/app/crm/_lib/wispro-webhook";
+import {
+  searchWisproByCedula,
+  WisproApiError,
+} from "@/app/api/crm/_lib/wispro-api";
+
+const LOG_PREFIX = "[WISPRO_SEARCH]";
 
 const searchSchema = z.object({
   cedula: z
@@ -10,16 +15,6 @@ const searchSchema = z.object({
     .max(12, "La cédula no puede superar 12 dígitos")
     .regex(/^\d+$/, "La cédula solo puede contener números"),
 });
-
-const getServerEnv = (key: string) => {
-  const value = process.env[key];
-
-  if (!value) {
-    throw new Error(`Missing environment variable: ${key}`);
-  }
-
-  return value;
-};
 
 export async function POST(req: NextRequest) {
   try {
@@ -32,62 +27,22 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { cedula } = payload.data;
-    const proxyUrl = getServerEnv("WISPRO_PROXY_URL");
+    const results = await searchWisproByCedula(payload.data.cedula);
 
-    const proxyResponse = await fetch(proxyUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cedula }),
-    });
-
-    if (!proxyResponse.ok) {
-      console.error("Wispro proxy error:", proxyResponse.status);
-      return NextResponse.json(
-        { error: "No se pudo consultar Wispro. Intenta de nuevo." },
-        { status: 502 },
-      );
-    }
-
-    const rawBody = await proxyResponse.text();
-    console.log("[Wispro webhook] respuesta literal del webhook:", rawBody);
-
-    let proxyData: unknown;
-    try {
-      proxyData = JSON.parse(rawBody);
-    } catch {
-      console.error("[Wispro webhook] la respuesta no es JSON válido");
-      return NextResponse.json(
-        { error: "La respuesta de Wispro no es válida" },
-        { status: 502 },
-      );
-    }
-
-    const results = parseWisproSearchResults(proxyData, {
-      fallbackCedula: cedula,
-    });
-
-    console.log(
-      "[Wispro webhook] resultados normalizados:",
-      results.length,
-      results,
-    );
-
-    return NextResponse.json({
-      data: results,
-      webhookRaw: rawBody,
-      webhookParsed: proxyData,
-    });
+    return NextResponse.json({ data: results });
   } catch (error) {
-    if (error instanceof Error && error.message.startsWith("Missing environment")) {
-      console.error(error.message);
+    if (error instanceof WisproApiError) {
+      console.error(`${LOG_PREFIX} wispro_error`, {
+        code: error.code,
+        message: error.message,
+      });
       return NextResponse.json(
-        { error: "Integración Wispro no configurada en el servidor" },
-        { status: 503 },
+        { error: error.message },
+        { status: error.status },
       );
     }
 
-    console.error("Wispro search error:", error);
+    console.error(`${LOG_PREFIX} unexpected_error`, error);
     return NextResponse.json(
       { error: "Error interno al consultar Wispro" },
       { status: 500 },

@@ -4,13 +4,6 @@ import type {
   WisproSearchResult,
 } from "./types";
 
-interface WisproSearchPayload {
-  data?: WisproSearchResult[];
-  webhookRaw?: string;
-  webhookParsed?: unknown;
-  error?: string;
-}
-
 interface WisproApiPayload {
   data?: WisproSearchResult[];
   client?: Client;
@@ -29,14 +22,11 @@ export const wisproService = {
       body: JSON.stringify({ cedula }),
     });
 
-    const payload = (await response.json()) as WisproSearchPayload;
+    const payload = (await response.json()) as WisproApiPayload;
 
     if (!response.ok) {
       parseApiError(payload, "Error al consultar Wispro");
     }
-
-    console.log("[Wispro webhook] respuesta literal del webhook:", payload.webhookRaw);
-    console.log("[Wispro webhook] respuesta parseada (sin transformar):", payload.webhookParsed);
 
     return payload.data || [];
   },
