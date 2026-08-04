@@ -35,6 +35,11 @@ export const escalateHumanArgsSchema = z.object({
     .min(3, "reason debe tener al menos 3 caracteres")
     .max(500, "reason es demasiado largo"),
   message: z.string().trim().max(4096).optional().nullable(),
+  /**
+   * support → etiqueta Soporte + handoff al cerrar diagnóstico.
+   * general → handoff sin etiqueta de soporte (cliente pide humano, etc.).
+   */
+  category: z.enum(["support", "general"]).optional().default("general"),
 });
 
 const optionalAmountSchema = z
@@ -159,7 +164,7 @@ export const GEMINI_TOOL_DECLARATIONS = [
   {
     name: ESCALATE_HUMAN_TOOL,
     description:
-      "Escala a un asesor humano. NO la uses solo porque llegó un comprobante. Para pagos, el handoff ocurre automáticamente después de submit_payment_receipt (éxito o error). Úsala si el cliente pide humano u otro caso grave no relacionado al registro del pago.",
+      "Escala a un asesor humano. NO la uses solo porque llegó un comprobante. Para pagos, el handoff ocurre automáticamente después de submit_payment_receipt. En soporte técnico: cuando termines el diagnóstico y des el resumen al cliente, llama esta tool con category=support (el sistema etiqueta Soporte y hace handoff). Para pedido de humano u otros casos usa category=general.",
     parameters: {
       type: "object",
       properties: {
@@ -169,10 +174,17 @@ export const GEMINI_TOOL_DECLARATIONS = [
         },
         message: {
           type: "string",
-          description: "Mensaje opcional para el cliente.",
+          description:
+            "Mensaje para el cliente (en soporte: incluye el resumen breve del caso).",
+        },
+        category: {
+          type: "string",
+          enum: ["support", "general"],
+          description:
+            "support = cierre de caso técnico documentado. general = cliente pide humano u otro motivo.",
         },
       },
-      required: ["reason"],
+      required: ["reason", "category"],
     },
   },
 ] as const;
@@ -180,8 +192,8 @@ export const GEMINI_TOOL_DECLARATIONS = [
 export const GEMINI_TOOLS_CONTRACT_PROMPT = `Herramientas disponibles (obligatorio respetar):
 1) lookup_wispro_by_cedula — cuando el usuario entregue su cédula de abonado.
 2) link_wispro_client — opcional; no bloquea pagos.
-3) submit_payment_receipt — registrar comprobante (requiere lookup previo). amount y transaction_code como texto.
-4) escalate_to_human — solo si el cliente pide humano u otro caso grave. NO al solo recibir un comprobante.
+3) submit_payment_receipt — registrar comprobante (requiere lookup previo). amount y transaction_code como texto. Tras éxito o error el sistema etiqueta "Verificar pago" y hace handoff.
+4) escalate_to_human — handoff a humano. category=support al cerrar diagnóstico técnico (con resumen). category=general si el cliente pide humano. NO al solo recibir un comprobante.
 
 Flujo obligatorio de pagos:
 1) Si llega imagen de comprobante SIN cédula: analiza la imagen y PIDE la cédula. No hagas handoff.
@@ -189,6 +201,12 @@ Flujo obligatorio de pagos:
 3) Luego submit_payment_receipt con monto/referencia/banco del comprobante.
 4) El sistema hará handoff automático tras el POST (éxito o error). Tú solo confirma al cliente según el resultado de la tool.
 5) Nunca digas que el pago está aprobado; solo recibido/en revisión o que un asesor continuará.
+
+Flujo obligatorio de soporte técnico:
+1) Identifica (cédula si falta) y haz preguntas de diagnóstico breves.
+2) Cuando tengas lo necesario: resume el caso al cliente en el message de escalate_to_human.
+3) Llama escalate_to_human con category=support (el sistema etiqueta Soporte y hace handoff).
+4) No des pasos de reparación ni cierres el caso como resuelto.
 
 Reglas:
 - No inventes monto, referencia ni banco.

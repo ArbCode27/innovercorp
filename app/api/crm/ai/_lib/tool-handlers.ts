@@ -9,6 +9,7 @@ import {
   InnoverPaymentsError,
   submitInnoverPayment,
 } from "@/app/api/crm/_lib/innover-payments";
+import { ensureConversationLabel } from "@/app/api/crm/_lib/conversation-labels";
 import {
   ESCALATE_HUMAN_TOOL,
   LINK_WISPRO_TOOL,
@@ -162,6 +163,35 @@ const markHandoff = (
   ctx.escalated = true;
   ctx.escalateReason = reason;
   ctx.escalateMessage = message;
+};
+
+const applyPaymentVerificationLabel = async (ctx: AgentRunContext) => {
+  const result = await ensureConversationLabel(
+    ctx.supabase,
+    ctx.conversationId,
+    "verificar_pago",
+  );
+  return result;
+};
+
+const looksLikeSupportReason = (reason: string) => {
+  const normalized = reason
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  return (
+    normalized.includes("soporte") ||
+    normalized.includes("tecnico") ||
+    normalized.includes("falla") ||
+    normalized.includes("lentitud") ||
+    normalized.includes("intermiten") ||
+    normalized.includes("sin servicio") ||
+    normalized.includes("clave") ||
+    normalized.includes("password") ||
+    normalized.includes("wifi") ||
+    normalized.includes("router") ||
+    normalized.includes("luz roja")
+  );
 };
 
 const handleLookup = async (
@@ -429,6 +459,7 @@ const handleSubmitPaymentReceipt = async (
   if (!phoneId) {
     const message =
       "No pudimos identificar tu número de WhatsApp. Un asesor te ayudará en breve.";
+    const label = await applyPaymentVerificationLabel(ctx);
     markHandoff(ctx, "payment_missing_phone", message);
     return {
       name: SUBMIT_PAYMENT_RECEIPT_TOOL,
@@ -437,6 +468,8 @@ const handleSubmitPaymentReceipt = async (
         ok: false,
         error: "No hay phone_id WhatsApp para este chat",
         should_handoff: true,
+        label_applied: label.applied,
+        label_id: label.labelId,
       },
       stopAgent: true,
       shouldHandoff: true,
@@ -467,6 +500,7 @@ const handleSubmitPaymentReceipt = async (
   if (existingMetadata.payment_submitted === true) {
     const message =
       "Tu comprobante ya fue registrado. Un asesor lo verificará en breve.";
+    const label = await applyPaymentVerificationLabel(ctx);
     markHandoff(ctx, "payment_already_submitted", message);
     return {
       name: SUBMIT_PAYMENT_RECEIPT_TOOL,
@@ -476,6 +510,8 @@ const handleSubmitPaymentReceipt = async (
         alreadyProcessed: true,
         message_id: receiptMessage?.id ?? null,
         should_handoff: true,
+        label_applied: label.applied,
+        label_id: label.labelId,
         hint: message,
       },
       stopAgent: true,
@@ -525,6 +561,7 @@ const handleSubmitPaymentReceipt = async (
 
     const message =
       "Registramos tu comprobante de pago. Un asesor lo verificará en breve.";
+    const label = await applyPaymentVerificationLabel(ctx);
     markHandoff(ctx, "payment_submitted", message);
 
     return {
@@ -542,6 +579,8 @@ const handleSubmitPaymentReceipt = async (
         bank: payload.bank,
         name: payload.name,
         cedula: payload.cedula,
+        label_applied: label.applied,
+        label_id: label.labelId,
         hint: message,
       },
       stopAgent: true,
@@ -575,6 +614,7 @@ const handleSubmitPaymentReceipt = async (
 
     const message =
       "No pudimos registrar tu pago automáticamente. Un asesor te atenderá en breve.";
+    const label = await applyPaymentVerificationLabel(ctx);
     markHandoff(ctx, "payment_api_error", message);
 
     return {
@@ -586,6 +626,8 @@ const handleSubmitPaymentReceipt = async (
         should_handoff: true,
         api_status:
           error instanceof InnoverPaymentsError ? error.status : null,
+        label_applied: label.applied,
+        label_id: label.labelId,
         hint: message,
       },
       stopAgent: true,
@@ -596,10 +638,10 @@ const handleSubmitPaymentReceipt = async (
   }
 };
 
-const handleEscalate = (
+const handleEscalate = async (
   ctx: AgentRunContext,
   rawArgs: unknown,
-): ToolHandlerResult => {
+): Promise<ToolHandlerResult> => {
   const parsed = escalateHumanArgsSchema.safeParse(rawArgs);
   if (!parsed.success) {
     return {
@@ -616,7 +658,27 @@ const handleEscalate = (
     parsed.data.message?.trim() ||
     "Un asesor de nuestro equipo continuará contigo en breve.";
 
-  markHandoff(ctx, parsed.data.reason, message);
+  const isSupport =
+    parsed.data.category === "support" ||
+    looksLikeSupportReason(parsed.data.reason);
+
+  let labelApplied = false;
+  let labelId: number | null = null;
+  if (isSupport) {
+    const label = await ensureConversationLabel(
+      ctx.supabase,
+      ctx.conversationId,
+      "soporte",
+    );
+    labelApplied = label.applied;
+    labelId = label.labelId;
+  }
+
+  const handoffReason = isSupport
+    ? `support:${parsed.data.reason}`
+    : parsed.data.reason;
+
+  markHandoff(ctx, handoffReason, message);
 
   return {
     name: ESCALATE_HUMAN_TOOL,
@@ -625,12 +687,15 @@ const handleEscalate = (
       ok: true,
       escalated: true,
       reason: parsed.data.reason,
+      category: isSupport ? "support" : "general",
+      label_applied: labelApplied,
+      label_id: labelId,
       message_queued: message,
     },
     stopAgent: true,
     shouldHandoff: true,
     handoffMessage: message,
-    handoffReason: parsed.data.reason,
+    handoffReason,
   };
 };
 
@@ -653,7 +718,7 @@ export const executeAgentTool = async (
       result = await handleSubmitPaymentReceipt(ctx, rawArgs);
       break;
     case ESCALATE_HUMAN_TOOL:
-      result = handleEscalate(ctx, rawArgs);
+      result = await handleEscalate(ctx, rawArgs);
       break;
     default:
       result = {

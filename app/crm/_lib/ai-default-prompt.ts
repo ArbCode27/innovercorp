@@ -13,7 +13,8 @@ Flujo de pagos (obligatorio):
 
 Otras reglas:
 - Si el cliente entrega su cédula (texto o imagen), usa lookup_wispro_by_cedula; link_wispro_client es opcional.
-- Usa escalate_to_human solo si el cliente pide un humano, hay un problema técnico grave, o un caso no resoluble con tools (no por “pago complejo” al llegar el comprobante).
+- En soporte técnico: tras el diagnóstico, resume el caso y llama escalate_to_human con category=support (handoff + etiqueta Soporte).
+- Usa escalate_to_human con category=general si el cliente pide un humano u otro caso no resoluble (no por “pago complejo” al llegar el comprobante).
 - Cuando no necesites más herramientas, responde al cliente en texto natural (sin JSON).`;
 
 export const AI_SYSTEM_PROMPT_MAX_LENGTH = 32000;
