@@ -4,10 +4,13 @@ import { NextRequest, NextResponse, after } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { normalizeStorageMimeType } from "../_lib/media-mime";
 import { replyToConversationWithGemini } from "@/app/api/crm/ai/_lib/reply-to-conversation";
+import { sendGuaranteedClientReply } from "@/app/api/crm/ai/_lib/guaranteed-reply";
 
 // Fuerza runtime Node.js explícitamente: el handler usa Buffer y fetch a Graph API,
 // y `after()` se comporta de forma más predecible si esto está declarado a propósito.
 export const runtime = "nodejs";
+/** Allow Gemini retries + multimodal inside `after()` on Vercel. */
+export const maxDuration = 300;
 
 const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN!;
 const GRAPH_API_VERSION = "v19.0";
@@ -867,14 +870,26 @@ export async function POST(req: NextRequest) {
                   triggerMessageId: dbMessageIdForGemini,
                 });
 
-                if (!result.ok) {
-                  console.error(
-                    `${WEBHOOK_LOG_PREFIX} gemini_reply_no_response`,
+                if (result.ok) {
+                  console.log(`${WEBHOOK_LOG_PREFIX} gemini_reply_ok`, {
+                    messageId,
+                    conversationId: conversationIdForGemini,
+                    messageType,
+                    action: result.action ?? null,
+                    reason: result.reason,
+                    dbMessageId: result.messageId ?? null,
+                    willReplyToClient: true,
+                  });
+                  return;
+                }
+
+                if (result.skipped) {
+                  console.warn(
+                    `${WEBHOOK_LOG_PREFIX} gemini_reply_skipped`,
                     {
                       messageId,
                       conversationId: conversationIdForGemini,
                       messageType,
-                      skipped: result.skipped ?? false,
                       reason: result.reason,
                       willReplyToClient: false,
                     },
@@ -882,23 +897,55 @@ export async function POST(req: NextRequest) {
                   return;
                 }
 
-                console.log(`${WEBHOOK_LOG_PREFIX} gemini_reply_ok`, {
+                console.error(
+                  `${WEBHOOK_LOG_PREFIX} gemini_reply_no_response`,
+                  {
+                    messageId,
+                    conversationId: conversationIdForGemini,
+                    messageType,
+                    reason: result.reason,
+                  },
+                );
+
+                // Safety net if reply path returned failure without fallback.
+                const fallback = await sendGuaranteedClientReply(supabase, {
+                  conversationId: conversationIdForGemini,
+                  triggerMessageId: dbMessageIdForGemini,
+                  customerPhone: normalizedFrom,
+                  errorMessage: result.reason,
+                });
+
+                console.log(`${WEBHOOK_LOG_PREFIX} gemini_fallback_result`, {
                   messageId,
                   conversationId: conversationIdForGemini,
-                  messageType,
-                  action: result.action ?? null,
-                  reason: result.reason,
-                  dbMessageId: result.messageId ?? null,
-                  willReplyToClient: true,
+                  ok: fallback.ok,
+                  reason: fallback.reason,
+                  willReplyToClient: fallback.ok,
                 });
               } catch (error) {
+                const errorMessage =
+                  error instanceof Error ? error.message : "unknown_error";
+
                 console.error(`${WEBHOOK_LOG_PREFIX} gemini_reply_failed`, {
                   messageId,
                   conversationId: conversationIdForGemini,
                   messageType,
-                  error:
-                    error instanceof Error ? error.message : "unknown_error",
-                  willReplyToClient: false,
+                  error: errorMessage,
+                });
+
+                const fallback = await sendGuaranteedClientReply(supabase, {
+                  conversationId: conversationIdForGemini,
+                  triggerMessageId: dbMessageIdForGemini,
+                  customerPhone: normalizedFrom,
+                  errorMessage,
+                });
+
+                console.log(`${WEBHOOK_LOG_PREFIX} gemini_fallback_result`, {
+                  messageId,
+                  conversationId: conversationIdForGemini,
+                  ok: fallback.ok,
+                  reason: fallback.reason,
+                  willReplyToClient: fallback.ok,
                 });
               }
             });

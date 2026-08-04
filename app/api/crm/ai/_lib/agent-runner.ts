@@ -5,11 +5,12 @@ import {
   GEMINI_MEDIA_CONTRACT_PROMPT,
   type AgentHistoryMessage,
 } from "./context-builder";
+import type { GeminiContent, GeminiContentPart } from "./gemini";
 import {
-  generateGeminiWithTools,
-  type GeminiContent,
-  type GeminiContentPart,
-} from "./gemini";
+  generateGeminiWithRetry,
+  isRetryableGeminiError,
+  stripInlineMediaFromContents,
+} from "./gemini-retry";
 import { GEMINI_TOOLS_CONTRACT_PROMPT } from "./gemini-tools";
 import {
   executeAgentTool,
@@ -61,6 +62,176 @@ const buildIdentityBlock = (input: {
   ].join("\n");
 };
 
+const createAgentContext = (input: {
+  supabase: SupabaseClient;
+  conversationId: number;
+  customerPhone: string | null;
+  client: AgentClientSnapshot | null;
+  runId: string;
+  triggerMessageId?: number | null;
+}): AgentRunContext => ({
+  supabase: input.supabase,
+  conversationId: input.conversationId,
+  clientId: input.client?.id ?? null,
+  customerPhone: input.customerPhone,
+  whatsappId: input.client?.whatsapp_id ?? null,
+  waName: input.client?.wa_name ?? null,
+  runId: input.runId,
+  triggerMessageId: input.triggerMessageId ?? null,
+  lastLookupByWisproId: new Map(),
+  lastLookupCedula: null,
+  escalated: false,
+  escalateReason: null,
+  escalateMessage: null,
+});
+
+const runAgentLoop = async (input: {
+  systemPrompt: string;
+  contents: GeminiContent[];
+  model: string;
+  ctx: AgentRunContext;
+  timeoutsMs: number[];
+  degraded: boolean;
+}): Promise<AgentDecision> => {
+  const workingContents: GeminiContent[] = input.contents.map((content) => ({
+    role: content.role,
+    parts: [...content.parts],
+  }));
+
+  const logContext = {
+    conversationId: input.ctx.conversationId,
+    runId: input.ctx.runId,
+    degraded: input.degraded,
+  };
+
+  for (let step = 0; step < MAX_TOOL_STEPS; step += 1) {
+    const generated = await generateGeminiWithRetry({
+      systemPrompt: input.systemPrompt,
+      contents: workingContents,
+      model: input.model,
+      enableTools: true,
+      timeoutsMs: input.timeoutsMs,
+      logContext: { ...logContext, step },
+    });
+
+    console.log(`${LOG_PREFIX} loop_step`, {
+      ...logContext,
+      step,
+      functionCallCount: generated.functionCalls.length,
+      hasText: Boolean(generated.text),
+    });
+
+    if (generated.functionCalls.length > 0) {
+      if (generated.modelContent) {
+        workingContents.push(generated.modelContent);
+      } else {
+        workingContents.push({
+          role: "model",
+          parts: generated.functionCalls.map((call) => ({
+            functionCall: {
+              name: call.name,
+              args: call.args,
+            },
+          })),
+        });
+      }
+
+      const responseParts: GeminiContentPart[] = [];
+      let stopAgent = false;
+
+      for (const call of generated.functionCalls) {
+        const toolResult = await executeAgentTool(
+          input.ctx,
+          call.name,
+          call.args,
+        );
+        responseParts.push({
+          functionResponse: {
+            name: toolResult.name,
+            response: toolResult.response,
+          },
+        });
+
+        if (toolResult.shouldHandoff) {
+          input.ctx.escalated = true;
+          if (toolResult.handoffReason) {
+            input.ctx.escalateReason = toolResult.handoffReason;
+          }
+          if (toolResult.handoffMessage) {
+            input.ctx.escalateMessage = toolResult.handoffMessage;
+          }
+        }
+
+        if (toolResult.stopAgent || toolResult.shouldHandoff) {
+          stopAgent = true;
+        }
+      }
+
+      workingContents.push({
+        role: "user",
+        parts: responseParts,
+      });
+
+      if (stopAgent || input.ctx.escalated) {
+        break;
+      }
+
+      continue;
+    }
+
+    const replyText = generated.text.trim();
+    if (!replyText) {
+      throw new Error("empty_model_reply");
+    }
+
+    console.log(`${LOG_PREFIX} final_text`, {
+      ...logContext,
+      preview: replyText.slice(0, 160),
+    });
+
+    return {
+      action: "reply",
+      message: replyText,
+      runId: input.ctx.runId,
+      clientId: input.ctx.clientId,
+    };
+  }
+
+  if (input.ctx.escalated) {
+    return {
+      action: "handoff",
+      message:
+        input.ctx.escalateMessage ||
+        "Un asesor de nuestro equipo continuará contigo en breve.",
+      reason: input.ctx.escalateReason || "escalate_to_human",
+      runId: input.ctx.runId,
+      clientId: input.ctx.clientId,
+    };
+  }
+
+  const fallback = await generateGeminiWithRetry({
+    systemPrompt: `${input.systemPrompt}\n\nNo uses más tools. Responde ahora al cliente en texto claro.`,
+    contents: workingContents,
+    model: input.model,
+    enableTools: false,
+    timeoutsMs: input.timeoutsMs,
+    logContext: { ...logContext, step: "text_fallback" },
+  });
+
+  const fallbackText = fallback.text.trim();
+  if (!fallbackText) {
+    throw new Error("empty_model_reply_after_tools");
+  }
+
+  return {
+    action: "reply",
+    message: fallbackText,
+    reason: "tool_loop_exhausted",
+    runId: input.ctx.runId,
+    clientId: input.ctx.clientId,
+  };
+};
+
 export const runGeminiAgent = async (input: {
   supabase: SupabaseClient;
   conversationId: number;
@@ -95,24 +266,10 @@ export const runGeminiAgent = async (input: {
     }),
   ].join("\n");
 
-  const ctx: AgentRunContext = {
-    supabase: input.supabase,
-    conversationId: input.conversationId,
-    clientId: input.client?.id ?? null,
-    customerPhone: input.customerPhone,
-    whatsappId: input.client?.whatsapp_id ?? null,
-    waName: input.client?.wa_name ?? null,
-    runId,
-    triggerMessageId: input.triggerMessageId ?? null,
-    lastLookupByWisproId: new Map(),
-    lastLookupCedula: null,
-    escalated: false,
-    escalateReason: null,
-    escalateMessage: null,
-  };
-
   const hasInlineMedia = attachedMediaIds.length > 0;
-  const requestTimeoutMs = hasInlineMedia ? 40000 : 25000;
+  // Primary: longer budget for multimodal + tools. Retries bump further.
+  const primaryTimeouts = hasInlineMedia ? [60000, 75000] : [35000, 50000];
+  const degradedTimeouts = [45000, 60000];
 
   console.log(`${LOG_PREFIX} started`, {
     conversationId: input.conversationId,
@@ -121,136 +278,61 @@ export const runGeminiAgent = async (input: {
     contentsCount: contents.length,
     attachedMediaIds,
     linkedWispro: Boolean(input.client?.wispro_id),
+    primaryTimeouts,
   });
 
-  // Working copy — tool loop mutates this array.
-  const workingContents: GeminiContent[] = contents.map((content) => ({
-    role: content.role,
-    parts: [...content.parts],
-  }));
-
-  for (let step = 0; step < MAX_TOOL_STEPS; step += 1) {
-    const generated = await generateGeminiWithTools({
-      systemPrompt,
-      contents: workingContents,
-      model: input.model,
-      enableTools: true,
-      timeoutMs: requestTimeoutMs,
-    });
-
-    console.log(`${LOG_PREFIX} loop_step`, {
-      conversationId: input.conversationId,
-      runId,
-      step,
-      functionCallCount: generated.functionCalls.length,
-      hasText: Boolean(generated.text),
-    });
-
-    if (generated.functionCalls.length > 0) {
-      if (generated.modelContent) {
-        workingContents.push(generated.modelContent);
-      } else {
-        workingContents.push({
-          role: "model",
-          parts: generated.functionCalls.map((call) => ({
-            functionCall: {
-              name: call.name,
-              args: call.args,
-            },
-          })),
-        });
-      }
-
-      const responseParts: GeminiContentPart[] = [];
-      let stopAgent = false;
-
-      for (const call of generated.functionCalls) {
-        const toolResult = await executeAgentTool(ctx, call.name, call.args);
-        responseParts.push({
-          functionResponse: {
-            name: toolResult.name,
-            response: toolResult.response,
-          },
-        });
-
-        if (toolResult.shouldHandoff) {
-          ctx.escalated = true;
-          if (toolResult.handoffReason) {
-            ctx.escalateReason = toolResult.handoffReason;
-          }
-          if (toolResult.handoffMessage) {
-            ctx.escalateMessage = toolResult.handoffMessage;
-          }
-        }
-
-        if (toolResult.stopAgent || toolResult.shouldHandoff) {
-          stopAgent = true;
-        }
-      }
-
-      workingContents.push({
-        role: "user",
-        parts: responseParts,
-      });
-
-      // Payment submit (ok/error) and escalate stop the loop; handoff message is authoritative.
-      if (stopAgent || ctx.escalated) {
-        break;
-      }
-
-      continue;
-    }
-
-    const replyText = generated.text.trim();
-    if (!replyText) {
-      throw new Error("empty_model_reply");
-    }
-
-    console.log(`${LOG_PREFIX} final_text`, {
-      conversationId: input.conversationId,
-      runId,
-      preview: replyText.slice(0, 160),
-      attachedMediaIds,
-    });
-
-    return {
-      action: "reply",
-      message: replyText,
-      runId,
-      clientId: ctx.clientId,
-    };
-  }
-
-  if (ctx.escalated) {
-    return {
-      action: "handoff",
-      message:
-        ctx.escalateMessage ||
-        "Un asesor de nuestro equipo continuará contigo en breve.",
-      reason: ctx.escalateReason || "escalate_to_human",
-      runId,
-      clientId: ctx.clientId,
-    };
-  }
-
-  const fallback = await generateGeminiWithTools({
-    systemPrompt: `${systemPrompt}\n\nNo uses más tools. Responde ahora al cliente en texto claro.`,
-    contents: workingContents,
-    model: input.model,
-    enableTools: false,
-    timeoutMs: requestTimeoutMs,
-  });
-
-  const fallbackText = fallback.text.trim();
-  if (!fallbackText) {
-    throw new Error("empty_model_reply_after_tools");
-  }
-
-  return {
-    action: "reply",
-    message: fallbackText,
-    reason: "tool_loop_exhausted",
+  const ctx = createAgentContext({
+    supabase: input.supabase,
+    conversationId: input.conversationId,
+    customerPhone: input.customerPhone,
+    client: input.client,
     runId,
-    clientId: ctx.clientId,
-  };
+    triggerMessageId: input.triggerMessageId,
+  });
+
+  try {
+    return await runAgentLoop({
+      systemPrompt,
+      contents,
+      model: input.model,
+      ctx,
+      timeoutsMs: primaryTimeouts,
+      degraded: false,
+    });
+  } catch (error) {
+    if (!hasInlineMedia || !isRetryableGeminiError(error)) {
+      throw error;
+    }
+
+    console.warn(`${LOG_PREFIX} degraded_retry`, {
+      conversationId: input.conversationId,
+      runId,
+      reason: error instanceof Error ? error.message : "unknown_error",
+    });
+
+    const degradedCtx = createAgentContext({
+      supabase: input.supabase,
+      conversationId: input.conversationId,
+      customerPhone: input.customerPhone,
+      client: input.client,
+      runId,
+      triggerMessageId: input.triggerMessageId,
+    });
+
+    const decision = await runAgentLoop({
+      systemPrompt: `${systemPrompt}\n\nNota: el media inline se omitió por timeout. Usa el historial de texto ([Imagen]) y tools.`,
+      contents: stripInlineMediaFromContents(contents),
+      model: input.model,
+      ctx: degradedCtx,
+      timeoutsMs: degradedTimeouts,
+      degraded: true,
+    });
+
+    return {
+      ...decision,
+      reason: decision.reason
+        ? `${decision.reason}|degraded_no_inline_media`
+        : "degraded_no_inline_media",
+    };
+  }
 };

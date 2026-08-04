@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { getCrmSettings } from "../../_lib/crm-settings";
 import type { AgentHistoryMessage } from "./context-builder";
 import { runGeminiAgent, type AgentClientSnapshot } from "./agent-runner";
+import { sendGuaranteedClientReply } from "./guaranteed-reply";
 
 const LOG_PREFIX = "[CRM_AI_REPLY]";
 const GRAPH_API_VERSION = "v19.0";
@@ -119,14 +120,20 @@ export const replyToConversationWithGemini = async (
 
   console.log(`${LOG_PREFIX} started`, baseContext);
 
+  let conversation: ConversationRow | null = null;
+  let client: AgentClientSnapshot | null = null;
+  let chronological: AgentHistoryMessage[] = [];
+  let latestInbound: AgentHistoryMessage | null | undefined = null;
+
   try {
-    const { data: conversation, error: conversationError } = await supabase
+    const { data: conversationRow, error: conversationError } = await supabase
       .from("conversations")
       .select("id, client_id, human_mode, customer_phone, status, bot_engine")
       .eq("id", input.conversationId)
       .maybeSingle<ConversationRow>();
 
     if (conversationError) throw conversationError;
+    conversation = conversationRow;
     if (!conversation) {
       const result = {
         ok: false,
@@ -166,7 +173,6 @@ export const replyToConversationWithGemini = async (
     }
 
     const settings = await getCrmSettings(supabase);
-    let client: AgentClientSnapshot | null = null;
 
     if (conversation.client_id) {
       const { data: clientRow, error: clientError } = await supabase
@@ -192,8 +198,8 @@ export const replyToConversationWithGemini = async (
 
     if (historyError) throw historyError;
 
-    const chronological = ([...(history || [])] as AgentHistoryMessage[]).reverse();
-    const latestInbound = [...chronological]
+    chronological = ([...(history || [])] as AgentHistoryMessage[]).reverse();
+    latestInbound = [...chronological]
       .reverse()
       .find((message) => message.type === "in" || message.sender_type === "client");
 
@@ -261,7 +267,31 @@ export const replyToConversationWithGemini = async (
         model: settings.gemini_model,
         error: message,
       });
-      throw geminiError;
+
+      const fallback = await sendGuaranteedClientReply(supabase, {
+        conversationId: conversation.id,
+        triggerMessageId: input.triggerMessageId,
+        customerPhone: conversation.customer_phone,
+        whatsappId: client?.whatsapp_id,
+        clientPhone: client?.phone,
+        latestInbound,
+        messages: chronological,
+        errorMessage: message,
+      });
+
+      if (fallback.ok) {
+        return {
+          ok: true,
+          reason: "fallback_sent",
+          action: "handoff",
+          messageId: fallback.messageId ?? null,
+        };
+      }
+
+      return {
+        ok: false,
+        reason: fallback.reason || "fallback_failed_after_gemini_error",
+      };
     }
 
     console.log(`${LOG_PREFIX} gemini_decision`, {
@@ -520,12 +550,41 @@ export const replyToConversationWithGemini = async (
       runId: decision.runId,
     };
   } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : "unknown_error";
+
     logGeminiNoReply("failed", {
       ...baseContext,
       reason: "unexpected_error",
-      error: error instanceof Error ? error.message : "unknown_error",
+      error: errorMessage,
       name: error instanceof Error ? error.name : typeof error,
     });
-    throw error;
+
+    if (conversation) {
+      const fallback = await sendGuaranteedClientReply(supabase, {
+        conversationId: conversation.id,
+        triggerMessageId: input.triggerMessageId,
+        customerPhone: conversation.customer_phone,
+        whatsappId: client?.whatsapp_id,
+        clientPhone: client?.phone,
+        latestInbound,
+        messages: chronological,
+        errorMessage,
+      });
+
+      if (fallback.ok) {
+        return {
+          ok: true,
+          reason: "fallback_sent",
+          action: "handoff",
+          messageId: fallback.messageId ?? null,
+        };
+      }
+    }
+
+    return {
+      ok: false,
+      reason: "unexpected_error",
+    };
   }
 };
