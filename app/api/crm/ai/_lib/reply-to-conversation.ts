@@ -1,20 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getCrmSettings } from "../../_lib/crm-settings";
-import {
-  generateGeminiText,
-  parseGeminiReplyDecision,
-} from "./gemini";
+import { runGeminiAgent, type AgentClientSnapshot } from "./agent-runner";
 
 const LOG_PREFIX = "[CRM_AI_REPLY]";
 const GRAPH_API_VERSION = "v19.0";
-const HISTORY_LIMIT = 16;
-
-const DEFAULT_SYSTEM_PROMPT = `Eres el asistente virtual de Fibra Óptica Innover (ISP en Venezuela).
-Responde en español, de forma breve, clara y profesional por WhatsApp.
-No inventes precios, fechas de visita, saldos ni estados de cuenta.
-Si el cliente pide un humano, reporta un problema técnico grave, habla de pagos complejos o no tienes datos suficientes, usa action=handoff.
-Devuelve SOLO JSON válido con esta forma:
-{"action":"reply"|"handoff","message":"texto para el cliente","reason":"motivo breve"}`;
+const HISTORY_LIMIT = 24;
 
 type ConversationRow = {
   id: number;
@@ -23,16 +13,6 @@ type ConversationRow = {
   customer_phone: string | null;
   status: string | null;
   bot_engine: string | null;
-};
-
-type ClientRow = {
-  id: number;
-  name: string | null;
-  phone: string | null;
-  whatsapp_id: string | null;
-  plan: string | null;
-  zone: string | null;
-  account: string | null;
 };
 
 type MessageRow = {
@@ -70,7 +50,7 @@ const logGeminiNoReply = (
 
 const resolveRecipient = (
   conversation: ConversationRow,
-  client: ClientRow | null,
+  client: AgentClientSnapshot | null,
 ) => {
   const candidates = [
     conversation.customer_phone,
@@ -123,6 +103,7 @@ export type AiReplyResult = {
   reason: string;
   action?: "reply" | "handoff";
   messageId?: number | null;
+  runId?: string;
 };
 
 export const replyToConversationWithGemini = async (
@@ -186,14 +167,16 @@ export const replyToConversationWithGemini = async (
     }
 
     const settings = await getCrmSettings(supabase);
-    let client: ClientRow | null = null;
+    let client: AgentClientSnapshot | null = null;
 
     if (conversation.client_id) {
       const { data: clientRow, error: clientError } = await supabase
         .from("clients")
-        .select("id, name, phone, whatsapp_id, plan, zone, account")
+        .select(
+          "id, name, phone, whatsapp_id, wa_name, plan, zone, account, wispro_id",
+        )
         .eq("id", conversation.client_id)
-        .maybeSingle<ClientRow>();
+        .maybeSingle<AgentClientSnapshot>();
 
       if (clientError) throw clientError;
       client = clientRow;
@@ -227,57 +210,23 @@ export const replyToConversationWithGemini = async (
       return result;
     }
 
-    const contextLines = [
-      `Cliente: ${client?.name || "Desconocido"}`,
-      `Plan: ${client?.plan || "N/D"}`,
-      `Zona: ${client?.zone || "N/D"}`,
-      `Estado cuenta: ${client?.account || "N/D"}`,
-      `Teléfono chat: ${conversation.customer_phone || client?.whatsapp_id || client?.phone || "N/D"}`,
-    ].join("\n");
-
-    const contents = chronological
-      .filter((message) => Boolean(message.content?.trim()))
-      .map((message) => {
-        const isUser = message.type === "in" || message.sender_type === "client";
-        return {
-          role: isUser ? ("user" as const) : ("model" as const),
-          parts: [{ text: String(message.content).trim() }],
-        };
-      });
-
-    while (contents.length > 0 && contents[0].role !== "user") {
-      contents.shift();
-    }
-
-    if (contents.length === 0) {
-      const result = {
-        ok: false,
-        skipped: true,
-        reason: "empty_history",
-      } as const;
-      logGeminiNoReply("skipped", { ...baseContext, ...result });
-      return result;
-    }
-
-    const systemPrompt = [
-      settings.ai_system_prompt?.trim() || DEFAULT_SYSTEM_PROMPT,
-      "",
-      "Contexto del cliente:",
-      contextLines,
-    ].join("\n");
-
     console.log(`${LOG_PREFIX} generating`, {
       ...baseContext,
       model: settings.gemini_model,
-      contentsCount: contents.length,
+      historyCount: chronological.length,
+      linkedWispro: Boolean(client?.wispro_id),
       latestInboundPreview: latestInbound.content?.slice(0, 120) ?? null,
     });
 
-    let generated;
+    let decision;
     try {
-      generated = await generateGeminiText({
-        systemPrompt,
-        contents,
+      decision = await runGeminiAgent({
+        supabase,
+        conversationId: conversation.id,
+        customerPhone: conversation.customer_phone,
+        client,
+        messages: chronological,
+        businessPrompt: settings.ai_system_prompt,
         model: settings.gemini_model,
       });
     } catch (geminiError) {
@@ -285,6 +234,17 @@ export const replyToConversationWithGemini = async (
         geminiError instanceof Error
           ? geminiError.message
           : "gemini_request_failed";
+
+      if (message === "empty_history") {
+        const result = {
+          ok: false,
+          skipped: true,
+          reason: "empty_history",
+        } as const;
+        logGeminiNoReply("skipped", { ...baseContext, ...result });
+        return result;
+      }
+
       logGeminiNoReply("failed", {
         ...baseContext,
         reason: "gemini_api_error",
@@ -294,19 +254,35 @@ export const replyToConversationWithGemini = async (
       throw geminiError;
     }
 
-    console.log(`${LOG_PREFIX} gemini_raw_text`, {
-      ...baseContext,
-      text: generated.text,
-    });
-
-    const decision = parseGeminiReplyDecision(generated.text);
-
     console.log(`${LOG_PREFIX} gemini_decision`, {
       ...baseContext,
       action: decision.action,
       message: decision.message,
       reason: decision.reason ?? null,
+      runId: decision.runId,
+      clientId: decision.clientId,
     });
+
+    // Refresh client after possible Wispro link.
+    if (decision.clientId && decision.clientId !== client?.id) {
+      const { data: linkedClient } = await supabase
+        .from("clients")
+        .select(
+          "id, name, phone, whatsapp_id, wa_name, plan, zone, account, wispro_id",
+        )
+        .eq("id", decision.clientId)
+        .maybeSingle<AgentClientSnapshot>();
+      if (linkedClient) client = linkedClient;
+    } else if (client?.id) {
+      const { data: refreshedClient } = await supabase
+        .from("clients")
+        .select(
+          "id, name, phone, whatsapp_id, wa_name, plan, zone, account, wispro_id",
+        )
+        .eq("id", client.id)
+        .maybeSingle<AgentClientSnapshot>();
+      if (refreshedClient) client = refreshedClient;
+    }
 
     const { data: freshConversation, error: freshError } = await supabase
       .from("conversations")
@@ -320,6 +296,7 @@ export const replyToConversationWithGemini = async (
         ok: false,
         skipped: true,
         reason: "human_mode_active_before_send",
+        runId: decision.runId,
       } as const;
       logGeminiNoReply("skipped", {
         ...baseContext,
@@ -346,6 +323,7 @@ export const replyToConversationWithGemini = async (
             ...baseContext,
             reason: "handoff_missing_recipient_phone",
             action: "handoff",
+            runId: decision.runId,
           });
         } else {
           try {
@@ -366,6 +344,7 @@ export const replyToConversationWithGemini = async (
                   engine: "gemini",
                   action: "handoff",
                   reason: decision.reason || null,
+                  run_id: decision.runId,
                   trigger_message_id: input.triggerMessageId ?? null,
                 },
               })
@@ -385,6 +364,7 @@ export const replyToConversationWithGemini = async (
               ...baseContext,
               messageId: saved?.id ?? null,
               reason: decision.reason || null,
+              runId: decision.runId,
               willReplyToClient: true,
             });
 
@@ -393,12 +373,14 @@ export const replyToConversationWithGemini = async (
               reason: "handoff",
               action: "handoff",
               messageId: saved?.id ?? null,
+              runId: decision.runId,
             };
           } catch (error) {
             logGeminiNoReply("failed", {
               ...baseContext,
               reason: "handoff_whatsapp_send_failed",
               action: "handoff",
+              runId: decision.runId,
               error: error instanceof Error ? error.message : "unknown_error",
             });
           }
@@ -408,6 +390,7 @@ export const replyToConversationWithGemini = async (
           ...baseContext,
           reason: "handoff_empty_message",
           action: "handoff",
+          runId: decision.runId,
         });
       }
 
@@ -415,6 +398,7 @@ export const replyToConversationWithGemini = async (
         ok: true,
         reason: decision.reason || "handoff",
         action: "handoff",
+        runId: decision.runId,
       };
     }
 
@@ -424,6 +408,7 @@ export const replyToConversationWithGemini = async (
         ok: false,
         skipped: true,
         reason: "empty_model_reply",
+        runId: decision.runId,
       } as const;
       logGeminiNoReply("failed", { ...baseContext, ...result });
       return result;
@@ -435,6 +420,7 @@ export const replyToConversationWithGemini = async (
         ok: false,
         skipped: true,
         reason: "missing_recipient_phone",
+        runId: decision.runId,
       } as const;
       logGeminiNoReply("failed", {
         ...baseContext,
@@ -454,6 +440,7 @@ export const replyToConversationWithGemini = async (
         ...baseContext,
         reason: "whatsapp_send_failed",
         to,
+        runId: decision.runId,
         error: sendError instanceof Error ? sendError.message : "unknown_error",
         replyPreview: replyText.slice(0, 120),
       });
@@ -477,6 +464,7 @@ export const replyToConversationWithGemini = async (
           engine: "gemini",
           action: "reply",
           reason: decision.reason || null,
+          run_id: decision.runId,
           trigger_message_id: input.triggerMessageId ?? null,
         },
       })
@@ -489,6 +477,7 @@ export const replyToConversationWithGemini = async (
         reason: "message_persist_failed",
         error: saveError.message,
         waMessageId,
+        runId: decision.runId,
       });
       throw saveError;
     }
@@ -506,6 +495,7 @@ export const replyToConversationWithGemini = async (
       ...baseContext,
       messageId: savedMessage?.id ?? null,
       to,
+      runId: decision.runId,
       willReplyToClient: true,
     });
 
@@ -514,6 +504,7 @@ export const replyToConversationWithGemini = async (
       reason: "reply_sent",
       action: "reply",
       messageId: savedMessage?.id ?? null,
+      runId: decision.runId,
     };
   } catch (error) {
     logGeminiNoReply("failed", {

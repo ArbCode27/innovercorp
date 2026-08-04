@@ -770,6 +770,36 @@ export const useCrmData = (agent: Agent | null) => {
     );
   };
 
+  const updateAiSystemPrompt = async (prompt: string | null) => {
+    if (!agent) return;
+    if (!isAdminRole(agent.role)) {
+      toast.error("Solo un administrador puede cambiar el prompt de IA");
+      return;
+    }
+
+    const normalized =
+      typeof prompt === "string" ? prompt.trim() || null : null;
+
+    try {
+      const settings = await crmService.updateCrmSettings(agent.id, {
+        ai_system_prompt: normalized,
+      });
+      setData((current) => ({ ...current, settings }));
+      toast.success(
+        normalized
+          ? "Prompt de Gemini actualizado"
+          : "Prompt restaurado al predeterminado",
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "No se pudo guardar el prompt de IA",
+      );
+      throw error;
+    }
+  };
+
   const updateConversationBotEngine = async (botEngine: BotEngine | null) => {
     if (!selectedConversation) return;
 
@@ -1073,6 +1103,7 @@ export const useCrmData = (agent: Agent | null) => {
     takeControl,
     reactivateBot,
     updateGlobalBotEngine,
+    updateAiSystemPrompt,
     updateConversationBotEngine,
     resolveConversation,
     updateLabels,

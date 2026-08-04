@@ -205,6 +205,7 @@ export const CrmShell = () => {
                 currentAgent={auth.agent}
                 settings={crm.settings}
                 onUpdateGlobalBotEngine={crm.updateGlobalBotEngine}
+                onUpdateAiSystemPrompt={crm.updateAiSystemPrompt}
               />
             ) : null}
           </>

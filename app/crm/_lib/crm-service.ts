@@ -145,28 +145,41 @@ export const crmService = {
     };
   },
 
-  async updateGlobalBotEngine(
-    botEngine: BotEngine,
+  async updateCrmSettings(
     agentId: number,
-    extras?: { gemini_model?: string; ai_system_prompt?: string | null },
+    patch: {
+      bot_engine?: BotEngine;
+      gemini_model?: string;
+      ai_system_prompt?: string | null;
+    },
   ) {
     const response = await fetch("/api/crm/settings", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        bot_engine: botEngine,
         agent_id: agentId,
-        gemini_model: extras?.gemini_model,
-        ai_system_prompt: extras?.ai_system_prompt,
+        ...patch,
       }),
     });
 
     const data = await response.json();
     if (!response.ok) {
-      throw new Error(data.error || "No se pudo actualizar el motor global");
+      throw new Error(data.error || "No se pudieron guardar los ajustes");
     }
 
     return data.settings as CrmSettings;
+  },
+
+  async updateGlobalBotEngine(
+    botEngine: BotEngine,
+    agentId: number,
+    extras?: { gemini_model?: string; ai_system_prompt?: string | null },
+  ) {
+    return this.updateCrmSettings(agentId, {
+      bot_engine: botEngine,
+      gemini_model: extras?.gemini_model,
+      ai_system_prompt: extras?.ai_system_prompt,
+    });
   },
 
   async updateConversationBotEngine(

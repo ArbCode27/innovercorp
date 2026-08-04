@@ -1,13 +1,35 @@
-type GeminiGenerateResult = {
-  text: string;
-  raw: unknown;
-};
+import { GEMINI_TOOL_DECLARATIONS } from "./gemini-tools";
 
-type GeminiContentPart = { text: string };
+export type GeminiContentPart =
+  | { text: string }
+  | {
+      functionCall: {
+        name: string;
+        args?: Record<string, unknown>;
+      };
+    }
+  | {
+      functionResponse: {
+        name: string;
+        response: Record<string, unknown>;
+      };
+    };
 
-type GeminiContent = {
+export type GeminiContent = {
   role: "user" | "model";
   parts: GeminiContentPart[];
+};
+
+export type GeminiFunctionCall = {
+  name: string;
+  args: Record<string, unknown>;
+};
+
+export type GeminiGenerateResult = {
+  text: string;
+  raw: unknown;
+  functionCalls: GeminiFunctionCall[];
+  modelContent: GeminiContent | null;
 };
 
 const LOG_PREFIX = "[GEMINI]";
@@ -23,11 +45,64 @@ export const getGeminiApiKey = () => {
   return key || null;
 };
 
-export const generateGeminiText = async (input: {
+const extractFunctionCalls = (raw: unknown): GeminiFunctionCall[] => {
+  const parts =
+    (raw as { candidates?: Array<{ content?: { parts?: unknown[] } }> })
+      ?.candidates?.[0]?.content?.parts || [];
+
+  const calls: GeminiFunctionCall[] = [];
+
+  for (const part of parts) {
+    if (!part || typeof part !== "object") continue;
+    const functionCall = (part as { functionCall?: unknown }).functionCall;
+    if (!functionCall || typeof functionCall !== "object") continue;
+
+    const name = String(
+      (functionCall as { name?: unknown }).name || "",
+    ).trim();
+    if (!name) continue;
+
+    const argsRaw = (functionCall as { args?: unknown }).args;
+    const args =
+      argsRaw && typeof argsRaw === "object" && !Array.isArray(argsRaw)
+        ? (argsRaw as Record<string, unknown>)
+        : {};
+
+    calls.push({ name, args });
+  }
+
+  return calls;
+};
+
+const extractText = (raw: unknown) =>
+  String(
+    (raw as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> })
+      ?.candidates?.[0]?.content?.parts
+      ?.map((part) => part?.text || "")
+      .join("") || "",
+  ).trim();
+
+const extractModelContent = (raw: unknown): GeminiContent | null => {
+  const content = (
+    raw as { candidates?: Array<{ content?: { role?: string; parts?: unknown[] } }> }
+  )?.candidates?.[0]?.content;
+
+  if (!content?.parts || !Array.isArray(content.parts) || !content.parts.length) {
+    return null;
+  }
+
+  return {
+    role: "model",
+    parts: content.parts as GeminiContentPart[],
+  };
+};
+
+export const generateGeminiWithTools = async (input: {
   systemPrompt: string;
   contents: GeminiContent[];
   model?: string;
   timeoutMs?: number;
+  enableTools?: boolean;
 }): Promise<GeminiGenerateResult> => {
   const apiKey = getGeminiApiKey();
   if (!apiKey) {
@@ -39,18 +114,44 @@ export const generateGeminiText = async (input: {
 
   const model = (input.model || DEFAULT_MODEL).trim() || DEFAULT_MODEL;
   const controller = new AbortController();
-  const timeoutMs = input.timeoutMs ?? 15000;
+  const timeoutMs = input.timeoutMs ?? 25000;
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const enableTools = input.enableTools ?? true;
 
   console.log(`${LOG_PREFIX} request_started`, {
     model,
     contentsCount: input.contents.length,
     timeoutMs,
+    enableTools,
     apiKeyPresent: true,
     apiKeyPrefix: `${apiKey.slice(0, 6)}...`,
   });
 
   try {
+    const body: Record<string, unknown> = {
+      systemInstruction: {
+        parts: [{ text: input.systemPrompt }],
+      },
+      contents: input.contents,
+      generationConfig: {
+        temperature: 0.4,
+        maxOutputTokens: 1024,
+      },
+    };
+
+    if (enableTools) {
+      body.tools = [
+        {
+          functionDeclarations: GEMINI_TOOL_DECLARATIONS,
+        },
+      ];
+      body.toolConfig = {
+        functionCallingConfig: {
+          mode: "AUTO",
+        },
+      };
+    }
+
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
         model,
@@ -59,26 +160,22 @@ export const generateGeminiText = async (input: {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
-        body: JSON.stringify({
-          systemInstruction: {
-            parts: [{ text: input.systemPrompt }],
-          },
-          contents: input.contents,
-          generationConfig: {
-            temperature: 0.4,
-            maxOutputTokens: 512,
-            responseMimeType: "application/json",
-          },
-        }),
+        body: JSON.stringify(body),
       },
     );
 
     const raw = await response.json();
+    const functionCalls = extractFunctionCalls(raw);
+    const text = extractText(raw);
+    const modelContent = extractModelContent(raw);
+
     console.log(`${LOG_PREFIX} raw_response`, {
       model,
       ok: response.ok,
       status: response.status,
-      raw,
+      functionCallCount: functionCalls.length,
+      hasText: Boolean(text),
+      finishReason: raw?.candidates?.[0]?.finishReason ?? null,
     });
 
     if (!response.ok) {
@@ -95,30 +192,16 @@ export const generateGeminiText = async (input: {
       throw new Error(message);
     }
 
-    const text = String(
-      raw?.candidates?.[0]?.content?.parts
-        ?.map((part: { text?: string }) => part?.text || "")
-        .join("") || "",
-    ).trim();
-
-    const finishReason = raw?.candidates?.[0]?.finishReason ?? null;
-    console.log(`${LOG_PREFIX} text_response`, {
-      model,
-      text,
-      finishReason,
-      hasText: Boolean(text),
-    });
-
-    if (!text) {
-      console.error(`${LOG_PREFIX} empty_text`, {
+    if (!functionCalls.length && !text) {
+      console.error(`${LOG_PREFIX} empty_response`, {
         model,
-        finishReason,
+        finishReason: raw?.candidates?.[0]?.finishReason ?? null,
         candidates: raw?.candidates ?? null,
       });
-      throw new Error("Gemini no devolvió texto útil");
+      throw new Error("Gemini no devolvió texto ni function calls");
     }
 
-    return { text, raw };
+    return { text, raw, functionCalls, modelContent };
   } catch (error) {
     const isAbort =
       error instanceof Error &&
@@ -143,6 +226,26 @@ export const generateGeminiText = async (input: {
   } finally {
     clearTimeout(timeout);
   }
+};
+
+/** @deprecated Prefer generateGeminiWithTools for the agent path. */
+export const generateGeminiText = async (input: {
+  systemPrompt: string;
+  contents: GeminiContent[];
+  model?: string;
+  timeoutMs?: number;
+}): Promise<{ text: string; raw: unknown }> => {
+  const result = await generateGeminiWithTools({
+    ...input,
+    enableTools: false,
+    timeoutMs: input.timeoutMs ?? 15000,
+  });
+
+  if (!result.text) {
+    throw new Error("Gemini no devolvió texto útil");
+  }
+
+  return { text: result.text, raw: result.raw };
 };
 
 export type GeminiReplyDecision = {
