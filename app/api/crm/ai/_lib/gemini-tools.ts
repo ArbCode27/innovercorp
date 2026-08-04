@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+  normalizeAmountToApiString,
+  normalizeTransactionCodeToApiString,
+} from "@/app/api/crm/_lib/innover-payments";
 
 export const LOOKUP_WISPRO_TOOL = "lookup_wispro_by_cedula";
 export const LINK_WISPRO_TOOL = "link_wispro_client";
@@ -33,60 +37,45 @@ export const escalateHumanArgsSchema = z.object({
   message: z.string().trim().max(4096).optional().nullable(),
 });
 
-const coercePositiveNumber = z.union([z.number(), z.string()]).transform((value, ctx) => {
-  if (typeof value === "number") {
-    if (!Number.isFinite(value) || value <= 0) {
+const optionalAmountSchema = z
+  .union([z.number(), z.string()])
+  .optional()
+  .nullable()
+  .transform((value, ctx) => {
+    if (value === undefined || value === null || value === "") return null;
+    const normalized = normalizeAmountToApiString(value);
+    if (!normalized) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "Debe ser un número positivo",
+        message: "amount inválido",
       });
       return z.NEVER;
     }
-    return value;
-  }
+    return normalized;
+  });
 
-  const normalized = value.replace(/,/g, ".").replace(/[^\d.]/g, "");
-  const parsed = Number.parseFloat(normalized);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "Debe ser un número positivo",
-    });
-    return z.NEVER;
-  }
-  return parsed;
-});
-
-const coerceTransactionCode = z.union([z.number(), z.string()]).transform((value, ctx) => {
-  const digits =
-    typeof value === "number"
-      ? String(Math.trunc(value))
-      : value.replace(/\D/g, "");
-
-  if (!digits || digits.length < 1 || digits.length > 18) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "transaction_code inválido",
-    });
-    return z.NEVER;
-  }
-
-  const parsed = Number(digits);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "transaction_code inválido",
-    });
-    return z.NEVER;
-  }
-
-  return parsed;
-});
+const optionalTransactionCodeSchema = z
+  .union([z.number(), z.string()])
+  .optional()
+  .nullable()
+  .transform((value, ctx) => {
+    if (value === undefined || value === null || value === "") return null;
+    const normalized = normalizeTransactionCodeToApiString(value);
+    if (!normalized) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "transaction_code inválido",
+      });
+      return z.NEVER;
+    }
+    return normalized;
+  });
 
 export const submitPaymentReceiptArgsSchema = z.object({
-  amount: coercePositiveNumber,
-  transaction_code: coerceTransactionCode,
-  bank: z.string().trim().min(2, "bank es requerido").max(80),
+  // Optional when pending_receipt was saved from a previous turn (image → then cedula).
+  amount: optionalAmountSchema,
+  transaction_code: optionalTransactionCodeSchema,
+  bank: z.string().trim().min(2).max(80).optional().nullable(),
   wispro_id: z.string().trim().min(1).optional().nullable(),
   cedula: z
     .string()
@@ -102,14 +91,14 @@ export const GEMINI_TOOL_DECLARATIONS = [
   {
     name: LOOKUP_WISPRO_TOOL,
     description:
-      "Busca al abonado en Wispro por cédula/documento. Úsala cuando el usuario envíe su cédula o pida consultar su cuenta y aún no esté vinculado, o quiera verificar otra cédula.",
+      "Busca al abonado en Wispro por cédula/documento. Úsala cuando el usuario envíe su cédula. Si el chat empezó con un comprobante, pide la cédula primero y luego usa esta tool.",
     parameters: {
       type: "object",
       properties: {
         cedula: {
           type: "string",
           description:
-            "Cédula del cliente (solo dígitos; puedes limpiar V-, puntos o espacios).",
+            "Cédula del cliente abonado Innover (solo dígitos; no uses la cédula del beneficiario del Tpago si no es el cliente).",
         },
       },
       required: ["cedula"],
@@ -118,13 +107,13 @@ export const GEMINI_TOOL_DECLARATIONS = [
   {
     name: LINK_WISPRO_TOOL,
     description:
-      "Vincula un resultado de Wispro a ESTE chat de WhatsApp. Solo después de lookup_wispro_by_cedula. Si hubo un solo match, puedes vincularlo. Si hubo varios, confirma nombre/zona con el usuario antes de vincular.",
+      "Vincula un resultado de Wispro a ESTE chat. Opcional; no bloquea el registro de pagos.",
     parameters: {
       type: "object",
       properties: {
         wispro_id: {
           type: "string",
-          description: "ID Wispro del match elegido (campo wispro_id del lookup).",
+          description: "ID Wispro del match elegido.",
         },
       },
       required: ["wispro_id"],
@@ -133,44 +122,44 @@ export const GEMINI_TOOL_DECLARATIONS = [
   {
     name: SUBMIT_PAYMENT_RECEIPT_TOOL,
     description:
-      "Registra un comprobante de pago en el API de pagos Innover. Úsala cuando el usuario envíe una captura/imagen de pago y ya hayas hecho lookup_wispro_by_cedula (no hace falta link previo). Extrae amount, transaction_code y bank solo si son legibles. No digas que el pago está aprobado; solo que quedó en revisión.",
+      "Registra el comprobante en el API de pagos Innover. Requiere lookup_wispro_by_cedula previo. Pasa amount/transaction_code/bank (texto) si los tienes; si ya se guardaron de una imagen anterior (pending_receipt), puedes omitirlos. Si aún no hay cédula, NO uses escalate: pide la cédula. Tras éxito o error del API el sistema hace handoff automático.",
     parameters: {
       type: "object",
       properties: {
         amount: {
-          type: "number",
-          description: "Monto del pago leído del comprobante.",
+          type: "string",
+          description:
+            "Monto del comprobante como texto (ej. 6687 o 6687.00). Acepta formato VE 6.687,00.",
         },
         transaction_code: {
-          type: "number",
-          description:
-            "Código/referencia de la transacción (solo dígitos) leído del comprobante.",
+          type: "string",
+          description: "Referencia/código de transacción (solo dígitos) como texto.",
         },
         bank: {
           type: "string",
-          description: "Banco del comprobante (origen o destino legible).",
+          description: "Banco del comprobante.",
         },
         wispro_id: {
           type: "string",
           description:
-            "Opcional. wispro_id del match si hubo varios resultados en el lookup.",
+            "Opcional si hubo varios matches en el lookup.",
         },
         cedula: {
           type: "string",
-          description: "Opcional. Cédula si la tienes clara.",
+          description: "Opcional. Cédula del abonado.",
         },
         comment: {
           type: "string",
           description: "Nota interna opcional.",
         },
       },
-      required: ["amount", "transaction_code", "bank"],
+      required: [],
     },
   },
   {
     name: ESCALATE_HUMAN_TOOL,
     description:
-      "Escala la conversación a un asesor humano. Úsala si el cliente lo pide, hay un problema grave, o no puedes resolver con las tools.",
+      "Escala a un asesor humano. NO la uses solo porque llegó un comprobante. Para pagos, el handoff ocurre automáticamente después de submit_payment_receipt (éxito o error). Úsala si el cliente pide humano u otro caso grave no relacionado al registro del pago.",
     parameters: {
       type: "object",
       properties: {
@@ -180,8 +169,7 @@ export const GEMINI_TOOL_DECLARATIONS = [
         },
         message: {
           type: "string",
-          description:
-            "Mensaje opcional para el cliente avisando que un asesor continuará.",
+          description: "Mensaje opcional para el cliente.",
         },
       },
       required: ["reason"],
@@ -190,15 +178,19 @@ export const GEMINI_TOOL_DECLARATIONS = [
 ] as const;
 
 export const GEMINI_TOOLS_CONTRACT_PROMPT = `Herramientas disponibles (obligatorio respetar):
-1) lookup_wispro_by_cedula — cuando el usuario entregue cédula o pida datos de cuenta.
-2) link_wispro_client — para vincular un match de Wispro a ESTE chat (opcional; no bloquea pagos).
-3) submit_payment_receipt — cuando el usuario envíe un comprobante de pago (imagen). Requiere lookup previo con la cédula; NO exige link. Usa amount/transaction_code/bank legibles del comprobante.
-4) escalate_to_human — para pasar a un asesor humano.
+1) lookup_wispro_by_cedula — cuando el usuario entregue su cédula de abonado.
+2) link_wispro_client — opcional; no bloquea pagos.
+3) submit_payment_receipt — registrar comprobante (requiere lookup previo). amount y transaction_code como texto.
+4) escalate_to_human — solo si el cliente pide humano u otro caso grave. NO al solo recibir un comprobante.
 
-Reglas de identidad y pagos:
-- Ya conoces el teléfono WhatsApp y el cliente CRM de ESTE chat (ver bloque Identidad).
-- Para pagos: primero lookup_wispro_by_cedula; luego submit_payment_receipt con datos del match + del comprobante.
-- Si el lookup tiene varios matches, confirma cuál es (o pasa wispro_id) antes de submit_payment_receipt.
-- No inventes monto, referencia ni banco. Si no son legibles, pídelos al cliente.
-- Nunca digas que el pago está aprobado; solo que fue recibido y quedó en revisión.
-- Cuando termines (sin más tools), responde al cliente en texto claro por WhatsApp (sin JSON).`;
+Flujo obligatorio de pagos:
+1) Si llega imagen de comprobante SIN cédula: analiza la imagen y PIDE la cédula. No hagas handoff.
+2) Cuando tengas cédula: lookup_wispro_by_cedula.
+3) Luego submit_payment_receipt con monto/referencia/banco del comprobante.
+4) El sistema hará handoff automático tras el POST (éxito o error). Tú solo confirma al cliente según el resultado de la tool.
+5) Nunca digas que el pago está aprobado; solo recibido/en revisión o que un asesor continuará.
+
+Reglas:
+- No inventes monto, referencia ni banco.
+- Si hay varios matches Wispro, confirma cuál es antes del submit.
+- Responde siempre en texto claro por WhatsApp (sin JSON).`;

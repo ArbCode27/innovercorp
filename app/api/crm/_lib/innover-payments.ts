@@ -3,10 +3,11 @@ const DEFAULT_PAYMENTS_URL =
   "https://backend-innover.vercel.app/api/v1/payments";
 const REQUEST_TIMEOUT_MS = 20_000;
 
+/** API Innover expects amount and transaction_code as strings. */
 export type InnoverPaymentPayload = {
   client_id: string;
-  amount: number;
-  transaction_code: number;
+  amount: string;
+  transaction_code: string;
   bank: string;
   name: string;
   cedula: string;
@@ -24,6 +25,51 @@ export class InnoverPaymentsError extends Error {
     this.body = body;
   }
 }
+
+/**
+ * Normalizes VE-style amounts ("6.687,00" / "6687,5" / 6687) to an API string.
+ */
+export const normalizeAmountToApiString = (value: string | number): string | null => {
+  if (typeof value === "number") {
+    if (!Number.isFinite(value) || value <= 0) return null;
+    const fixed = Number.isInteger(value)
+      ? String(value)
+      : value.toFixed(2).replace(/\.?0+$/, "");
+    return fixed || null;
+  }
+
+  let raw = value.trim();
+  if (!raw) return null;
+
+  if (raw.includes(",") && raw.includes(".")) {
+    // 6.687,00 → 6687.00
+    raw = raw.replace(/\./g, "").replace(",", ".");
+  } else if (raw.includes(",")) {
+    raw = raw.replace(",", ".");
+  }
+
+  raw = raw.replace(/[^\d.]/g, "");
+  if (!raw) return null;
+
+  const parsed = Number.parseFloat(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+
+  return Number.isInteger(parsed)
+    ? String(parsed)
+    : parsed.toFixed(2).replace(/\.?0+$/, "");
+};
+
+export const normalizeTransactionCodeToApiString = (
+  value: string | number,
+): string | null => {
+  const digits =
+    typeof value === "number"
+      ? String(Math.trunc(value)).replace(/\D/g, "")
+      : value.replace(/\D/g, "");
+
+  if (!digits || digits.length < 1 || digits.length > 24) return null;
+  return digits;
+};
 
 const getPaymentsUrl = () =>
   process.env.INNOVER_PAYMENTS_API_URL?.trim() || DEFAULT_PAYMENTS_URL;
@@ -46,6 +92,7 @@ export const submitInnoverPayment = async (
     url,
     clientId: payload.client_id,
     amount: payload.amount,
+    transactionCode: payload.transaction_code,
     bank: payload.bank,
     cedula: payload.cedula,
     phoneId: payload.phone_id,

@@ -30,7 +30,6 @@ export type AgentRunContext = {
   waName: string | null;
   runId: string;
   triggerMessageId: number | null;
-  /** Cache of last Wispro matches by wispro_id (for link/payment). */
   lastLookupByWisproId: Map<string, WisproSearchResult>;
   lastLookupCedula: string | null;
   escalated: boolean;
@@ -43,6 +42,16 @@ export type ToolHandlerResult = {
   ok: boolean;
   response: Record<string, unknown>;
   stopAgent?: boolean;
+  shouldHandoff?: boolean;
+  handoffMessage?: string;
+  handoffReason?: string;
+};
+
+type PendingReceipt = {
+  amount: string;
+  transaction_code: string;
+  bank: string;
+  comment?: string | null;
 };
 
 const normalizePhone = (value: string | null | undefined) =>
@@ -92,15 +101,67 @@ const resolvePaymentMatch = (
     return {
       ok: false,
       error:
-        "Hay varios matches de Wispro. Confirma con el usuario y pasa wispro_id a submit_payment_receipt.",
+        "Hay varios matches de Wispro. Confirma con el usuario y pasa wispro_id.",
     };
   }
 
   return {
     ok: false,
     error:
-      "No hay lookup Wispro reciente. Llama primero lookup_wispro_by_cedula con la cédula del cliente (no hace falta link).",
+      "Falta lookup Wispro. Si el cliente aún no dio cédula, PÍDELA (no hagas handoff). Cuando la tenga, llama lookup_wispro_by_cedula y luego submit_payment_receipt.",
   };
+};
+
+const findReceiptMessage = async (ctx: AgentRunContext) => {
+  if (ctx.triggerMessageId) {
+    const { data } = await ctx.supabase
+      .from("messages")
+      .select("id, metadata, media_type")
+      .eq("id", ctx.triggerMessageId)
+      .maybeSingle();
+    if (data) return data;
+  }
+
+  const { data: latestImage } = await ctx.supabase
+    .from("messages")
+    .select("id, metadata, media_type")
+    .eq("conversation_id", ctx.conversationId)
+    .eq("type", "in")
+    .eq("media_type", "image")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  return latestImage;
+};
+
+const readPendingReceipt = (
+  metadata: Record<string, unknown>,
+): PendingReceipt | null => {
+  const pending = metadata.pending_receipt;
+  if (!pending || typeof pending !== "object") return null;
+  const record = pending as Record<string, unknown>;
+  const amount = String(record.amount || "").trim();
+  const transactionCode = String(record.transaction_code || "").trim();
+  const bank = String(record.bank || "").trim();
+  if (!amount || !transactionCode || !bank) return null;
+  return {
+    amount,
+    transaction_code: transactionCode,
+    bank,
+    comment:
+      typeof record.comment === "string" ? record.comment : null,
+  };
+};
+
+const markHandoff = (
+  ctx: AgentRunContext,
+  reason: string,
+  message: string,
+) => {
+  ctx.escalated = true;
+  ctx.escalateReason = reason;
+  ctx.escalateMessage = message;
 };
 
 const handleLookup = async (
@@ -139,8 +200,8 @@ const handleLookup = async (
           results.length === 0
             ? "No se encontró abonado. Pide verificar la cédula."
             : results.length === 1
-              ? "Un solo match. Puedes link_wispro_client o submit_payment_receipt sin link."
-              : "Varios matches. Confirma nombre/zona antes de link o pago.",
+              ? "Un solo match. Si hay comprobante pendiente, llama submit_payment_receipt."
+              : "Varios matches. Confirma nombre/zona antes del pago.",
       },
     };
   } catch (error) {
@@ -157,7 +218,7 @@ const handleLookup = async (
       response: {
         ok: false,
         error: message,
-        hint: "Informa al cliente que no pudiste consultar ahora e intenta de nuevo o escala a humano.",
+        hint: "Pide reintentar la cédula o, si insiste, escalate_to_human.",
       },
     };
   }
@@ -256,7 +317,7 @@ const handleLink = async (
         debt: match.invoicing.debt,
         has_debt: match.invoicing.hasDebt,
         account_status: match.invoicing.accountStatus,
-        hint: "Cliente vinculado a ESTE chat. Usa estos datos para responder; no inventes saldos.",
+        hint: "Cliente vinculado. Puedes continuar con submit_payment_receipt si hay comprobante.",
       },
     };
   } catch (error) {
@@ -284,9 +345,66 @@ const handleSubmitPaymentReceipt = async (
       response: {
         ok: false,
         error: parsed.error.issues[0]?.message || "Datos del comprobante inválidos",
-        hint: "Pide al cliente monto, referencia y banco si no son legibles.",
+        hint: "Pide monto, referencia y banco si no son legibles. No hagas handoff todavía.",
       },
     };
+  }
+
+  const receiptMessage = await findReceiptMessage(ctx);
+  const existingMetadata =
+    receiptMessage?.metadata && typeof receiptMessage.metadata === "object"
+      ? ({ ...(receiptMessage.metadata as Record<string, unknown>) } as Record<
+          string,
+          unknown
+        >)
+      : {};
+
+  const pending = readPendingReceipt(existingMetadata);
+  const amount = parsed.data.amount ?? pending?.amount ?? null;
+  const transactionCode =
+    parsed.data.transaction_code ?? pending?.transaction_code ?? null;
+  const bank = (parsed.data.bank || pending?.bank || "").trim() || null;
+  const comment = parsed.data.comment ?? pending?.comment ?? null;
+
+  if (!amount || !transactionCode || !bank) {
+    return {
+      name: SUBMIT_PAYMENT_RECEIPT_TOOL,
+      ok: false,
+      response: {
+        ok: false,
+        error: "Faltan amount, transaction_code o bank",
+        hint: "Extrae los datos del comprobante o pídelos. No hagas handoff.",
+      },
+    };
+  }
+
+  // Persist pending extraction so a later turn (after cedula) can reuse it.
+  if (receiptMessage?.id) {
+    const nextPending: PendingReceipt = {
+      amount,
+      transaction_code: transactionCode,
+      bank,
+      comment,
+    };
+    const { error: pendingError } = await ctx.supabase
+      .from("messages")
+      .update({
+        metadata: {
+          ...existingMetadata,
+          pending_receipt: nextPending,
+          pending_receipt_at: new Date().toISOString(),
+        },
+      })
+      .eq("id", receiptMessage.id);
+
+    if (pendingError) {
+      console.warn("[AI_PAYMENT] pending_receipt_save_failed", {
+        messageId: receiptMessage.id,
+        error: pendingError.message,
+      });
+    } else {
+      existingMetadata.pending_receipt = nextPending;
+    }
   }
 
   const matchResult = resolvePaymentMatch(ctx, parsed.data.wispro_id);
@@ -297,19 +415,33 @@ const handleSubmitPaymentReceipt = async (
       response: {
         ok: false,
         error: matchResult.error,
+        pending_receipt_saved: Boolean(receiptMessage?.id),
+        needs_cedula: ctx.lastLookupByWisproId.size === 0,
+        hint:
+          ctx.lastLookupByWisproId.size === 0
+            ? "Datos del comprobante guardados. Pide la cédula del abonado y luego lookup + submit. NO escalate."
+            : matchResult.error,
       },
     };
   }
 
   const phoneId = resolvePhoneId(ctx);
   if (!phoneId) {
+    const message =
+      "No pudimos identificar tu número de WhatsApp. Un asesor te ayudará en breve.";
+    markHandoff(ctx, "payment_missing_phone", message);
     return {
       name: SUBMIT_PAYMENT_RECEIPT_TOOL,
       ok: false,
       response: {
         ok: false,
         error: "No hay phone_id WhatsApp para este chat",
+        should_handoff: true,
       },
+      stopAgent: true,
+      shouldHandoff: true,
+      handoffMessage: message,
+      handoffReason: "payment_missing_phone",
     };
   }
 
@@ -325,58 +457,39 @@ const handleSubmitPaymentReceipt = async (
       ok: false,
       response: {
         ok: false,
-        error: "Falta cédula. Haz lookup_wispro_by_cedula primero.",
+        error: "Falta cédula",
+        hint: "Pide la cédula y haz lookup_wispro_by_cedula. No hagas handoff.",
+        needs_cedula: true,
       },
     };
   }
 
-  // Idempotency on the trigger / latest inbound image message.
-  let targetMessageId = ctx.triggerMessageId;
-  if (!targetMessageId) {
-    const { data: latestImage } = await ctx.supabase
-      .from("messages")
-      .select("id, metadata, media_type")
-      .eq("conversation_id", ctx.conversationId)
-      .eq("type", "in")
-      .eq("media_type", "image")
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    targetMessageId = latestImage?.id ?? null;
-  }
-
-  let existingMetadata: Record<string, unknown> = {};
-  if (targetMessageId) {
-    const { data: messageRow } = await ctx.supabase
-      .from("messages")
-      .select("id, metadata")
-      .eq("id", targetMessageId)
-      .maybeSingle();
-
-    existingMetadata =
-      messageRow?.metadata && typeof messageRow.metadata === "object"
-        ? (messageRow.metadata as Record<string, unknown>)
-        : {};
-
-    if (existingMetadata.payment_submitted === true) {
-      return {
-        name: SUBMIT_PAYMENT_RECEIPT_TOOL,
+  if (existingMetadata.payment_submitted === true) {
+    const message =
+      "Tu comprobante ya fue registrado. Un asesor lo verificará en breve.";
+    markHandoff(ctx, "payment_already_submitted", message);
+    return {
+      name: SUBMIT_PAYMENT_RECEIPT_TOOL,
+      ok: true,
+      response: {
         ok: true,
-        response: {
-          ok: true,
-          alreadyProcessed: true,
-          message_id: targetMessageId,
-          hint: "Este comprobante ya fue enviado al API de pagos. Informa al cliente que está en revisión.",
-        },
-      };
-    }
+        alreadyProcessed: true,
+        message_id: receiptMessage?.id ?? null,
+        should_handoff: true,
+        hint: message,
+      },
+      stopAgent: true,
+      shouldHandoff: true,
+      handoffMessage: message,
+      handoffReason: "payment_already_submitted",
+    };
   }
 
   const payload = {
     client_id: match.customer.id,
-    amount: parsed.data.amount,
-    transaction_code: parsed.data.transaction_code,
-    bank: parsed.data.bank,
+    amount,
+    transaction_code: transactionCode,
+    bank,
     name: match.customer.name,
     cedula,
     phone_id: phoneId,
@@ -385,36 +498,34 @@ const handleSubmitPaymentReceipt = async (
   try {
     const result = await submitInnoverPayment(payload);
 
-    if (targetMessageId) {
-      const nextMetadata = {
-        ...existingMetadata,
-        payment_submitted: true,
-        payment_submitted_at: new Date().toISOString(),
-        payment_submitted_run_id: ctx.runId,
-        payment_submitted_payload: {
-          client_id: payload.client_id,
-          amount: payload.amount,
-          transaction_code: payload.transaction_code,
-          bank: payload.bank,
-          cedula: payload.cedula,
-          phone_id: payload.phone_id,
-        },
-        payment_api_status: result.status,
-        payment_comment: parsed.data.comment ?? null,
-      };
-
+    if (receiptMessage?.id) {
       const { error: updateError } = await ctx.supabase
         .from("messages")
-        .update({ metadata: nextMetadata })
-        .eq("id", targetMessageId);
+        .update({
+          metadata: {
+            ...existingMetadata,
+            payment_submitted: true,
+            payment_submitted_at: new Date().toISOString(),
+            payment_submitted_run_id: ctx.runId,
+            payment_submitted_payload: payload,
+            payment_api_status: result.status,
+            payment_comment: comment,
+            pending_receipt: null,
+          },
+        })
+        .eq("id", receiptMessage.id);
 
       if (updateError) {
         console.warn("[AI_PAYMENT] metadata_update_failed", {
-          messageId: targetMessageId,
+          messageId: receiptMessage.id,
           error: updateError.message,
         });
       }
     }
+
+    const message =
+      "Registramos tu comprobante de pago. Un asesor lo verificará en breve.";
+    markHandoff(ctx, "payment_submitted", message);
 
     return {
       name: SUBMIT_PAYMENT_RECEIPT_TOOL,
@@ -423,34 +534,64 @@ const handleSubmitPaymentReceipt = async (
         ok: true,
         alreadyProcessed: false,
         submitted: true,
-        message_id: targetMessageId,
+        should_handoff: true,
+        message_id: receiptMessage?.id ?? null,
         client_id: payload.client_id,
         amount: payload.amount,
         transaction_code: payload.transaction_code,
         bank: payload.bank,
         name: payload.name,
         cedula: payload.cedula,
-        hint: "Pago registrado en Innover (en revisión). Confirma recepción al cliente; NO digas que está aprobado.",
+        hint: message,
       },
+      stopAgent: true,
+      shouldHandoff: true,
+      handoffMessage: message,
+      handoffReason: "payment_submitted",
     };
   } catch (error) {
-    const message =
+    const apiMessage =
       error instanceof InnoverPaymentsError
         ? error.message
         : error instanceof Error
           ? error.message
           : "No se pudo registrar el pago";
 
+    if (receiptMessage?.id) {
+      await ctx.supabase
+        .from("messages")
+        .update({
+          metadata: {
+            ...existingMetadata,
+            payment_submit_failed: true,
+            payment_submit_failed_at: new Date().toISOString(),
+            payment_submit_error: apiMessage,
+            payment_api_status:
+              error instanceof InnoverPaymentsError ? error.status : null,
+          },
+        })
+        .eq("id", receiptMessage.id);
+    }
+
+    const message =
+      "No pudimos registrar tu pago automáticamente. Un asesor te atenderá en breve.";
+    markHandoff(ctx, "payment_api_error", message);
+
     return {
       name: SUBMIT_PAYMENT_RECEIPT_TOOL,
       ok: false,
       response: {
         ok: false,
-        error: message,
-        hint: "Informa el fallo y pide reintentar o usa escalate_to_human.",
+        error: apiMessage,
+        should_handoff: true,
         api_status:
           error instanceof InnoverPaymentsError ? error.status : null,
+        hint: message,
       },
+      stopAgent: true,
+      shouldHandoff: true,
+      handoffMessage: message,
+      handoffReason: "payment_api_error",
     };
   }
 };
@@ -471,11 +612,11 @@ const handleEscalate = (
     };
   }
 
-  ctx.escalated = true;
-  ctx.escalateReason = parsed.data.reason;
-  ctx.escalateMessage =
+  const message =
     parsed.data.message?.trim() ||
     "Un asesor de nuestro equipo continuará contigo en breve.";
+
+  markHandoff(ctx, parsed.data.reason, message);
 
   return {
     name: ESCALATE_HUMAN_TOOL,
@@ -483,10 +624,13 @@ const handleEscalate = (
     response: {
       ok: true,
       escalated: true,
-      reason: ctx.escalateReason,
-      message_queued: ctx.escalateMessage,
+      reason: parsed.data.reason,
+      message_queued: message,
     },
     stopAgent: true,
+    shouldHandoff: true,
+    handoffMessage: message,
+    handoffReason: parsed.data.reason,
   };
 };
 
@@ -538,6 +682,7 @@ export const executeAgentTool = async (
     runId: ctx.runId,
     toolName: result.name,
     ok: result.ok,
+    shouldHandoff: result.shouldHandoff ?? false,
     durationMs: Date.now() - started,
   });
 

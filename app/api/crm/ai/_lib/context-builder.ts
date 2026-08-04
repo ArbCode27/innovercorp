@@ -310,8 +310,8 @@ export const GEMINI_MEDIA_CONTRACT_PROMPT = `Media (imagen/audio):
 - Usa caption + media juntos cuando existan.
 - Si ves una cédula legible en imagen, puedes usar lookup_wispro_by_cedula.
 - Si parece comprobante de pago:
-  1) Asegura lookup_wispro_by_cedula (con la cédula del cliente; no hace falta link).
-  2) Extrae amount, transaction_code y bank solo si son legibles.
-  3) Llama submit_payment_receipt.
-  4) Di al cliente que el pago fue recibido y quedó en revisión; NUNCA digas que está aprobado.
+  1) Extrae amount, transaction_code y bank solo si son legibles.
+  2) Si NO tienes cédula del abonado: PÍDELA. No uses escalate_to_human todavía.
+  3) Con cédula: lookup_wispro_by_cedula y luego submit_payment_receipt (link opcional).
+  4) Tras submit, el sistema hace handoff; confirma según el resultado. NUNCA digas que el pago está aprobado.
 - No digas que no puedes ver imágenes o audios: en este sistema sí los recibes.`;

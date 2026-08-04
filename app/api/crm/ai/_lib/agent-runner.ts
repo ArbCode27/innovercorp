@@ -172,7 +172,18 @@ export const runGeminiAgent = async (input: {
             response: toolResult.response,
           },
         });
-        if (toolResult.stopAgent) {
+
+        if (toolResult.shouldHandoff) {
+          ctx.escalated = true;
+          if (toolResult.handoffReason) {
+            ctx.escalateReason = toolResult.handoffReason;
+          }
+          if (toolResult.handoffMessage) {
+            ctx.escalateMessage = toolResult.handoffMessage;
+          }
+        }
+
+        if (toolResult.stopAgent || toolResult.shouldHandoff) {
           stopAgent = true;
         }
       }
@@ -182,6 +193,7 @@ export const runGeminiAgent = async (input: {
         parts: responseParts,
       });
 
+      // Payment submit (ok/error) and escalate stop the loop; handoff message is authoritative.
       if (stopAgent || ctx.escalated) {
         break;
       }
