@@ -8,6 +8,7 @@ export const LOOKUP_WISPRO_TOOL = "lookup_wispro_by_cedula";
 export const LINK_WISPRO_TOOL = "link_wispro_client";
 export const ESCALATE_HUMAN_TOOL = "escalate_to_human";
 export const SUBMIT_PAYMENT_RECEIPT_TOOL = "submit_payment_receipt";
+export const GET_BCV_RATE_TOOL = "get_bcv_rate";
 
 export const lookupWisproArgsSchema = z.object({
   cedula: z
@@ -96,7 +97,7 @@ export const GEMINI_TOOL_DECLARATIONS = [
   {
     name: LOOKUP_WISPRO_TOOL,
     description:
-      "Busca al abonado en Wispro por cédula/documento. Úsala cuando el usuario envíe su cédula. Si el chat empezó con un comprobante, pide la cédula primero y luego usa esta tool.",
+      "Busca al abonado en Wispro por cédula/documento. Devuelve saldo en USD y su equivalente en bolívares (debt_bs) con la tasa BCV del día ya calculada. Úsala cuando el usuario envíe su cédula. Si el chat empezó con un comprobante, pide la cédula primero y luego usa esta tool.",
     parameters: {
       type: "object",
       properties: {
@@ -107,6 +108,16 @@ export const GEMINI_TOOL_DECLARATIONS = [
         },
       },
       required: ["cedula"],
+    },
+  },
+  {
+    name: GET_BCV_RATE_TOOL,
+    description:
+      "Consulta la tasa BCV/dólar del día (dolarvzla). Úsala solo si el cliente pregunta por la tasa y NO necesitas consultar saldo. Para saldo pendiente usa lookup_wispro_by_cedula (ya trae debt_bs).",
+    parameters: {
+      type: "object",
+      properties: {},
+      required: [],
     },
   },
   {
@@ -190,23 +201,28 @@ export const GEMINI_TOOL_DECLARATIONS = [
 ] as const;
 
 export const GEMINI_TOOLS_CONTRACT_PROMPT = `Herramientas disponibles (obligatorio respetar):
-1) lookup_wispro_by_cedula — cuando el usuario entregue su cédula de abonado.
-2) link_wispro_client — opcional; no bloquea pagos.
-3) submit_payment_receipt — registrar comprobante (requiere lookup previo). amount y transaction_code como texto. Tras éxito o error el sistema etiqueta "Verificar pago" y hace handoff.
-4) escalate_to_human — handoff a humano. category=support al cerrar diagnóstico técnico (con resumen). category=general si el cliente pide humano. NO al solo recibir un comprobante.
+1) lookup_wispro_by_cedula — cédula del abonado. Trae debt_usd, debt_bs, bcv_rate ya calculados.
+2) get_bcv_rate — solo si preguntan la tasa del día sin consultar saldo.
+3) link_wispro_client — opcional; no bloquea pagos.
+4) submit_payment_receipt — registrar comprobante (requiere lookup previo). Tras éxito/error: etiqueta "Verificar pago" + handoff.
+5) escalate_to_human — category=support al cerrar diagnóstico; category=general si pide humano. NO al solo recibir comprobante.
+
+Tasa BCV / bolívares (CRÍTICO):
+- NUNCA inventes ni recalcules la tasa.
+- Para saldo: usa debt_bs_formatted / debt_usd_formatted del lookup.
+- Si bcv_error aparece, informa solo USD y di que no se pudo obtener la tasa del día.
+- Formato bolívares: miles con punto y decimales con coma (ej. Bs. 20.381,75).
 
 Flujo obligatorio de pagos:
-1) Si llega imagen de comprobante SIN cédula: analiza la imagen y PIDE la cédula. No hagas handoff.
-2) Cuando tengas cédula: lookup_wispro_by_cedula.
-3) Luego submit_payment_receipt con monto/referencia/banco del comprobante.
-4) El sistema hará handoff automático tras el POST (éxito o error). Tú solo confirma al cliente según el resultado de la tool.
-5) Nunca digas que el pago está aprobado; solo recibido/en revisión o que un asesor continuará.
+1) Si llega imagen de comprobante SIN cédula: analiza y PIDE la cédula. No hagas handoff.
+2) Con cédula: lookup_wispro_by_cedula.
+3) Luego submit_payment_receipt.
+4) Confirma según el resultado de la tool. Nunca digas que el pago está aprobado.
 
 Flujo obligatorio de soporte técnico:
-1) Identifica (cédula si falta) y haz preguntas de diagnóstico breves.
-2) Cuando tengas lo necesario: resume el caso al cliente en el message de escalate_to_human.
-3) Llama escalate_to_human con category=support (el sistema etiqueta Soporte y hace handoff).
-4) No des pasos de reparación ni cierres el caso como resuelto.
+1) Identifica y haz preguntas de diagnóstico breves.
+2) Resume el caso en message de escalate_to_human con category=support.
+3) No des pasos de reparación.
 
 Reglas:
 - No inventes monto, referencia ni banco.

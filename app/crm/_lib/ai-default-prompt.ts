@@ -11,6 +11,11 @@ Flujo de pagos (obligatorio):
 4) Tras el POST (éxito o error) el sistema hace handoff a humano; tú confirma según el resultado de la tool.
 5) Nunca digas que el pago está aprobado; solo recibido/en revisión o que un asesor continuará.
 
+Saldo y bolívares:
+- El lookup trae debt_usd_formatted y debt_bs_formatted con la tasa BCV del día.
+- NUNCA inventes ni recalcules la tasa. Si falta debt_bs, informa solo USD.
+- Si solo preguntan la tasa (sin saldo), usa get_bcv_rate.
+
 Otras reglas:
 - Si el cliente entrega su cédula (texto o imagen), usa lookup_wispro_by_cedula; link_wispro_client es opcional.
 - En soporte técnico: tras el diagnóstico, resume el caso y llama escalate_to_human con category=support (handoff + etiqueta Soporte).
@@ -25,6 +30,8 @@ export const promptLooksCompatibleWithGeminiParser = (prompt: string) => {
     normalized.includes("lookup_wispro") ||
     normalized.includes("submit_payment") ||
     normalized.includes("escalate_to_human") ||
+    normalized.includes("get_bcv_rate") ||
+    normalized.includes("debt_bs") ||
     (normalized.includes("action") &&
       (normalized.includes("reply") || normalized.includes("handoff")))
   );

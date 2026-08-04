@@ -11,7 +11,13 @@ import {
 } from "@/app/api/crm/_lib/innover-payments";
 import { ensureConversationLabel } from "@/app/api/crm/_lib/conversation-labels";
 import {
+  DolarVzlaError,
+  enrichDebtWithBcv,
+  getBcvRate,
+} from "@/app/api/crm/_lib/dolarvzla-rate";
+import {
   ESCALATE_HUMAN_TOOL,
+  GET_BCV_RATE_TOOL,
   LINK_WISPRO_TOOL,
   LOOKUP_WISPRO_TOOL,
   SUBMIT_PAYMENT_RECEIPT_TOOL,
@@ -58,17 +64,35 @@ type PendingReceipt = {
 const normalizePhone = (value: string | null | undefined) =>
   String(value || "").replace(/\D/g, "");
 
-const summarizeMatch = (result: WisproSearchResult) => ({
-  wispro_id: result.customer.id,
-  name: result.customer.name,
-  cedula: result.customer.national_identification_number,
-  zone: result.customer.zone_name ?? null,
-  city: result.customer.city ?? null,
-  phone_mobile: result.customer.phone_mobile ?? null,
-  account_status: result.invoicing.accountStatus,
-  debt: result.invoicing.debt,
-  has_debt: result.invoicing.hasDebt,
-});
+const summarizeMatch = async (result: WisproSearchResult) => {
+  const debtUsd = Number(result.invoicing.debt) || 0;
+  const fx = await enrichDebtWithBcv(debtUsd);
+
+  return {
+    wispro_id: result.customer.id,
+    name: result.customer.name,
+    cedula: result.customer.national_identification_number,
+    zone: result.customer.zone_name ?? null,
+    city: result.customer.city ?? null,
+    phone_mobile: result.customer.phone_mobile ?? null,
+    account_status: result.invoicing.accountStatus,
+    debt: debtUsd,
+    has_debt: result.invoicing.hasDebt,
+    debt_usd: fx.debt_usd,
+    debt_usd_formatted: fx.debt_usd_formatted,
+    debt_bs: fx.debt_bs,
+    debt_bs_formatted: fx.debt_bs_formatted,
+    bcv_rate: fx.ok ? fx.bcv_rate : null,
+    bcv_buy: fx.ok ? fx.bcv_buy : null,
+    bcv_sell: fx.ok ? fx.bcv_sell : null,
+    bcv_as_of: fx.ok ? fx.bcv_as_of : null,
+    bcv_source: fx.ok ? fx.bcv_source : null,
+    bcv_error: fx.ok ? null : fx.bcv_error,
+    currency_hint: fx.ok
+      ? "Usa debt_bs_formatted y debt_usd_formatted. No recalcules ni inventes tasa."
+      : fx.hint,
+  };
+};
 
 const resolvePhoneId = (ctx: AgentRunContext) => {
   const candidates = [ctx.customerPhone, ctx.whatsappId]
@@ -194,6 +218,45 @@ const looksLikeSupportReason = (reason: string) => {
   );
 };
 
+const handleGetBcvRate = async (): Promise<ToolHandlerResult> => {
+  try {
+    const rate = await getBcvRate();
+    return {
+      name: GET_BCV_RATE_TOOL,
+      ok: true,
+      response: {
+        ok: true,
+        bcv_rate: rate.rate,
+        bcv_average: rate.average,
+        bcv_buy: rate.buy,
+        bcv_sell: rate.sell,
+        bcv_as_of: rate.asOf,
+        bcv_source: rate.source,
+        bcv_cached: rate.cached,
+        bcv_rate_display: `${rate.average.toFixed(4).replace(".", ",")} Bs/$`,
+        hint: "Usa bcv_rate (average = tasa del día). No inventes otra tasa.",
+      },
+    };
+  } catch (error) {
+    const message =
+      error instanceof DolarVzlaError
+        ? error.message
+        : error instanceof Error
+          ? error.message
+          : "No se pudo obtener la tasa BCV";
+
+    return {
+      name: GET_BCV_RATE_TOOL,
+      ok: false,
+      response: {
+        ok: false,
+        error: message,
+        hint: "Di que no pudiste consultar la tasa del día. No inventes un valor.",
+      },
+    };
+  }
+};
+
 const handleLookup = async (
   ctx: AgentRunContext,
   rawArgs: unknown,
@@ -218,6 +281,8 @@ const handleLookup = async (
       ctx.lastLookupByWisproId.set(result.customer.id, result);
     }
 
+    const matches = await Promise.all(results.map((result) => summarizeMatch(result)));
+
     return {
       name: LOOKUP_WISPRO_TOOL,
       ok: true,
@@ -225,12 +290,12 @@ const handleLookup = async (
         ok: true,
         cedula: parsed.data.cedula,
         count: results.length,
-        matches: results.map(summarizeMatch),
+        matches,
         hint:
           results.length === 0
             ? "No se encontró abonado. Pide verificar la cédula."
             : results.length === 1
-              ? "Un solo match. Si hay comprobante pendiente, llama submit_payment_receipt."
+              ? "Un solo match. Informa saldo con debt_usd_formatted y debt_bs_formatted. Si hay comprobante pendiente, llama submit_payment_receipt."
               : "Varios matches. Confirma nombre/zona antes del pago.",
       },
     };
@@ -710,6 +775,9 @@ export const executeAgentTool = async (
   switch (toolName) {
     case LOOKUP_WISPRO_TOOL:
       result = await handleLookup(ctx, rawArgs);
+      break;
+    case GET_BCV_RATE_TOOL:
+      result = await handleGetBcvRate();
       break;
     case LINK_WISPRO_TOOL:
       result = await handleLink(ctx, rawArgs);
