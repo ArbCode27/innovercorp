@@ -202,7 +202,7 @@ export const GEMINI_TOOL_DECLARATIONS = [
 
 export const GEMINI_TOOLS_CONTRACT_PROMPT = `Herramientas disponibles (obligatorio respetar):
 1) lookup_wispro_by_cedula — cédula del abonado. Trae debt_usd, debt_bs, bcv_rate ya calculados.
-2) get_bcv_rate — solo si preguntan la tasa del día sin consultar saldo.
+2) get_bcv_rate — solo si preguntan la tasa BCV del día sin consultar saldo (fuente rates.dolarvzla.com/bcv).
 3) link_wispro_client — opcional; no bloquea pagos.
 4) submit_payment_receipt — registrar comprobante (requiere lookup previo). Tras éxito/error: etiqueta "Verificar pago" + handoff.
 5) escalate_to_human — category=support al cerrar diagnóstico; category=general si pide humano. NO al solo recibir comprobante.

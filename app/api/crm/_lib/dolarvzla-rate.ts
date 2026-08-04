@@ -1,23 +1,18 @@
-const LOG_PREFIX = "[DOLARVZLA]";
-const DEFAULT_URL = "https://api.dolarvzla.com/public/usdt/exchange-rate";
+const LOG_PREFIX = "[DOLARVZLA_BCV]";
+/** Official BCV rates feed from dolarvzla. */
+const DEFAULT_URL = "https://rates.dolarvzla.com/bcv/current.json";
 const REQUEST_TIMEOUT_MS = 8_000;
 const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
-export type DolarVzlaQuote = {
-  buy: number;
-  sell: number;
-  average: number;
-  date: string;
-};
-
 export type BcvRateSnapshot = {
-  /** Primary rate used for debt conversion (current.average). */
+  /** Primary USD→Bs rate from current.usd */
   rate: number;
-  buy: number;
-  sell: number;
-  average: number;
+  usd: number;
+  eur: number | null;
   asOf: string;
-  source: "dolarvzla";
+  previousUsd: number | null;
+  changePercentageUsd: number | null;
+  source: "dolarvzla_bcv";
   cached: boolean;
 };
 
@@ -39,9 +34,9 @@ type CacheEntry = {
 let cache: CacheEntry | null = null;
 
 const getApiUrl = () =>
-  process.env.DOLARVZLA_API_URL?.trim() || DEFAULT_URL;
-
-const getApiKey = () => process.env.DOLARVZLA_API_KEY?.trim() || "";
+  process.env.DOLARVZLA_API_URL?.trim() ||
+  process.env.DOLARVZLA_BCV_URL?.trim() ||
+  DEFAULT_URL;
 
 const parsePositiveNumber = (value: unknown): number | null => {
   const n = typeof value === "number" ? value : Number(value);
@@ -49,19 +44,10 @@ const parsePositiveNumber = (value: unknown): number | null => {
   return n;
 };
 
-const parseQuote = (raw: unknown): DolarVzlaQuote | null => {
-  if (!raw || typeof raw !== "object") return null;
-  const record = raw as Record<string, unknown>;
-  const buy = parsePositiveNumber(record.buy);
-  const sell = parsePositiveNumber(record.sell);
-  const average = parsePositiveNumber(record.average);
-  const date =
-    typeof record.date === "string" && record.date.trim()
-      ? record.date.trim()
-      : null;
-
-  if (!buy || !sell || !average || !date) return null;
-  return { buy, sell, average, date };
+const parseFiniteNumber = (value: unknown): number | null => {
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return null;
+  return n;
 };
 
 export const roundMoney = (value: number, digits = 2) => {
@@ -87,24 +73,50 @@ export const formatUsd = (value: number) => {
 export const convertUsdToBs = (usd: number, rate: number) =>
   roundMoney(usd * rate, 2);
 
-const fetchFreshRate = async (): Promise<BcvRateSnapshot> => {
-  const apiKey = getApiKey();
-  if (!apiKey) {
-    throw new DolarVzlaError(
-      "Falta DOLARVZLA_API_KEY en el servidor",
-      503,
-    );
-  }
+const parseBcvPayload = (parsed: unknown): BcvRateSnapshot | null => {
+  if (!parsed || typeof parsed !== "object") return null;
+  const root = parsed as Record<string, unknown>;
+  const current =
+    root.current && typeof root.current === "object"
+      ? (root.current as Record<string, unknown>)
+      : null;
+  if (!current) return null;
 
+  const usd = parsePositiveNumber(current.usd);
+  const date =
+    typeof current.date === "string" && current.date.trim()
+      ? current.date.trim()
+      : null;
+  if (!usd || !date) return null;
+
+  const previous =
+    root.previous && typeof root.previous === "object"
+      ? (root.previous as Record<string, unknown>)
+      : null;
+  const change =
+    root.changePercentage && typeof root.changePercentage === "object"
+      ? (root.changePercentage as Record<string, unknown>)
+      : null;
+
+  return {
+    rate: usd,
+    usd,
+    eur: parsePositiveNumber(current.eur),
+    asOf: date,
+    previousUsd: previous ? parsePositiveNumber(previous.usd) : null,
+    changePercentageUsd: change ? parseFiniteNumber(change.usd) : null,
+    source: "dolarvzla_bcv",
+    cached: false,
+  };
+};
+
+const fetchFreshRate = async (): Promise<BcvRateSnapshot> => {
   const url = getApiUrl();
   let response: Response;
   try {
     response = await fetch(url, {
       method: "GET",
-      headers: {
-        Accept: "application/json",
-        "x-dolarvzla-key": apiKey,
-      },
+      headers: { Accept: "application/json" },
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       cache: "no-store",
     });
@@ -112,7 +124,7 @@ const fetchFreshRate = async (): Promise<BcvRateSnapshot> => {
     console.error(`${LOG_PREFIX} request_failed`, {
       error: error instanceof Error ? error.message : "unknown_error",
     });
-    throw new DolarVzlaError("No se pudo conectar con dolarvzla", 502);
+    throw new DolarVzlaError("No se pudo conectar con la tasa BCV", 502);
   }
 
   const rawBody = await response.text();
@@ -131,32 +143,18 @@ const fetchFreshRate = async (): Promise<BcvRateSnapshot> => {
       body: rawBody.slice(0, 300),
     });
     throw new DolarVzlaError(
-      "dolarvzla rechazó la consulta de tasa",
+      "No se pudo obtener la tasa BCV",
       response.status,
     );
   }
 
-  const root =
-    parsed && typeof parsed === "object"
-      ? (parsed as Record<string, unknown>)
-      : null;
-  const current = parseQuote(root?.current);
-  if (!current) {
+  const snapshot = parseBcvPayload(parsed);
+  if (!snapshot) {
     console.error(`${LOG_PREFIX} invalid_payload`, {
       body: rawBody.slice(0, 300),
     });
-    throw new DolarVzlaError("Respuesta de tasa inválida", 502);
+    throw new DolarVzlaError("Respuesta de tasa BCV inválida", 502);
   }
-
-  const snapshot: BcvRateSnapshot = {
-    rate: current.average,
-    buy: current.buy,
-    sell: current.sell,
-    average: current.average,
-    asOf: current.date,
-    source: "dolarvzla",
-    cached: false,
-  };
 
   cache = {
     expiresAt: Date.now() + CACHE_TTL_MS,
@@ -171,9 +169,7 @@ const fetchFreshRate = async (): Promise<BcvRateSnapshot> => {
   return snapshot;
 };
 
-/**
- * Returns current exchange rate (average). Uses a short in-memory cache.
- */
+/** Returns current BCV USD rate. Uses a short in-memory cache. */
 export const getBcvRate = async (): Promise<BcvRateSnapshot> => {
   if (cache && cache.expiresAt > Date.now()) {
     return cache.snapshot;
@@ -193,11 +189,12 @@ export const enrichDebtWithBcv = async (debtUsd: number) => {
       debt_usd_formatted: formatUsd(debtUsd),
       debt_bs_formatted: formatBolivares(debtBs),
       bcv_rate: rate.rate,
-      bcv_buy: rate.buy,
-      bcv_sell: rate.sell,
+      bcv_usd: rate.usd,
+      bcv_eur: rate.eur,
       bcv_as_of: rate.asOf,
       bcv_source: rate.source,
       bcv_cached: rate.cached,
+      bcv_change_percentage_usd: rate.changePercentageUsd,
     };
   } catch (error) {
     const message =
