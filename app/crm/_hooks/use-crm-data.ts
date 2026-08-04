@@ -20,7 +20,6 @@ import { isAdminRole } from "../_lib/agent-role-utils";
 import { useSendMessage } from "./use-send-message";
 import type {
   Agent,
-  BotEngine,
   Client,
   Conversation,
   ConversationFilter,
@@ -754,22 +753,6 @@ export const useCrmData = (agent: Agent | null) => {
     toast.success("Bot IA reactivado");
   };
 
-  const updateGlobalBotEngine = async (botEngine: BotEngine) => {
-    if (!agent) return;
-    if (!isAdminRole(agent.role)) {
-      toast.error("Solo un administrador puede cambiar el motor global");
-      return;
-    }
-
-    const settings = await crmService.updateGlobalBotEngine(botEngine, agent.id);
-    setData((current) => ({ ...current, settings }));
-    toast.success(
-      botEngine === "gemini"
-        ? "Motor global: Gemini (backend)"
-        : "Motor global: Make",
-    );
-  };
-
   const updateAiSystemPrompt = async (prompt: string | null) => {
     if (!agent) return;
     if (!isAdminRole(agent.role)) {
@@ -798,26 +781,6 @@ export const useCrmData = (agent: Agent | null) => {
       );
       throw error;
     }
-  };
-
-  const updateConversationBotEngine = async (botEngine: BotEngine | null) => {
-    if (!selectedConversation) return;
-
-    const updated = await crmService.updateConversationBotEngine(
-      selectedConversation.id,
-      botEngine,
-    );
-    updateConversationLocal({
-      ...selectedConversation,
-      bot_engine: updated.bot_engine ?? null,
-    });
-    toast.success(
-      botEngine === null
-        ? "Motor de esta conversación: usar global"
-        : botEngine === "gemini"
-          ? "Motor de esta conversación: Gemini"
-          : "Motor de esta conversación: Make",
-    );
   };
 
   const resolveConversation = async () => {
@@ -1102,9 +1065,7 @@ export const useCrmData = (agent: Agent | null) => {
     addNote,
     takeControl,
     reactivateBot,
-    updateGlobalBotEngine,
     updateAiSystemPrompt,
-    updateConversationBotEngine,
     resolveConversation,
     updateLabels,
     quickToggleLabel,

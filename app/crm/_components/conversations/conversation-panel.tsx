@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { CRM_DIALOG, CRM_SURFACES } from "../../_lib/crm-theme";
-import type { Agent, BotEngine, Client, Conversation, Label, Message, QuickReply, Ticket, WisproCustomer, WisproSearchResult } from "../../_lib/types";
+import type { Agent, Client, Conversation, Label, Message, QuickReply, Ticket, WisproCustomer, WisproSearchResult } from "../../_lib/types";
 import { AssignAgentDialog } from "../agents/assign-agent-dialog";
 import { LabelPickerDialog } from "../labels/label-picker-dialog";
 import { UnknownClientBanner } from "../wispro/unknown-client-banner";
@@ -41,7 +41,6 @@ interface ConversationPanelProps {
   agents: Agent[];
   conversations: Conversation[];
   currentAgent: Agent;
-  globalBotEngine: BotEngine;
   tickets: Ticket[];
   isMessagesLoading: boolean;
   isSendingMessage: boolean;
@@ -58,7 +57,6 @@ interface ConversationPanelProps {
   onAddNote: (content: string) => Promise<void>;
   onTakeControl: () => Promise<void>;
   onReactivateBot: () => Promise<void>;
-  onChangeBotEngine: (engine: BotEngine | null) => Promise<void>;
   onResolve: () => Promise<void>;
   onUpdateLabels: (labelIds: number[]) => Promise<void>;
   onQuickToggleLabel: (labelId: number) => Promise<void>;
@@ -76,7 +74,6 @@ export const ConversationPanel = ({
   agents,
   conversations,
   currentAgent,
-  globalBotEngine,
   tickets,
   isMessagesLoading,
   isSendingMessage,
@@ -90,7 +87,6 @@ export const ConversationPanel = ({
   onAddNote,
   onTakeControl,
   onReactivateBot,
-  onChangeBotEngine,
   onResolve,
   onUpdateLabels,
   onQuickToggleLabel,
@@ -183,13 +179,11 @@ export const ConversationPanel = ({
           conversation={conversation}
           client={client}
           currentAgent={currentAgent}
-          globalBotEngine={globalBotEngine}
           onOpenDetails={() => setIsDetailsSheetOpen(true)}
           onBackToList={onBackToList}
           onOpenLabels={() => setIsLabelDialogOpen(true)}
           onTakeControl={onTakeControl}
           onReactivateBot={onReactivateBot}
-          onChangeBotEngine={onChangeBotEngine}
           onResolve={() => setIsResolveDialogOpen(true)}
           isResolving={isResolvingConversation}
           onOpenNote={() => setIsNoteDialogOpen(true)}

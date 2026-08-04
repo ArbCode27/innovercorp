@@ -96,8 +96,6 @@ export const CrmShell = () => {
                 onAddNote={crm.addNote}
                 onTakeControl={crm.takeControl}
                 onReactivateBot={crm.reactivateBot}
-                onChangeBotEngine={crm.updateConversationBotEngine}
-                globalBotEngine={crm.settings.bot_engine}
                 onResolve={crm.resolveConversation}
                 onUpdateLabels={crm.updateLabels}
                 onQuickToggleLabel={crm.quickToggleLabel}
@@ -140,8 +138,6 @@ export const CrmShell = () => {
                 onAddNote={crm.addNote}
                 onTakeControl={crm.takeControl}
                 onReactivateBot={crm.reactivateBot}
-                onChangeBotEngine={crm.updateConversationBotEngine}
-                globalBotEngine={crm.settings.bot_engine}
                 onResolve={crm.resolveConversation}
                 onUpdateLabels={crm.updateLabels}
                 onQuickToggleLabel={crm.quickToggleLabel}
@@ -204,7 +200,6 @@ export const CrmShell = () => {
               <SettingsView
                 currentAgent={auth.agent}
                 settings={crm.settings}
-                onUpdateGlobalBotEngine={crm.updateGlobalBotEngine}
                 onUpdateAiSystemPrompt={crm.updateAiSystemPrompt}
               />
             ) : null}

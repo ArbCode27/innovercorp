@@ -2,13 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@supabase/supabase-js";
 import { AI_SYSTEM_PROMPT_MAX_LENGTH } from "@/app/crm/_lib/ai-default-prompt";
-import { isBotEngine } from "../_lib/bot-engine";
 import { getCrmSettings, updateCrmSettings } from "../_lib/crm-settings";
 
 const updateSchema = z
   .object({
     agent_id: z.coerce.number().int().positive("agent_id es requerido"),
-    bot_engine: z.enum(["gemini", "make"]).optional(),
     gemini_model: z.string().trim().min(1).max(120).optional(),
     ai_system_prompt: z
       .string()
@@ -21,7 +19,6 @@ const updateSchema = z
   })
   .refine(
     (value) =>
-      value.bot_engine !== undefined ||
       value.gemini_model !== undefined ||
       value.ai_system_prompt !== undefined,
     { message: "Debes enviar al menos un campo para actualizar" },
@@ -98,16 +95,6 @@ export async function PATCH(req: NextRequest) {
       );
     }
 
-    if (
-      payload.data.bot_engine !== undefined &&
-      !isBotEngine(payload.data.bot_engine)
-    ) {
-      return NextResponse.json(
-        { error: "Motor de bot inválido" },
-        { status: 400 },
-      );
-    }
-
     const supabase = getAnonClient();
     const adminCheck = await assertAdminAgent(supabase, payload.data.agent_id);
     if ("error" in adminCheck) {
@@ -115,7 +102,6 @@ export async function PATCH(req: NextRequest) {
     }
 
     const settings = await updateCrmSettings(supabase, {
-      bot_engine: payload.data.bot_engine,
       gemini_model: payload.data.gemini_model,
       ai_system_prompt:
         typeof payload.data.ai_system_prompt === "string"

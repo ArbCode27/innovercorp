@@ -1,10 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
-
-const DEFAULT_CEDULA = "00000000";
-const DEFAULT_MAKE_PAYMENT_RECEIPT_WEBHOOK_URL =
-  "https://hook.us2.make.com/mh1c3q2r32pvme548npr9jegiphkgopz";
+import { replyToConversationWithGemini } from "@/app/api/crm/ai/_lib/reply-to-conversation";
 
 const payloadSchema = z.object({
   messageId: z.coerce.number().int().positive(),
@@ -28,17 +25,6 @@ type DbConversation = {
   agent_id: number | null;
 };
 
-type DbClient = {
-  id: number;
-  name: string | null;
-  phone: string | null;
-  whatsapp_id: string | null;
-  cedula?: string | null;
-  national_identification_number?: string | null;
-  document_number?: string | null;
-  dni?: string | null;
-};
-
 type DbAgent = {
   id: number;
   role: string | null;
@@ -52,25 +38,11 @@ const getServerEnv = (key: string) => {
   return value;
 };
 
-const getMakeWebhookUrl = () =>
-  process.env.MAKE_PAYMENT_RECEIPT_WEBHOOK_URL ||
-  DEFAULT_MAKE_PAYMENT_RECEIPT_WEBHOOK_URL;
-
 const toNonEmptyString = (value: unknown) => {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed || null;
 };
-
-const extractCedula = (client: DbClient) =>
-  toNonEmptyString(client.cedula) ||
-  toNonEmptyString(client.national_identification_number) ||
-  toNonEmptyString(client.document_number) ||
-  toNonEmptyString(client.dni) ||
-  DEFAULT_CEDULA;
-
-const extractPhoneId = (client: DbClient) =>
-  toNonEmptyString(client.whatsapp_id) || toNonEmptyString(client.phone) || "";
 
 const readMetadataFlag = (
   metadata: Record<string, unknown> | null,
@@ -159,7 +131,9 @@ export async function POST(req: NextRequest) {
 
     const { data: message, error: messageError } = await supabase
       .from("messages")
-      .select("id, conversation_id, wa_message_id, media_url, media_type, type, metadata")
+      .select(
+        "id, conversation_id, wa_message_id, media_url, media_type, type, metadata",
+      )
       .eq("id", messageId)
       .maybeSingle<DbMessage>();
 
@@ -200,33 +174,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (!conversation.client_id) {
-      return NextResponse.json(
-        { error: "La conversación no tiene un cliente asociado" },
-        { status: 404 },
-      );
-    }
-
-    const { data: client, error: clientError } = await supabase
-      .from("clients")
-      .select("*")
-      .eq("id", conversation.client_id)
-      .maybeSingle<DbClient>();
-
-    if (clientError) {
-      console.error("Process receipt client lookup:", clientError);
-      return NextResponse.json(
-        { error: "No se pudo validar el cliente de la conversación" },
-        { status: 500 },
-      );
-    }
-
-    if (!client) {
-      return NextResponse.json({ error: "Cliente no encontrado" }, { status: 404 });
-    }
-
+    const metadata = (message.metadata || {}) as Record<string, unknown>;
     const alreadyRequested = readMetadataFlag(
-      message.metadata,
+      metadata,
       "payment_receipt_requested",
     );
 
@@ -235,49 +185,8 @@ export async function POST(req: NextRequest) {
         success: true,
         alreadyProcessed: true,
         messageId: message.id,
+        engine: "gemini",
       });
-    }
-
-    const cedula = extractCedula(client);
-    const cedulaIsDefault = cedula === DEFAULT_CEDULA;
-    const phoneId = extractPhoneId(client);
-    const clientName = toNonEmptyString(client.name) || "Cliente sin nombre";
-    const metadata = (message.metadata || {}) as Record<string, unknown>;
-    const storagePath = toNonEmptyString(metadata.storage_path);
-    const storageBucket = toNonEmptyString(metadata.storage_bucket);
-
-    const webhookPayload = {
-      event_type: "payment_receipt_requested",
-      file_url: fileUrl,
-      cedula,
-      cedula_is_default: cedulaIsDefault,
-      phone_id: phoneId,
-      client_name: clientName,
-      message_id: message.id,
-      wa_message_id: message.wa_message_id,
-      conversation_id: conversation.id,
-      client_id: client.id,
-      agent_id: agentId,
-      storage_bucket: storageBucket,
-      storage_path: storagePath,
-    };
-
-    const makeResponse = await fetch(getMakeWebhookUrl(), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(webhookPayload),
-    });
-
-    const makeResponseBody = await makeResponse.text();
-    if (!makeResponse.ok) {
-      console.error("Process receipt Make webhook failed:", {
-        status: makeResponse.status,
-        body: makeResponseBody,
-      });
-      return NextResponse.json(
-        { error: "No se pudo enviar el comprobante a Make" },
-        { status: 502 },
-      );
     }
 
     const nextMetadata: Record<string, unknown> = {
@@ -285,8 +194,7 @@ export async function POST(req: NextRequest) {
       payment_receipt_requested: true,
       payment_receipt_requested_at: new Date().toISOString(),
       payment_receipt_requested_by: agentId,
-      payment_receipt_make_response_status: makeResponse.status,
-      payment_receipt_make_response_body: makeResponseBody || null,
+      payment_receipt_engine: "gemini",
     };
 
     const { error: updateMessageError } = await supabase
@@ -295,16 +203,53 @@ export async function POST(req: NextRequest) {
       .eq("id", message.id);
 
     if (updateMessageError) {
-      console.error("Process receipt update message metadata:", updateMessageError);
+      console.error(
+        "Process receipt update message metadata:",
+        updateMessageError,
+      );
+      return NextResponse.json(
+        { error: "No se pudo marcar el comprobante para procesamiento" },
+        { status: 500 },
+      );
     }
+
+    // Run Gemini after response so the UI stays snappy; forceRun allows human_mode chats.
+    after(async () => {
+      try {
+        const result = await replyToConversationWithGemini(supabase, {
+          conversationId,
+          triggerMessageId: message.id,
+          forceRun: true,
+        });
+
+        console.log("[PROCESS_RECEIPT] gemini_finished", {
+          conversationId,
+          messageId: message.id,
+          ok: result.ok,
+          reason: result.reason,
+          action: result.action ?? null,
+        });
+      } catch (error) {
+        console.error("[PROCESS_RECEIPT] gemini_failed", {
+          conversationId,
+          messageId: message.id,
+          error: error instanceof Error ? error.message : "unknown_error",
+        });
+      }
+    });
 
     return NextResponse.json({
       success: true,
       alreadyProcessed: false,
       messageId: message.id,
+      engine: "gemini",
+      scheduled: true,
     });
   } catch (error) {
-    if (error instanceof Error && error.message.startsWith("Missing environment")) {
+    if (
+      error instanceof Error &&
+      error.message.startsWith("Missing environment")
+    ) {
       console.error(error.message);
       return NextResponse.json(
         { error: "CRM no configurado en el servidor" },

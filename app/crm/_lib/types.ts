@@ -36,7 +36,7 @@ export type CrmView =
 
 export type ConversationFilter = "all" | "unread" | "bot" | "human";
 
-export type BotEngine = "gemini" | "make";
+export type BotEngine = "gemini";
 
 export interface CrmSettings {
   id: number;

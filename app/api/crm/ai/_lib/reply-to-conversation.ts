@@ -104,11 +104,17 @@ export const replyToConversationWithGemini = async (
   input: {
     conversationId: number;
     triggerMessageId?: number | null;
+    /**
+     * Agent-initiated runs (e.g. process payment receipt) may bypass human_mode
+     * so Gemini can still extract/submit while an advisor owns the chat.
+     */
+    forceRun?: boolean;
   },
 ): Promise<AiReplyResult> => {
   const baseContext = {
     conversationId: input.conversationId,
     triggerMessageId: input.triggerMessageId ?? null,
+    forceRun: Boolean(input.forceRun),
   };
 
   console.log(`${LOG_PREFIX} started`, baseContext);
@@ -145,7 +151,7 @@ export const replyToConversationWithGemini = async (
       return result;
     }
 
-    if (Boolean(conversation.human_mode)) {
+    if (Boolean(conversation.human_mode) && !input.forceRun) {
       const result = {
         ok: false,
         skipped: true,
@@ -295,7 +301,10 @@ export const replyToConversationWithGemini = async (
       .maybeSingle<ConversationRow>();
 
     if (freshError) throw freshError;
-    if (!freshConversation || Boolean(freshConversation.human_mode)) {
+    if (
+      !freshConversation ||
+      (Boolean(freshConversation.human_mode) && !input.forceRun)
+    ) {
       const result = {
         ok: false,
         skipped: true,

@@ -6,7 +6,6 @@ import { getSupabaseClient } from "./supabase";
 import type {
   Agent,
   AgentStatus,
-  BotEngine,
   Conversation,
   CreateClientInput,
   CreateLabelInput,
@@ -93,7 +92,7 @@ export const crmService = {
       throwIfError(result.error)
     );
 
-    // Settings table may not exist until migration; soft-fail to Make default.
+    // Settings table may not exist until migration; soft-fail to Gemini default.
     if (settings.error) {
       console.warn("[crm_settings] load_failed", settings.error.message);
     }
@@ -148,7 +147,6 @@ export const crmService = {
   async updateCrmSettings(
     agentId: number,
     patch: {
-      bot_engine?: BotEngine;
       gemini_model?: string;
       ai_system_prompt?: string | null;
     },
@@ -168,41 +166,6 @@ export const crmService = {
     }
 
     return data.settings as CrmSettings;
-  },
-
-  async updateGlobalBotEngine(
-    botEngine: BotEngine,
-    agentId: number,
-    extras?: { gemini_model?: string; ai_system_prompt?: string | null },
-  ) {
-    return this.updateCrmSettings(agentId, {
-      bot_engine: botEngine,
-      gemini_model: extras?.gemini_model,
-      ai_system_prompt: extras?.ai_system_prompt,
-    });
-  },
-
-  async updateConversationBotEngine(
-    conversationId: number,
-    botEngine: BotEngine | null,
-  ) {
-    const response = await fetch(
-      `/api/crm/conversations/${conversationId}/bot-engine`,
-      {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bot_engine: botEngine }),
-      },
-    );
-
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(
-        data.error || "No se pudo actualizar el motor de la conversación",
-      );
-    }
-
-    return data.conversation as Conversation;
   },
 
   async loadMessages(conversationId: number) {

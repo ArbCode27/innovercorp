@@ -58,7 +58,7 @@ export const getCrmSettings = async (
     .maybeSingle();
 
   if (error) {
-    // Table may not exist yet before migration; fail soft to Make.
+    // Table may not exist yet before migration; fail soft to Gemini defaults.
     console.error("[crm_settings] load_failed", error.message);
     return DEFAULT_SETTINGS;
   }

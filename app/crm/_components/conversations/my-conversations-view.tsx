@@ -3,7 +3,6 @@
 import { Inbox } from "lucide-react";
 import type {
   Agent,
-  BotEngine,
   Client,
   Conversation,
   CrmView,
@@ -58,8 +57,6 @@ interface MyConversationsViewProps {
   onAddNote: (content: string) => Promise<void>;
   onTakeControl: () => Promise<void>;
   onReactivateBot: () => Promise<void>;
-  onChangeBotEngine: (engine: BotEngine | null) => Promise<void>;
-  globalBotEngine: BotEngine;
   onResolve: () => Promise<void>;
   onUpdateLabels: (labelIds: number[]) => Promise<void>;
   onQuickToggleLabel: (labelId: number) => Promise<void>;
@@ -101,8 +98,6 @@ export const MyConversationsView = ({
   onAddNote,
   onTakeControl,
   onReactivateBot,
-  onChangeBotEngine,
-  globalBotEngine,
   onResolve,
   onUpdateLabels,
   onQuickToggleLabel,
@@ -199,8 +194,6 @@ export const MyConversationsView = ({
           onAddNote={onAddNote}
           onTakeControl={onTakeControl}
           onReactivateBot={onReactivateBot}
-          onChangeBotEngine={onChangeBotEngine}
-          globalBotEngine={globalBotEngine}
           onResolve={onResolve}
           onUpdateLabels={onUpdateLabels}
           onQuickToggleLabel={onQuickToggleLabel}

@@ -3,15 +3,6 @@ import { NextRequest, NextResponse, after } from "next/server";
 //    import { NextRequest, NextResponse, unstable_after as after } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { normalizeStorageMimeType } from "../_lib/media-mime";
-import {
-  validateMakeMessagePayload,
-  type MakeMessagePayload,
-} from "../_lib/make-payload";
-import {
-  findConversationEngineByWaMessageId,
-  notifyMakeWebhook,
-  resolveBotRouteContext,
-} from "../_lib/make-gate";
 import { replyToConversationWithGemini } from "@/app/api/crm/ai/_lib/reply-to-conversation";
 
 // Fuerza runtime Node.js explícitamente: el handler usa Buffer y fetch a Graph API,
@@ -19,7 +10,6 @@ import { replyToConversationWithGemini } from "@/app/api/crm/ai/_lib/reply-to-co
 export const runtime = "nodejs";
 
 const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN!;
-const MAKE_WEBHOOK_URL = process.env.MAKE_WEBHOOK_URL;
 const GRAPH_API_VERSION = "v19.0";
 const DEFAULT_STORAGE_BUCKET = "whatsapp-media";
 
@@ -101,64 +91,6 @@ const sanitizePathSegment = (value: string) =>
     .replace(/[^a-z0-9._-]/g, "-")
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "");
-
-const ensureConversationContactPhone = async (
-  supabase: ReturnType<typeof getSupabaseServerClient>,
-  conversationId: number,
-  clientId: number,
-  customerPhone: string,
-) => {
-  const normalizedPhone = normalizePhone(customerPhone);
-  if (!normalizedPhone) {
-    return { ok: false as const, reason: "invalid_customer_phone" };
-  }
-
-  const { data: conversation, error: conversationError } = await supabase
-    .from("conversations")
-    .update({
-      customer_phone: normalizedPhone,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", conversationId)
-    .select("id, customer_phone")
-    .maybeSingle();
-
-  if (conversationError) {
-    console.error(
-      `${WEBHOOK_LOG_PREFIX} ensure_customer_phone_failed`,
-      conversationError,
-    );
-    return { ok: false as const, reason: "customer_phone_update_failed" };
-  }
-
-  if (!conversation?.customer_phone) {
-    return {
-      ok: false as const,
-      reason: "customer_phone_missing_after_update",
-    };
-  }
-
-  const { error: clientError } = await supabase
-    .from("clients")
-    .update({
-      phone: normalizedPhone,
-      whatsapp_id: normalizedPhone,
-    })
-    .eq("id", clientId);
-
-  if (clientError) {
-    console.error(
-      `${WEBHOOK_LOG_PREFIX} ensure_client_phone_failed`,
-      clientError,
-    );
-    // No bloqueamos el notify a Make si la conversación ya tiene customer_phone.
-  }
-
-  return {
-    ok: true as const,
-    customerPhone: String(conversation.customer_phone),
-  };
-};
 
 const inferExtensionFromMime = (mimeType: string | null, fallback = "bin") => {
   const normalizedMimeType = (mimeType || "").toLowerCase();
@@ -903,183 +835,82 @@ export async function POST(req: NextRequest) {
       requestSummary.ignored = messageResult.ignored;
       requestSummary.saved = !messageResult.ignored;
 
-      // Route bot reply with a single gate: Gemini XOR Make (never both).
+      // Gemini is the sole bot engine (Make removed).
       if (!messageResult.ignored && messageResult.conversationId) {
-        try {
-          const route = await resolveBotRouteContext(supabase, {
-            humanMode: messageResult.humanMode,
-            conversationBotEngine: messageResult.botEngine,
-          });
-
-          console.log(`${WEBHOOK_LOG_PREFIX} bot_engine_resolved`, {
+        if (messageResult.humanMode) {
+          console.log(`${WEBHOOK_LOG_PREFIX} bot_reply_skipped_human_mode`, {
             messageId,
             conversationId: messageResult.conversationId,
-            messageType,
-            botEngine: route.engine,
-            allowMake: route.allowMake,
-            conversationOverride: messageResult.botEngine,
-            globalEngine: route.globalBotEngine,
-            humanMode: route.humanMode,
           });
+        } else {
+          // Text + image/audio (multimodal). Video/document remain deferred.
+          const geminiEligible =
+            messageType === "text" ||
+            messageType === "image" ||
+            messageType === "audio";
 
-          if (route.humanMode) {
-            console.log(`${WEBHOOK_LOG_PREFIX} bot_reply_skipped_human_mode`, {
+          if (geminiEligible) {
+            const conversationIdForGemini = messageResult.conversationId;
+            const dbMessageIdForGemini = messageResult.dbMessageId;
+
+            console.log(`${WEBHOOK_LOG_PREFIX} gemini_reply_scheduled`, {
               messageId,
-              conversationId: messageResult.conversationId,
+              conversationId: conversationIdForGemini,
+              messageType,
             });
-          } else if (route.engine === "gemini") {
-            // Text + image/audio (multimodal). Video/document remain deferred.
-            const geminiEligible =
-              messageType === "text" ||
-              messageType === "image" ||
-              messageType === "audio";
 
-            if (geminiEligible) {
-              const conversationIdForGemini = messageResult.conversationId;
-              const dbMessageIdForGemini = messageResult.dbMessageId;
+            // `after()` keeps the serverless invocation alive until Gemini finishes.
+            after(async () => {
+              try {
+                const result = await replyToConversationWithGemini(supabase, {
+                  conversationId: conversationIdForGemini,
+                  triggerMessageId: dbMessageIdForGemini,
+                });
 
-              console.log(`${WEBHOOK_LOG_PREFIX} gemini_reply_scheduled`, {
-                messageId,
-                conversationId: conversationIdForGemini,
-                messageType,
-              });
-
-              // `after()` keeps the serverless invocation alive until Gemini finishes.
-              after(async () => {
-                try {
-                  const result = await replyToConversationWithGemini(supabase, {
-                    conversationId: conversationIdForGemini,
-                    triggerMessageId: dbMessageIdForGemini,
-                  });
-
-                  if (!result.ok) {
-                    console.error(
-                      `${WEBHOOK_LOG_PREFIX} gemini_reply_no_response`,
-                      {
-                        messageId,
-                        conversationId: conversationIdForGemini,
-                        messageType,
-                        skipped: result.skipped ?? false,
-                        reason: result.reason,
-                        willReplyToClient: false,
-                      },
-                    );
-                    return;
-                  }
-
-                  console.log(`${WEBHOOK_LOG_PREFIX} gemini_reply_ok`, {
-                    messageId,
-                    conversationId: conversationIdForGemini,
-                    messageType,
-                    action: result.action ?? null,
-                    reason: result.reason,
-                    dbMessageId: result.messageId ?? null,
-                    willReplyToClient: true,
-                  });
-                } catch (error) {
-                  console.error(`${WEBHOOK_LOG_PREFIX} gemini_reply_failed`, {
-                    messageId,
-                    conversationId: conversationIdForGemini,
-                    messageType,
-                    error:
-                      error instanceof Error ? error.message : "unknown_error",
-                    willReplyToClient: false,
-                  });
+                if (!result.ok) {
+                  console.error(
+                    `${WEBHOOK_LOG_PREFIX} gemini_reply_no_response`,
+                    {
+                      messageId,
+                      conversationId: conversationIdForGemini,
+                      messageType,
+                      skipped: result.skipped ?? false,
+                      reason: result.reason,
+                      willReplyToClient: false,
+                    },
+                  );
+                  return;
                 }
-              });
-            } else {
-              console.warn(`${WEBHOOK_LOG_PREFIX} gemini_media_deferred`, {
-                messageId,
-                conversationId: messageResult.conversationId,
-                messageType,
-                reason: "gemini_multimodal_v1_image_audio_only",
-                willReplyToClient: false,
-              });
-            }
-          } else if (route.allowMake && MAKE_WEBHOOK_URL) {
-            let contactPhoneReady = true;
-            let contactPhoneReason: string | null = null;
 
-            if (messageResult.clientId) {
-              const contactPhoneResult = await ensureConversationContactPhone(
-                supabase,
-                messageResult.conversationId,
-                messageResult.clientId,
-                normalizedFrom,
-              );
-              contactPhoneReady = contactPhoneResult.ok;
-              contactPhoneReason = contactPhoneResult.ok
-                ? null
-                : contactPhoneResult.reason;
-            }
-
-            const makePayload: MakeMessagePayload = {
-              event_type: "message",
-              wa_message_id: messageId,
-              message_type: messageType,
-              from: normalizedFrom,
-              wa_name: waName,
-              content: content.trim(),
-              preview: (preview || content).trim(),
-              media_id: mediaId,
-              media_url: messageResult.mediaUrl,
-              media_type: mediaType,
-              mime_type: mimeType,
-              caption,
-              latitude,
-              longitude,
-              location_name: locationName,
-              location_address: locationAddress,
-              timestamp,
-              phone_number_id: metadata?.phone_number_id || null,
-              client_id: messageResult.clientId,
-              conversation_id: messageResult.conversationId,
-              message_id: messageResult.dbMessageId,
-              human_mode: messageResult.humanMode,
-              saved: !messageResult.ignored,
-              ignored: messageResult.ignored,
-              reason: messageResult.reason,
-            };
-
-            const validation = validateMakeMessagePayload(makePayload);
-            if (!contactPhoneReady) {
-              validation.errors.push(
-                contactPhoneReason || "contact_phone_not_ready",
-              );
-            }
-
-            if (!validation.ok || !contactPhoneReady) {
-              console.log(`${WEBHOOK_LOG_PREFIX} make_payload_skipped`, {
-                messageId,
-                conversationId: messageResult.conversationId,
-                clientId: messageResult.clientId,
-                errors: validation.errors,
-              });
-            } else {
-              await notifyMakeWebhook(MAKE_WEBHOOK_URL, makePayload, {
-                eventType: "message",
-                context: {
+                console.log(`${WEBHOOK_LOG_PREFIX} gemini_reply_ok`, {
                   messageId,
-                  conversationId: messageResult.conversationId,
-                  clientId: messageResult.clientId,
-                },
-              });
-            }
-          } else if (route.engine === "make" && !MAKE_WEBHOOK_URL) {
-            console.log(`${WEBHOOK_LOG_PREFIX} make_url_missing`, {
+                  conversationId: conversationIdForGemini,
+                  messageType,
+                  action: result.action ?? null,
+                  reason: result.reason,
+                  dbMessageId: result.messageId ?? null,
+                  willReplyToClient: true,
+                });
+              } catch (error) {
+                console.error(`${WEBHOOK_LOG_PREFIX} gemini_reply_failed`, {
+                  messageId,
+                  conversationId: conversationIdForGemini,
+                  messageType,
+                  error:
+                    error instanceof Error ? error.message : "unknown_error",
+                  willReplyToClient: false,
+                });
+              }
+            });
+          } else {
+            console.warn(`${WEBHOOK_LOG_PREFIX} gemini_media_deferred`, {
               messageId,
               conversationId: messageResult.conversationId,
+              messageType,
+              reason: "gemini_multimodal_v1_image_audio_only",
+              willReplyToClient: false,
             });
           }
-        } catch (routingError) {
-          console.error(`${WEBHOOK_LOG_PREFIX} bot_routing_failed`, {
-            messageId,
-            conversationId: messageResult.conversationId,
-            error:
-              routingError instanceof Error
-                ? routingError.message
-                : "unknown_error",
-          });
         }
       }
     }
@@ -1127,53 +958,6 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // Make status notifications only when the related conversation uses Make.
-      if (MAKE_WEBHOOK_URL && waMessageId) {
-        const conversationEngine = await findConversationEngineByWaMessageId(
-          supabase,
-          waMessageId,
-        );
-
-        if (!conversationEngine) {
-          // Safe default: do not notify Make if we cannot resolve the engine.
-          console.log(`${WEBHOOK_LOG_PREFIX} make_status_skipped_unresolved`, {
-            waMessageId,
-          });
-        } else {
-          const route = await resolveBotRouteContext(supabase, {
-            humanMode: conversationEngine.humanMode,
-            conversationBotEngine: conversationEngine.botEngine,
-          });
-
-          if (!route.allowMake) {
-            console.log(`${WEBHOOK_LOG_PREFIX} make_status_skipped`, {
-              waMessageId,
-              conversationId: conversationEngine.conversationId,
-              botEngine: route.engine,
-              humanMode: route.humanMode,
-            });
-          } else {
-            await notifyMakeWebhook(
-              MAKE_WEBHOOK_URL,
-              {
-                event_type: "status_update",
-                wa_message_id: status.id,
-                status: status.status,
-                timestamp: status.timestamp,
-                recipient_id: status.recipient_id,
-              },
-              {
-                eventType: "status_update",
-                context: {
-                  waMessageId,
-                  conversationId: conversationEngine.conversationId,
-                  botEngine: route.engine,
-                },
-              },
-            );
-          }
-        }
-      }
     } else {
       requestSummary.eventType = "unrecognized";
       requestSummary.ignored = true;
