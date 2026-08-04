@@ -3,6 +3,12 @@ import { GEMINI_TOOL_DECLARATIONS } from "./gemini-tools";
 export type GeminiContentPart =
   | { text: string }
   | {
+      inlineData: {
+        mimeType: string;
+        data: string;
+      };
+    }
+  | {
       functionCall: {
         name: string;
         args?: Record<string, unknown>;

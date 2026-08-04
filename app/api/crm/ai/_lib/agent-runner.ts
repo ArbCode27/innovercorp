@@ -1,6 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { DEFAULT_AI_SYSTEM_PROMPT } from "@/app/crm/_lib/ai-default-prompt";
 import {
+  buildAgentContents,
+  GEMINI_MEDIA_CONTRACT_PROMPT,
+  type AgentHistoryMessage,
+} from "./context-builder";
+import {
   generateGeminiWithTools,
   type GeminiContent,
   type GeminiContentPart,
@@ -56,46 +61,21 @@ const buildIdentityBlock = (input: {
   ].join("\n");
 };
 
-const buildHistoryContents = (
-  messages: Array<{
-    type: string | null;
-    content: string | null;
-    sender_type: string | null;
-  }>,
-): GeminiContent[] => {
-  const contents = messages
-    .filter((message) => Boolean(message.content?.trim()))
-    .map((message) => {
-      const isUser =
-        message.type === "in" || message.sender_type === "client";
-      return {
-        role: isUser ? ("user" as const) : ("model" as const),
-        parts: [{ text: String(message.content).trim() }] as GeminiContentPart[],
-      };
-    });
-
-  while (contents.length > 0 && contents[0].role !== "user") {
-    contents.shift();
-  }
-
-  return contents;
-};
-
 export const runGeminiAgent = async (input: {
   supabase: SupabaseClient;
   conversationId: number;
   customerPhone: string | null;
   client: AgentClientSnapshot | null;
-  messages: Array<{
-    type: string | null;
-    content: string | null;
-    sender_type: string | null;
-  }>;
+  messages: AgentHistoryMessage[];
+  triggerMessageId?: number | null;
   businessPrompt: string | null | undefined;
   model: string;
 }): Promise<AgentDecision> => {
   const runId = crypto.randomUUID();
-  const contents = buildHistoryContents(input.messages);
+  const { contents, attachedMediaIds } = await buildAgentContents({
+    messages: input.messages,
+    triggerMessageId: input.triggerMessageId,
+  });
 
   if (!contents.length) {
     throw new Error("empty_history");
@@ -105,6 +85,8 @@ export const runGeminiAgent = async (input: {
     input.businessPrompt?.trim() || DEFAULT_AI_SYSTEM_PROMPT,
     "",
     GEMINI_TOOLS_CONTRACT_PROMPT,
+    "",
+    GEMINI_MEDIA_CONTRACT_PROMPT,
     "",
     buildIdentityBlock({
       conversationId: input.conversationId,
@@ -127,21 +109,31 @@ export const runGeminiAgent = async (input: {
     escalateMessage: null,
   };
 
+  const hasInlineMedia = attachedMediaIds.length > 0;
+  const requestTimeoutMs = hasInlineMedia ? 40000 : 25000;
+
   console.log(`${LOG_PREFIX} started`, {
     conversationId: input.conversationId,
     runId,
     model: input.model,
     contentsCount: contents.length,
+    attachedMediaIds,
     linkedWispro: Boolean(input.client?.wispro_id),
   });
+
+  // Working copy — tool loop mutates this array.
+  const workingContents: GeminiContent[] = contents.map((content) => ({
+    role: content.role,
+    parts: [...content.parts],
+  }));
 
   for (let step = 0; step < MAX_TOOL_STEPS; step += 1) {
     const generated = await generateGeminiWithTools({
       systemPrompt,
-      contents,
+      contents: workingContents,
       model: input.model,
       enableTools: true,
-      timeoutMs: 25000,
+      timeoutMs: requestTimeoutMs,
     });
 
     console.log(`${LOG_PREFIX} loop_step`, {
@@ -154,9 +146,9 @@ export const runGeminiAgent = async (input: {
 
     if (generated.functionCalls.length > 0) {
       if (generated.modelContent) {
-        contents.push(generated.modelContent);
+        workingContents.push(generated.modelContent);
       } else {
-        contents.push({
+        workingContents.push({
           role: "model",
           parts: generated.functionCalls.map((call) => ({
             functionCall: {
@@ -183,8 +175,7 @@ export const runGeminiAgent = async (input: {
         }
       }
 
-      // Gemini expects functionResponse turns as role "user".
-      contents.push({
+      workingContents.push({
         role: "user",
         parts: responseParts,
       });
@@ -205,6 +196,7 @@ export const runGeminiAgent = async (input: {
       conversationId: input.conversationId,
       runId,
       preview: replyText.slice(0, 160),
+      attachedMediaIds,
     });
 
     return {
@@ -227,13 +219,12 @@ export const runGeminiAgent = async (input: {
     };
   }
 
-  // Exhausted tool steps without a final text — ask model once more without tools.
   const fallback = await generateGeminiWithTools({
     systemPrompt: `${systemPrompt}\n\nNo uses más tools. Responde ahora al cliente en texto claro.`,
-    contents,
+    contents: workingContents,
     model: input.model,
     enableTools: false,
-    timeoutMs: 20000,
+    timeoutMs: requestTimeoutMs,
   });
 
   const fallbackText = fallback.text.trim();

@@ -928,22 +928,23 @@ export async function POST(req: NextRequest) {
               conversationId: messageResult.conversationId,
             });
           } else if (route.engine === "gemini") {
-            // Zero Make calls in Gemini mode (text + media + later statuses).
-            if (messageType === "text") {
+            // Text + image/audio (multimodal). Video/document remain deferred.
+            const geminiEligible =
+              messageType === "text" ||
+              messageType === "image" ||
+              messageType === "audio";
+
+            if (geminiEligible) {
               const conversationIdForGemini = messageResult.conversationId;
               const dbMessageIdForGemini = messageResult.dbMessageId;
 
               console.log(`${WEBHOOK_LOG_PREFIX} gemini_reply_scheduled`, {
                 messageId,
                 conversationId: conversationIdForGemini,
+                messageType,
               });
 
-              // FIX: antes esto era `void promise.then().catch()` (fire-and-forget).
-              // En runtimes serverless, la instancia de la función puede
-              // congelarse/matarse apenas se devuelve el NextResponse de más abajo,
-              // cortando esta promesa antes de que sus callbacks (y sus console.log)
-              // lleguen a ejecutarse. `after()` mantiene viva la invocación hasta
-              // que este callback termine, sin retrasar la respuesta a Meta.
+              // `after()` keeps the serverless invocation alive until Gemini finishes.
               after(async () => {
                 try {
                   const result = await replyToConversationWithGemini(supabase, {
@@ -957,6 +958,7 @@ export async function POST(req: NextRequest) {
                       {
                         messageId,
                         conversationId: conversationIdForGemini,
+                        messageType,
                         skipped: result.skipped ?? false,
                         reason: result.reason,
                         willReplyToClient: false,
@@ -968,6 +970,7 @@ export async function POST(req: NextRequest) {
                   console.log(`${WEBHOOK_LOG_PREFIX} gemini_reply_ok`, {
                     messageId,
                     conversationId: conversationIdForGemini,
+                    messageType,
                     action: result.action ?? null,
                     reason: result.reason,
                     dbMessageId: result.messageId ?? null,
@@ -977,6 +980,7 @@ export async function POST(req: NextRequest) {
                   console.error(`${WEBHOOK_LOG_PREFIX} gemini_reply_failed`, {
                     messageId,
                     conversationId: conversationIdForGemini,
+                    messageType,
                     error:
                       error instanceof Error ? error.message : "unknown_error",
                     willReplyToClient: false,
@@ -984,11 +988,11 @@ export async function POST(req: NextRequest) {
                 }
               });
             } else {
-              console.warn(`${WEBHOOK_LOG_PREFIX} gemini_media_no_reply`, {
+              console.warn(`${WEBHOOK_LOG_PREFIX} gemini_media_deferred`, {
                 messageId,
                 conversationId: messageResult.conversationId,
                 messageType,
-                reason: "gemini_v1_text_only",
+                reason: "gemini_multimodal_v1_image_audio_only",
                 willReplyToClient: false,
               });
             }

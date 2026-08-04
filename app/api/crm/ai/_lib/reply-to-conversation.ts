@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getCrmSettings } from "../../_lib/crm-settings";
+import type { AgentHistoryMessage } from "./context-builder";
 import { runGeminiAgent, type AgentClientSnapshot } from "./agent-runner";
 
 const LOG_PREFIX = "[CRM_AI_REPLY]";
@@ -13,14 +14,6 @@ type ConversationRow = {
   customer_phone: string | null;
   status: string | null;
   bot_engine: string | null;
-};
-
-type MessageRow = {
-  id: number;
-  type: string | null;
-  content: string | null;
-  sender_type: string | null;
-  created_at: string | null;
 };
 
 const normalizePhone = (value: string) => value.replace(/\D/g, "");
@@ -184,23 +177,32 @@ export const replyToConversationWithGemini = async (
 
     const { data: history, error: historyError } = await supabase
       .from("messages")
-      .select("id, type, content, sender_type, created_at")
+      .select(
+        "id, type, content, sender_type, created_at, media_url, media_type, mime_type, caption, metadata",
+      )
       .eq("conversation_id", conversation.id)
       .order("created_at", { ascending: false })
       .limit(HISTORY_LIMIT);
 
     if (historyError) throw historyError;
 
-    const chronological = ([...(history || [])] as MessageRow[]).reverse();
+    const chronological = ([...(history || [])] as AgentHistoryMessage[]).reverse();
     const latestInbound = [...chronological]
       .reverse()
-      .find((message) => message.type === "in");
+      .find((message) => message.type === "in" || message.sender_type === "client");
 
-    if (!latestInbound?.content?.trim()) {
+    const hasInboundSignal = Boolean(
+      latestInbound &&
+        (latestInbound.content?.trim() ||
+          latestInbound.media_url ||
+          latestInbound.caption?.trim()),
+    );
+
+    if (!hasInboundSignal) {
       const result = {
         ok: false,
         skipped: true,
-        reason: "no_inbound_text",
+        reason: "no_inbound_content",
       } as const;
       logGeminiNoReply("skipped", {
         ...baseContext,
@@ -215,7 +217,8 @@ export const replyToConversationWithGemini = async (
       model: settings.gemini_model,
       historyCount: chronological.length,
       linkedWispro: Boolean(client?.wispro_id),
-      latestInboundPreview: latestInbound.content?.slice(0, 120) ?? null,
+      latestInboundPreview: latestInbound?.content?.slice(0, 120) ?? null,
+      latestMediaType: latestInbound?.media_type ?? null,
     });
 
     let decision;
@@ -226,6 +229,7 @@ export const replyToConversationWithGemini = async (
         customerPhone: conversation.customer_phone,
         client,
         messages: chronological,
+        triggerMessageId: input.triggerMessageId,
         businessPrompt: settings.ai_system_prompt,
         model: settings.gemini_model,
       });
