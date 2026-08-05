@@ -1,14 +1,41 @@
 "use client";
 
-import { ChangeEvent, ClipboardEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
-import { ImagePlus, Mic, Send, Square, Trash2, X } from "lucide-react";
+import {
+  ChangeEvent,
+  ClipboardEvent,
+  KeyboardEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import dynamic from "next/dynamic";
+import { ImagePlus, Mic, Send, Smile, Square, Trash2, X } from "lucide-react";
 import { CrmButton } from "../shared/crm-button";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
 import { useVoiceRecorder } from "../../_hooks/use-voice-recorder";
 import type { QuickReply } from "../../_lib/types";
+
+const EmojiPickerPanel = dynamic(
+  () =>
+    import("./emoji-picker-panel").then((mod) => mod.EmojiPickerPanel),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-[220px] w-[min(100vw-2rem,360px)] items-center justify-center text-sm text-slate-500">
+        Cargando emojis…
+      </div>
+    ),
+  },
+);
 
 interface MessageComposerProps {
   disabled?: boolean;
@@ -87,6 +114,7 @@ export const MessageComposer = ({
   const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null);
   const [imageError, setImageError] = useState<string | null>(null);
   const [isQuickReplyMenuOpen, setIsQuickReplyMenuOpen] = useState(false);
+  const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
   const [quickReplyQuery, setQuickReplyQuery] = useState("");
   const [quickReplyTriggerStart, setQuickReplyTriggerStart] = useState<number | null>(null);
   const [quickReplyTriggerEnd, setQuickReplyTriggerEnd] = useState<number | null>(null);
@@ -99,6 +127,8 @@ export const MessageComposer = ({
   const canStartRecording =
     !isInputLocked && recorder.supportsRecording && recorder.status !== "recording";
   const canOpenImagePicker = !isInputLocked && recorder.status !== "recording";
+  const canOpenEmojiPicker =
+    !isInputLocked && recorder.status !== "recording";
   const activeQuickReplies = useMemo(
     () => quickReplies.filter((quickReply) => quickReply.is_active),
     [quickReplies],
@@ -141,6 +171,7 @@ export const MessageComposer = ({
       return;
     }
 
+    setIsEmojiPickerOpen(false);
     setIsQuickReplyMenuOpen(true);
     setQuickReplyQuery(context.query);
     setQuickReplyTriggerStart(context.triggerStart);
@@ -177,7 +208,29 @@ export const MessageComposer = ({
   useEffect(() => {
     if (!isInputLocked) return;
     closeQuickReplyMenu();
+    setIsEmojiPickerOpen(false);
   }, [isInputLocked]);
+
+  const insertEmojiAtCursor = (emoji: string) => {
+    if (!emoji || isInputLocked) return;
+
+    const el = textareaRef.current;
+    const start = el?.selectionStart ?? value.length;
+    const end = el?.selectionEnd ?? value.length;
+    const nextValue = value.slice(0, start) + emoji + value.slice(end);
+    const nextCursor = start + emoji.length;
+
+    setValue(nextValue);
+    setIsQuickReplyMenuOpen(false);
+
+    requestAnimationFrame(() => {
+      const textarea = textareaRef.current;
+      if (!textarea) return;
+      textarea.focus();
+      textarea.setSelectionRange(nextCursor, nextCursor);
+      updateQuickReplyFromText(nextValue, nextCursor);
+    });
+  };
 
   const clearSelectedImage = () => {
     setSelectedImage(null);
@@ -219,6 +272,8 @@ export const MessageComposer = ({
 
   const handleStartRecording = async () => {
     if (!canStartRecording) return;
+    setIsEmojiPickerOpen(false);
+    closeQuickReplyMenu();
     await recorder.startRecording();
   };
 
@@ -553,6 +608,46 @@ export const MessageComposer = ({
           aria-label="Grabar nota de voz">
           <Mic className="size-4" aria-hidden="true" />
         </CrmButton>
+        <Popover
+          open={isEmojiPickerOpen}
+          onOpenChange={(open) => {
+            if (open && !canOpenEmojiPicker) return;
+            if (open) closeQuickReplyMenu();
+            setIsEmojiPickerOpen(open);
+          }}>
+          <PopoverTrigger asChild>
+            <CrmButton
+              type="button"
+              variant="secondary"
+              disabled={!canOpenEmojiPicker}
+              className="size-11 rounded-full p-0"
+              aria-label="Insertar emoji"
+              aria-expanded={isEmojiPickerOpen}
+              aria-haspopup="dialog">
+              <Smile className="size-4" aria-hidden="true" />
+            </CrmButton>
+          </PopoverTrigger>
+          <PopoverContent
+            side="top"
+            align="start"
+            sideOffset={10}
+            className={cn(
+              "w-auto border p-0 shadow-lg",
+              CRM_SURFACES.border,
+              CRM_SURFACES.elevated,
+            )}
+            onCloseAutoFocus={(event) => {
+              event.preventDefault();
+              textareaRef.current?.focus();
+            }}
+            onEscapeKeyDown={() => {
+              textareaRef.current?.focus();
+            }}>
+            {isEmojiPickerOpen ? (
+              <EmojiPickerPanel onEmojiSelect={insertEmojiAtCursor} />
+            ) : null}
+          </PopoverContent>
+        </Popover>
         <Textarea
           ref={textareaRef}
           value={value}
