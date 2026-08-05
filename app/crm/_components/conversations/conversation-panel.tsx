@@ -219,7 +219,6 @@ export const ConversationPanel = ({
           isResolving={isResolvingConversation}
           onOpenNote={() => setIsNoteDialogOpen(true)}
           onOpenAssign={() => setIsAssignDialogOpen(true)}
-          onOpenWispro={() => setIsWisproDialogOpen(true)}
         />
         {showUnknownBanner ? (
           <UnknownClientBanner onOpenWispro={() => setIsWisproDialogOpen(true)} />

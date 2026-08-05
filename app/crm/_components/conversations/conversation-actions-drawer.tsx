@@ -5,7 +5,6 @@ import {
   EllipsisVertical,
   FileText,
   RotateCcw,
-  Search,
   Tag,
   UserCheck,
   UserPlus,
@@ -27,14 +26,12 @@ interface ConversationActionsDrawerProps {
   isResolving: boolean;
   canAssignAgent: boolean;
   assignLabel: string;
-  wisproActionLabel: string;
   onTakeControl: () => void;
   onReactivateBot: () => void;
   onResolve: () => void;
   onOpenLabels: () => void;
   onOpenNote: () => void;
   onOpenAssign: () => void;
-  onOpenWispro: () => void;
 }
 
 export const ConversationActionsDrawer = ({
@@ -42,14 +39,12 @@ export const ConversationActionsDrawer = ({
   isResolving,
   canAssignAgent,
   assignLabel,
-  wisproActionLabel,
   onTakeControl,
   onReactivateBot,
   onResolve,
   onOpenLabels,
   onOpenNote,
   onOpenAssign,
-  onOpenWispro,
 }: ConversationActionsDrawerProps) => (
   <Drawer>
     <DrawerTrigger asChild>
@@ -144,17 +139,6 @@ export const ConversationActionsDrawer = ({
             </CrmButton>
           </DrawerClose>
         ) : null}
-
-        <DrawerClose asChild>
-          <CrmButton
-            type="button"
-            variant="secondary"
-            className="w-full justify-start"
-            onClick={onOpenWispro}>
-            <Search className="size-4" aria-hidden="true" />
-            {wisproActionLabel}
-          </CrmButton>
-        </DrawerClose>
       </div>
     </DrawerContent>
   </Drawer>

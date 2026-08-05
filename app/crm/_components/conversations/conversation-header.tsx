@@ -5,7 +5,6 @@ import {
   Check,
   FileText,
   RotateCcw,
-  Search,
   Tag,
   UserCheck,
   UserPlus,
@@ -32,7 +31,6 @@ interface ConversationHeaderProps {
   isResolving?: boolean;
   onOpenNote: () => void;
   onOpenAssign: () => void;
-  onOpenWispro: () => void;
 }
 
 export const ConversationHeader = ({
@@ -47,7 +45,6 @@ export const ConversationHeader = ({
   onResolve,
   onOpenNote,
   onOpenAssign,
-  onOpenWispro,
   isResolving = false,
 }: ConversationHeaderProps) => {
   const displayName =
@@ -63,10 +60,6 @@ export const ConversationHeader = ({
   const assignLabel = conversation.human_mode
     ? "Transferir conversación"
     : "Asignar agente";
-  const isWisproLinked = Boolean(client?.wispro_id);
-  const wisproActionLabel = isWisproLinked
-    ? "Cambiar vinculación"
-    : "Buscar en Wispro";
   const agentControlName = conversation.agent_control?.trim() || null;
   const shouldShowStatusBadge = conversation.status !== "abierto";
 
@@ -136,14 +129,12 @@ export const ConversationHeader = ({
             isResolving={isResolving}
             canAssignAgent={canAssignAgent}
             assignLabel={assignLabel}
-            wisproActionLabel={wisproActionLabel}
             onTakeControl={onTakeControl}
             onReactivateBot={onReactivateBot}
             onResolve={onResolve}
             onOpenLabels={onOpenLabels}
             onOpenNote={onOpenNote}
             onOpenAssign={onOpenAssign}
-            onOpenWispro={onOpenWispro}
           />
           <CrmThemeToggle className="size-8 md:hidden" />
         </div>
@@ -185,10 +176,6 @@ export const ConversationHeader = ({
               {assignLabel}
             </CrmButton>
           ) : null}
-          <CrmButton type="button" variant="secondary" size="sm" onClick={onOpenWispro}>
-            <Search className="size-3" aria-hidden="true" />
-            {wisproActionLabel}
-          </CrmButton>
         </div>
       </div>
       {conversation.human_mode ? (
