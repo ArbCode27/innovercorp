@@ -58,4 +58,24 @@ export const wisproService = {
 
     return payload.client;
   },
+
+  async unlinkFromClient(clientId: number): Promise<Client> {
+    const response = await fetch("/api/crm/wispro/unlink", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ clientId }),
+    });
+
+    const payload = (await response.json()) as WisproApiPayload;
+
+    if (!response.ok) {
+      parseApiError(payload, "No se pudo desvincular Wispro");
+    }
+
+    if (!payload.client) {
+      throw new Error("No se recibió el cliente actualizado");
+    }
+
+    return payload.client;
+  },
 };

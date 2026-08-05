@@ -63,7 +63,10 @@ export const ConversationHeader = ({
   const assignLabel = conversation.human_mode
     ? "Transferir conversación"
     : "Asignar agente";
-  const showWisproSearch = !client || !client.wispro_id;
+  const isWisproLinked = Boolean(client?.wispro_id);
+  const wisproActionLabel = isWisproLinked
+    ? "Cambiar vinculación"
+    : "Buscar en Wispro";
   const agentControlName = conversation.agent_control?.trim() || null;
   const shouldShowStatusBadge = conversation.status !== "abierto";
 
@@ -133,7 +136,7 @@ export const ConversationHeader = ({
             isResolving={isResolving}
             canAssignAgent={canAssignAgent}
             assignLabel={assignLabel}
-            showWisproSearch={showWisproSearch}
+            wisproActionLabel={wisproActionLabel}
             onTakeControl={onTakeControl}
             onReactivateBot={onReactivateBot}
             onResolve={onResolve}
@@ -182,12 +185,10 @@ export const ConversationHeader = ({
               {assignLabel}
             </CrmButton>
           ) : null}
-          {showWisproSearch ? (
-            <CrmButton type="button" variant="secondary" size="sm" onClick={onOpenWispro}>
-              <Search className="size-3" aria-hidden="true" />
-              Buscar en Wispro
-            </CrmButton>
-          ) : null}
+          <CrmButton type="button" variant="secondary" size="sm" onClick={onOpenWispro}>
+            <Search className="size-3" aria-hidden="true" />
+            {wisproActionLabel}
+          </CrmButton>
         </div>
       </div>
       {conversation.human_mode ? (

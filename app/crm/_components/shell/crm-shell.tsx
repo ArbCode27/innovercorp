@@ -101,6 +101,7 @@ export const CrmShell = () => {
                 onQuickToggleLabel={crm.quickToggleLabel}
                 onAssignAgent={crm.assignAgent}
                 onAssociateWispro={crm.associateWisproToConversation}
+                onUnlinkWispro={crm.unlinkWisproFromClient}
                 onOpenSettingsView={handleSelectView}
               />
             ) : null}
@@ -143,6 +144,7 @@ export const CrmShell = () => {
                 onQuickToggleLabel={crm.quickToggleLabel}
                 onAssignAgent={crm.assignAgent}
                 onAssociateWispro={crm.associateWisproToConversation}
+                onUnlinkWispro={crm.unlinkWisproFromClient}
                 onOpenSettingsView={handleSelectView}
               />
             ) : null}

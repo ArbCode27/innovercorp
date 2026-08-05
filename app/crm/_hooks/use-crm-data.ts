@@ -865,6 +865,7 @@ export const useCrmData = (agent: Agent | null) => {
     if (!selectedConversation) return;
 
     const { customer, invoicing } = result;
+    const wasRelink = Boolean(selectedClient?.wispro_id);
 
     const saved = await wisproService.associateToConversation({
       conversationId: selectedConversation.id,
@@ -882,9 +883,19 @@ export const useCrmData = (agent: Agent | null) => {
       return {
         ...current,
         clients: clientExists
-          ? current.clients.map((client) =>
-              client.id === saved.id ? saved : client,
-            )
+          ? current.clients.map((client) => {
+              if (client.id === saved.id) return saved;
+              // Another row may have been cleared of this wispro_id on the server.
+              if (client.wispro_id === customer.id && client.id !== saved.id) {
+                return {
+                  ...client,
+                  wispro_id: null,
+                  envoicing: null,
+                  account: "Prospecto",
+                };
+              }
+              return client;
+            })
           : [...current.clients, saved],
         conversations: current.conversations.map((conversation) =>
           conversation.id === selectedConversation.id
@@ -899,7 +910,32 @@ export const useCrmData = (agent: Agent | null) => {
       [saved.id]: customer,
     }));
 
-    toast.success(`${saved.name} asociado a la conversación`);
+    toast.success(
+      wasRelink
+        ? `Vinculación actualizada: ${saved.name}`
+        : `${saved.name} asociado a la conversación`,
+    );
+  };
+
+  const unlinkWisproFromClient = async () => {
+    if (!selectedClient?.id) return;
+
+    const saved = await wisproService.unlinkFromClient(selectedClient.id);
+
+    setData((current) => ({
+      ...current,
+      clients: current.clients.map((client) =>
+        client.id === saved.id ? saved : client,
+      ),
+    }));
+
+    setWisproSnapshotsByClientId((current) => {
+      const next = { ...current };
+      delete next[saved.id];
+      return next;
+    });
+
+    toast.success("Cliente desvinculado de Wispro");
   };
 
   const createTicket = async (input: CreateTicketInput) => {
@@ -1072,6 +1108,7 @@ export const useCrmData = (agent: Agent | null) => {
     assignAgent,
     createClient,
     associateWisproToConversation,
+    unlinkWisproFromClient,
     createTicket,
     createLabel,
     deleteLabel,

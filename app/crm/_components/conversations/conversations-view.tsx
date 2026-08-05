@@ -63,6 +63,7 @@ interface ConversationsViewProps {
   onQuickToggleLabel: (labelId: number) => Promise<void>;
   onAssignAgent: (conversationId: number, agentId: number) => Promise<void>;
   onAssociateWispro: (result: WisproSearchResult) => Promise<void>;
+  onUnlinkWispro: () => Promise<void>;
   onOpenSettingsView: (view: CrmView) => void;
 }
 
@@ -105,6 +106,7 @@ export const ConversationsView = ({
   onQuickToggleLabel,
   onAssignAgent,
   onAssociateWispro,
+  onUnlinkWispro,
   onOpenSettingsView,
 }: ConversationsViewProps) => {
   const selectedTickets =
@@ -181,6 +183,7 @@ export const ConversationsView = ({
           onQuickToggleLabel={onQuickToggleLabel}
           onAssignAgent={onAssignAgent}
           onAssociateWispro={onAssociateWispro}
+          onUnlinkWispro={onUnlinkWispro}
         />
       </div>
     </div>

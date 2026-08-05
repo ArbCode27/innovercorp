@@ -16,6 +16,8 @@ interface ClientProfileSectionProps {
   client: Client;
   wisproSnapshot?: WisproCustomer | null;
   onOpenWispro?: () => void;
+  onUnlinkWispro?: () => void;
+  isUnlinkingWispro?: boolean;
 }
 
 const fieldClass = "space-y-1";
@@ -39,6 +41,8 @@ export const ClientProfileSection = ({
   client,
   wisproSnapshot,
   onOpenWispro,
+  onUnlinkWispro,
+  isUnlinkingWispro = false,
 }: ClientProfileSectionProps) => {
   const locationLabel = wisproSnapshot
     ? [wisproSnapshot.city, wisproSnapshot.state].filter(Boolean).join(", ")
@@ -60,10 +64,33 @@ export const ClientProfileSection = ({
             {client.name}
           </p>
           {client.wispro_id ? (
-            <span
-              className={`mt-1 inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${CRM_BADGE_TONES.emerald}`}>
-              Wispro
-            </span>
+            <div className="mt-1 flex flex-wrap items-center gap-1.5">
+              <span
+                className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${CRM_BADGE_TONES.emerald}`}>
+                Wispro
+              </span>
+              {onOpenWispro ? (
+                <CrmButton
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="h-7 px-2 text-[11px]"
+                  onClick={onOpenWispro}>
+                  Cambiar vinculación
+                </CrmButton>
+              ) : null}
+              {onUnlinkWispro ? (
+                <CrmButton
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-[11px] text-rose-600 hover:text-rose-700 dark:text-rose-300"
+                  disabled={isUnlinkingWispro}
+                  onClick={onUnlinkWispro}>
+                  {isUnlinkingWispro ? "Desvinculando..." : "Desvincular"}
+                </CrmButton>
+              ) : null}
+            </div>
           ) : onOpenWispro ? (
             <CrmButton
               type="button"

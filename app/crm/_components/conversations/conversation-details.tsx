@@ -27,6 +27,8 @@ interface ConversationDetailsProps {
   className?: string;
   onToggleLabel: (labelId: number) => Promise<void>;
   onOpenWispro?: () => void;
+  onUnlinkWispro?: () => void;
+  isUnlinkingWispro?: boolean;
 }
 
 export const ConversationDetails = ({
@@ -39,6 +41,8 @@ export const ConversationDetails = ({
   className,
   onToggleLabel,
   onOpenWispro,
+  onUnlinkWispro,
+  isUnlinkingWispro = false,
 }: ConversationDetailsProps) => {
   const activeTicket =
     tickets.find((ticket) => ticket.status !== "Resuelto") ||
@@ -63,6 +67,8 @@ export const ConversationDetails = ({
             client={client}
             wisproSnapshot={wisproSnapshot}
             onOpenWispro={onOpenWispro}
+            onUnlinkWispro={onUnlinkWispro}
+            isUnlinkingWispro={isUnlinkingWispro}
           />
         ) : (
           <div className="space-y-3">

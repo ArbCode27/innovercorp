@@ -4,6 +4,16 @@ import { FormEvent, useState } from "react";
 import { toast } from "sonner";
 import { CrmButton } from "../shared/crm-button";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Dialog,
   DialogContent,
   DialogFooter,
@@ -62,6 +72,7 @@ interface ConversationPanelProps {
   onQuickToggleLabel: (labelId: number) => Promise<void>;
   onAssignAgent: (conversationId: number, agentId: number) => Promise<void>;
   onAssociateWispro: (result: WisproSearchResult) => Promise<void>;
+  onUnlinkWispro: () => Promise<void>;
 }
 
 export const ConversationPanel = ({
@@ -92,16 +103,21 @@ export const ConversationPanel = ({
   onQuickToggleLabel,
   onAssignAgent,
   onAssociateWispro,
+  onUnlinkWispro,
 }: ConversationPanelProps) => {
   const [isLabelDialogOpen, setIsLabelDialogOpen] = useState(false);
   const [isNoteDialogOpen, setIsNoteDialogOpen] = useState(false);
   const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false);
   const [isWisproDialogOpen, setIsWisproDialogOpen] = useState(false);
+  const [isUnlinkDialogOpen, setIsUnlinkDialogOpen] = useState(false);
+  const [isUnlinkingWispro, setIsUnlinkingWispro] = useState(false);
   const [isResolveDialogOpen, setIsResolveDialogOpen] = useState(false);
   const [isDetailsSheetOpen, setIsDetailsSheetOpen] = useState(false);
   const [note, setNote] = useState("");
 
   const clientDisplayName = client?.name || "Número desconocido";
+  const isWisproLinked = Boolean(client?.wispro_id);
+  const wisproDialogMode = isWisproLinked ? "relink" : "link";
 
   if (!conversation) {
     return (
@@ -140,6 +156,22 @@ export const ConversationPanel = ({
     await onAssociateWispro(result);
   };
 
+  const handleConfirmUnlinkWispro = async () => {
+    setIsUnlinkingWispro(true);
+    try {
+      await onUnlinkWispro();
+      setIsUnlinkDialogOpen(false);
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "No se pudo desvincular Wispro",
+      );
+    } finally {
+      setIsUnlinkingWispro(false);
+    }
+  };
+
   const handleSendVoiceNote = async (
     audioBlob: Blob,
     meta: { durationMs: number; mimeType: string },
@@ -170,7 +202,6 @@ export const ConversationPanel = ({
   };
 
   const showUnknownBanner = !client || !client.wispro_id;
-  const showWisproAction = !client || !client.wispro_id;
 
   return (
     <section className={`relative flex min-w-0 flex-1 ${CRM_SURFACES.page}`}>
@@ -230,7 +261,11 @@ export const ConversationPanel = ({
             agents={agents}
             className="block h-full w-full border-l-0 bg-transparent lg:hidden"
             onToggleLabel={onQuickToggleLabel}
-            onOpenWispro={showWisproAction ? () => setIsWisproDialogOpen(true) : undefined}
+            onOpenWispro={() => setIsWisproDialogOpen(true)}
+            onUnlinkWispro={
+              isWisproLinked ? () => setIsUnlinkDialogOpen(true) : undefined
+            }
+            isUnlinkingWispro={isUnlinkingWispro}
           />
         </SheetContent>
       </Sheet>
@@ -242,14 +277,64 @@ export const ConversationPanel = ({
         tickets={tickets}
         agents={agents}
         onToggleLabel={onQuickToggleLabel}
-        onOpenWispro={showWisproAction ? () => setIsWisproDialogOpen(true) : undefined}
+        onOpenWispro={() => setIsWisproDialogOpen(true)}
+        onUnlinkWispro={
+          isWisproLinked ? () => setIsUnlinkDialogOpen(true) : undefined
+        }
+        isUnlinkingWispro={isUnlinkingWispro}
       />
 
       <WisproSearchDialog
         open={isWisproDialogOpen}
         onOpenChange={setIsWisproDialogOpen}
         onAssociate={handleAssociateWispro}
+        mode={wisproDialogMode}
+        currentLink={
+          client
+            ? {
+                name: client.name,
+                cedula: wisproSnapshot?.national_identification_number,
+                wisproSnapshot,
+              }
+            : null
+        }
       />
+
+      <AlertDialog
+        open={isUnlinkDialogOpen}
+        onOpenChange={(open) => {
+          if (!isUnlinkingWispro) setIsUnlinkDialogOpen(open);
+        }}>
+        <AlertDialogContent className={CRM_DIALOG}>
+          <AlertDialogHeader>
+            <AlertDialogTitle className={CRM_SURFACES.textPrimary}>
+              ¿Desvincular de Wispro?
+            </AlertDialogTitle>
+            <AlertDialogDescription className={CRM_SURFACES.textMuted}>
+              Se quitará la ficha Wispro de{" "}
+              <span className={`font-medium ${CRM_SURFACES.textPrimary}`}>
+                {clientDisplayName}
+              </span>
+              . El chat de WhatsApp se mantiene y podrás vincular otra cédula
+              después.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isUnlinkingWispro}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isUnlinkingWispro}
+              onClick={(event) => {
+                event.preventDefault();
+                void handleConfirmUnlinkWispro();
+              }}
+              className="bg-rose-600 text-white hover:bg-rose-700 dark:bg-rose-600 dark:hover:bg-rose-500">
+              {isUnlinkingWispro ? "Desvinculando..." : "Desvincular"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <LabelPickerDialog
         open={isLabelDialogOpen}
