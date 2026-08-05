@@ -44,7 +44,12 @@ const sendWhatsAppText = async (to: string, message: string) => {
     throw new Error(data.error?.message || "Error al enviar fallback a WhatsApp");
   }
 
-  return String(data.messages?.[0]?.id || "") || null;
+  const waMessageId = String(data.messages?.[0]?.id || "").trim();
+  if (!waMessageId) {
+    throw new Error("WhatsApp no devolvió message id para el fallback");
+  }
+
+  return waMessageId;
 };
 
 const looksLikeCedula = (value: string | null | undefined) => {
@@ -91,8 +96,8 @@ export type GuaranteedReplyResult = {
 };
 
 /**
- * Last-resort path: always try to message the client and hand off to human
- * when the Gemini agent cannot complete.
+ * Last-resort path: message the client first, then hand off.
+ * Never marks human_mode on empty conversations.
  */
 export const sendGuaranteedClientReply = async (
   supabase: SupabaseClient,
@@ -127,6 +132,27 @@ export const sendGuaranteedClientReply = async (
 
   if (conversation.status === "resuelto") {
     return { ok: false, skipped: true, reason: "conversation_resolved" };
+  }
+
+  const { count: messageCount, error: countError } = await supabase
+    .from("messages")
+    .select("id", { count: "exact", head: true })
+    .eq("conversation_id", input.conversationId);
+
+  if (countError) {
+    console.error(`${LOG_PREFIX} message_count_failed`, {
+      conversationId: input.conversationId,
+      error: countError.message,
+    });
+    return { ok: false, reason: "message_count_failed" };
+  }
+
+  // Do not escalate orphan/empty conversations created by failed webhook inserts.
+  if ((messageCount ?? 0) === 0 && !input.triggerMessageId) {
+    console.warn(`${LOG_PREFIX} skipped_empty_conversation`, {
+      conversationId: input.conversationId,
+    });
+    return { ok: false, skipped: true, reason: "empty_conversation" };
   }
 
   const to =
@@ -183,10 +209,11 @@ export const sendGuaranteedClientReply = async (
       .single();
 
     if (saveError) {
-      console.warn(`${LOG_PREFIX} message_persist_failed`, {
+      console.error(`${LOG_PREFIX} message_persist_failed`, {
         conversationId: input.conversationId,
         error: saveError.message,
       });
+      return { ok: false, reason: "fallback_persist_failed" };
     }
 
     await supabase

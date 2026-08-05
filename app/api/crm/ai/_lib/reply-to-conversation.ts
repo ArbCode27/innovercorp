@@ -350,99 +350,123 @@ export const replyToConversationWithGemini = async (
     }
 
     if (decision.action === "handoff") {
-      await supabase
-        .from("conversations")
-        .update({
-          human_mode: true,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", conversation.id);
+      const tryHandoffFallback = async (errorMessage: string) => {
+        const fallback = await sendGuaranteedClientReply(supabase, {
+          conversationId: conversation.id,
+          triggerMessageId: input.triggerMessageId,
+          customerPhone: freshConversation.customer_phone,
+          whatsappId: client?.whatsapp_id,
+          clientPhone: client?.phone,
+          latestInbound,
+          messages: chronological,
+          errorMessage,
+        });
+
+        if (fallback.ok) {
+          return {
+            ok: true as const,
+            reason: "fallback_sent",
+            action: "handoff" as const,
+            messageId: fallback.messageId ?? null,
+            runId: decision.runId,
+          };
+        }
+
+        return {
+          ok: false as const,
+          reason: errorMessage,
+          action: "handoff" as const,
+          runId: decision.runId,
+        };
+      };
 
       const handoffText = decision.message.trim();
-      if (handoffText) {
-        const to = resolveRecipient(freshConversation, client);
-        if (!to) {
-          logGeminiNoReply("failed", {
-            ...baseContext,
-            reason: "handoff_missing_recipient_phone",
-            action: "handoff",
-            runId: decision.runId,
-          });
-        } else {
-          try {
-            const waMessageId = await sendWhatsAppText(to, handoffText);
-            const now = new Date().toISOString();
-            const { data: saved } = await supabase
-              .from("messages")
-              .insert({
-                conversation_id: conversation.id,
-                wa_message_id: waMessageId,
-                type: "out",
-                content: handoffText,
-                sender_type: "bot",
-                sent_by: "Bot IA",
-                status: "sent",
-                created_at: now,
-                metadata: {
-                  engine: "gemini",
-                  action: "handoff",
-                  reason: decision.reason || null,
-                  run_id: decision.runId,
-                  trigger_message_id: input.triggerMessageId ?? null,
-                },
-              })
-              .select("id")
-              .single();
-
-            await supabase
-              .from("conversations")
-              .update({
-                preview: handoffText,
-                updated_at: now,
-                last_message_at: now,
-              })
-              .eq("id", conversation.id);
-
-            console.log(`${LOG_PREFIX} handoff_sent`, {
-              ...baseContext,
-              messageId: saved?.id ?? null,
-              reason: decision.reason || null,
-              runId: decision.runId,
-              willReplyToClient: true,
-            });
-
-            return {
-              ok: true,
-              reason: "handoff",
-              action: "handoff",
-              messageId: saved?.id ?? null,
-              runId: decision.runId,
-            };
-          } catch (error) {
-            logGeminiNoReply("failed", {
-              ...baseContext,
-              reason: "handoff_whatsapp_send_failed",
-              action: "handoff",
-              runId: decision.runId,
-              error: error instanceof Error ? error.message : "unknown_error",
-            });
-          }
-        }
-      } else {
+      if (!handoffText) {
         logGeminiNoReply("failed", {
           ...baseContext,
           reason: "handoff_empty_message",
           action: "handoff",
           runId: decision.runId,
         });
+        return tryHandoffFallback("handoff_empty_message");
       }
 
-      return {
-        ok: true,
-        reason: decision.reason || "handoff",
-        action: "handoff",
-        runId: decision.runId,
-      };
+      const to = resolveRecipient(freshConversation, client);
+      if (!to) {
+        logGeminiNoReply("failed", {
+          ...baseContext,
+          reason: "handoff_missing_recipient_phone",
+          action: "handoff",
+          runId: decision.runId,
+        });
+        return tryHandoffFallback("handoff_missing_recipient_phone");
+      }
+
+      try {
+        const waMessageId = await sendWhatsAppText(to, handoffText);
+        const now = new Date().toISOString();
+        const { data: saved, error: saveError } = await supabase
+          .from("messages")
+          .insert({
+            conversation_id: conversation.id,
+            wa_message_id: waMessageId,
+            type: "out",
+            content: handoffText,
+            sender_type: "bot",
+            sent_by: "Bot IA",
+            status: "sent",
+            created_at: now,
+            metadata: {
+              engine: "gemini",
+              action: "handoff",
+              reason: decision.reason || null,
+              run_id: decision.runId,
+              trigger_message_id: input.triggerMessageId ?? null,
+            },
+          })
+          .select("id")
+          .single();
+
+        if (saveError) throw saveError;
+
+        // Only mark human after the client-visible message is persisted.
+        await supabase
+          .from("conversations")
+          .update({
+            human_mode: true,
+            preview: handoffText,
+            updated_at: now,
+            last_message_at: now,
+          })
+          .eq("id", conversation.id);
+
+        console.log(`${LOG_PREFIX} handoff_sent`, {
+          ...baseContext,
+          messageId: saved?.id ?? null,
+          reason: decision.reason || null,
+          runId: decision.runId,
+          willReplyToClient: true,
+        });
+
+        return {
+          ok: true,
+          reason: "handoff",
+          action: "handoff",
+          messageId: saved?.id ?? null,
+          runId: decision.runId,
+        };
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : "handoff_whatsapp_send_failed";
+        logGeminiNoReply("failed", {
+          ...baseContext,
+          reason: "handoff_whatsapp_send_failed",
+          action: "handoff",
+          runId: decision.runId,
+          error: errorMessage,
+        });
+        return tryHandoffFallback(errorMessage);
+      }
     }
 
     const replyText = decision.message.trim();

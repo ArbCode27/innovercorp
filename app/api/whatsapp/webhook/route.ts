@@ -317,54 +317,76 @@ const findOrCreateClient = async (
   return createdClient;
 };
 
+const isUniqueViolation = (error: unknown) =>
+  Boolean(
+    error &&
+      typeof error === "object" &&
+      "code" in error &&
+      String((error as { code?: string }).code) === "23505",
+  );
+
+const patchConversationPhoneIfNeeded = async (
+  supabase: ReturnType<typeof getSupabaseServerClient>,
+  conversation: Record<string, unknown>,
+  customerPhone: string,
+) => {
+  const needsPhoneUpdate =
+    !String(conversation.customer_phone || "").trim() && Boolean(customerPhone);
+
+  if (!needsPhoneUpdate) return conversation;
+
+  const { data: patchedConversation, error: patchError } = await supabase
+    .from("conversations")
+    .update({ customer_phone: customerPhone })
+    .eq("id", conversation.id)
+    .select("*")
+    .single();
+
+  if (patchError) throw patchError;
+  return patchedConversation as Record<string, unknown>;
+};
+
+const findActiveConversation = async (
+  supabase: ReturnType<typeof getSupabaseServerClient>,
+  clientId: number,
+) => {
+  const { data, error } = await supabase
+    .from("conversations")
+    .select("*")
+    .eq("client_id", clientId)
+    .in("status", ["abierto", "proceso"])
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data;
+};
+
+/**
+ * Returns the single active conversation for a client.
+ * `created` is true only when this call inserted a brand-new row (for rollback).
+ */
 const findOrCreateActiveConversation = async (
   supabase: ReturnType<typeof getSupabaseServerClient>,
   clientId: number,
   messageTimestamp: string,
   phoneNumberId: string | null,
   customerPhone: string,
-) => {
-  const { data: existingConversation, error: existingConversationError } =
-    await supabase
-      .from("conversations")
-      .select("*")
-      .eq("client_id", clientId)
-      .in("status", ["abierto", "proceso"])
-      .order("updated_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-  if (existingConversationError) throw existingConversationError;
-  if (existingConversation) {
-    const needsPhoneUpdate =
-      !String(existingConversation.customer_phone || "").trim() &&
-      Boolean(customerPhone);
-
-    if (needsPhoneUpdate) {
-      const { data: patchedConversation, error: patchError } = await supabase
-        .from("conversations")
-        .update({ customer_phone: customerPhone })
-        .eq("id", existingConversation.id)
-        .select("*")
-        .single();
-
-      if (patchError) throw patchError;
-
-      console.log(`${WEBHOOK_LOG_PREFIX} active_conversation_found`, {
-        conversationId: patchedConversation.id,
-        clientId,
-        status: patchedConversation.status,
-        customerPhonePatched: true,
-      });
-      return patchedConversation;
-    }
-
+): Promise<{ conversation: Record<string, unknown>; created: boolean }> => {
+  const existing = await findActiveConversation(supabase, clientId);
+  if (existing) {
+    const patched = await patchConversationPhoneIfNeeded(
+      supabase,
+      existing as Record<string, unknown>,
+      customerPhone,
+    );
     console.log(`${WEBHOOK_LOG_PREFIX} active_conversation_found`, {
-      conversationId: existingConversation.id,
+      conversationId: patched.id,
       clientId,
-      status: existingConversation.status,
+      status: patched.status,
     });
-    return existingConversation;
+    return { conversation: patched, created: false };
   }
 
   const { data: createdConversation, error: createConversationError } =
@@ -388,13 +410,76 @@ const findOrCreateActiveConversation = async (
       .select("*")
       .single();
 
-  if (createConversationError) throw createConversationError;
-  console.log(`${WEBHOOK_LOG_PREFIX} active_conversation_created`, {
-    conversationId: createdConversation.id,
-    clientId,
-    status: createdConversation.status,
+  if (!createConversationError && createdConversation) {
+    console.log(`${WEBHOOK_LOG_PREFIX} active_conversation_created`, {
+      conversationId: createdConversation.id,
+      clientId,
+      status: createdConversation.status,
+    });
+    return {
+      conversation: createdConversation as Record<string, unknown>,
+      created: true,
+    };
+  }
+
+  // Race: another webhook created the active conversation first.
+  if (isUniqueViolation(createConversationError)) {
+    const raced = await findActiveConversation(supabase, clientId);
+    if (raced) {
+      const patched = await patchConversationPhoneIfNeeded(
+        supabase,
+        raced as Record<string, unknown>,
+        customerPhone,
+      );
+      console.log(`${WEBHOOK_LOG_PREFIX} active_conversation_race_recovered`, {
+        conversationId: patched.id,
+        clientId,
+      });
+      return { conversation: patched, created: false };
+    }
+  }
+
+  throw createConversationError;
+};
+
+const deleteEmptyConversationIfNew = async (
+  supabase: ReturnType<typeof getSupabaseServerClient>,
+  conversationId: number,
+  created: boolean,
+) => {
+  if (!created) return;
+
+  const { count, error: countError } = await supabase
+    .from("messages")
+    .select("id", { count: "exact", head: true })
+    .eq("conversation_id", conversationId);
+
+  if (countError) {
+    console.warn(`${WEBHOOK_LOG_PREFIX} orphan_count_failed`, {
+      conversationId,
+      error: countError.message,
+    });
+    return;
+  }
+
+  if ((count ?? 0) > 0) return;
+
+  const { error: deleteError } = await supabase
+    .from("conversations")
+    .delete()
+    .eq("id", conversationId);
+
+  if (deleteError) {
+    console.warn(`${WEBHOOK_LOG_PREFIX} orphan_delete_failed`, {
+      conversationId,
+      error: deleteError.message,
+    });
+    return;
+  }
+
+  console.warn(`${WEBHOOK_LOG_PREFIX} orphan_conversation_deleted`, {
+    conversationId,
   });
-  return createdConversation;
 };
 
 const upsertIncomingMessage = async (
@@ -449,152 +534,196 @@ const upsertIncomingMessage = async (
   }
 
   const client = await findOrCreateClient(supabase, from, waName);
-  const conversation = await findOrCreateActiveConversation(
-    supabase,
-    client.id,
-    timestamp,
-    phoneNumberId,
-    from,
-  );
+  const { conversation, created: conversationCreated } =
+    await findOrCreateActiveConversation(
+      supabase,
+      client.id,
+      timestamp,
+      phoneNumberId,
+      from,
+    );
 
-  let persistedMediaUrl: string | null = null;
-  let persistedMimeType: string | null = mimeType;
-  let mergedMetadata: Record<string, unknown> | null = metadata;
+  const conversationId = Number(conversation.id);
+  const conversationHumanMode = Boolean(conversation.human_mode);
+  const conversationBotEngine =
+    typeof conversation.bot_engine === "string"
+      ? conversation.bot_engine
+      : null;
+  const conversationUnread = Number(conversation.unread ?? 0);
 
-  if (
-    mediaId &&
-    mediaType &&
-    ["audio", "image", "video", "document"].includes(mediaType)
-  ) {
-    const originalFilename =
-      typeof metadata?.filename === "string" ? String(metadata.filename) : null;
-    const storedMedia = await storeIncomingMedia(supabase, {
-      conversationId: conversation.id,
+  try {
+    let persistedMediaUrl: string | null = null;
+    let persistedMimeType: string | null = mimeType;
+    let mergedMetadata: Record<string, unknown> | null = metadata
+      ? { ...metadata }
+      : null;
+
+    if (
+      mediaId &&
+      mediaType &&
+      ["audio", "image", "video", "document"].includes(mediaType)
+    ) {
+      const originalFilename =
+        typeof metadata?.filename === "string"
+          ? String(metadata.filename)
+          : null;
+
+      try {
+        const storedMedia = await storeIncomingMedia(supabase, {
+          conversationId,
+          messageType,
+          mediaId,
+          mimeType,
+          originalFilename,
+        });
+
+        persistedMediaUrl = storedMedia.publicUrl;
+        persistedMimeType = storedMedia.mimeType;
+        mergedMetadata = {
+          ...(mergedMetadata || {}),
+          media_id: mediaId,
+          storage_path: storedMedia.storagePath,
+          storage_bucket: storedMedia.bucket,
+          size_bytes: storedMedia.sizeBytes,
+        };
+      } catch (mediaError) {
+        // Soft-fail media: still persist the inbound message so we never leave
+        // an empty conversation after create.
+        console.warn(`${WEBHOOK_LOG_PREFIX} media_store_soft_failed`, {
+          conversationId,
+          messageId,
+          mediaType,
+          error:
+            mediaError instanceof Error
+              ? mediaError.message
+              : "unknown_media_error",
+        });
+        mergedMetadata = {
+          ...(mergedMetadata || {}),
+          media_id: mediaId,
+          media_store_failed: true,
+          media_store_error:
+            mediaError instanceof Error
+              ? mediaError.message
+              : "unknown_media_error",
+        };
+      }
+    }
+
+    const { data: insertedMessage, error: insertMessageError } = await supabase
+      .from("messages")
+      .insert({
+        conversation_id: conversationId,
+        wa_message_id: messageId,
+        type: "in",
+        content,
+        sender_type: "client",
+        sent_by: waName,
+        status: "delivered",
+        media_url: persistedMediaUrl,
+        media_type: mediaType,
+        mime_type: persistedMimeType,
+        caption,
+        metadata: mergedMetadata,
+        latitude,
+        longitude,
+        location_name: locationName,
+        location_address: locationAddress,
+        created_at: timestamp,
+      })
+      .select("id, conversation_id, wa_message_id")
+      .single();
+
+    if (insertMessageError) {
+      if (isUniqueViolation(insertMessageError)) {
+        // Another webhook won the insert; drop our empty row if we just created it.
+        await deleteEmptyConversationIfNew(
+          supabase,
+          conversationId,
+          conversationCreated,
+        );
+        return {
+          ignored: true as const,
+          reason: "duplicate_on_insert",
+          messageType,
+          messageId,
+          clientId: client.id,
+          conversationId,
+          dbMessageId: null as number | null,
+          humanMode: conversationHumanMode,
+          botEngine: conversationBotEngine,
+          mediaUrl: persistedMediaUrl,
+        };
+      }
+
+      throw insertMessageError;
+    }
+
+    console.log(`${WEBHOOK_LOG_PREFIX} message_inserted`, {
+      messageId: insertedMessage?.id,
+      waMessageId: insertedMessage?.wa_message_id,
+      conversationId: insertedMessage?.conversation_id,
       messageType,
-      mediaId,
-      mimeType,
-      originalFilename,
     });
 
-    persistedMediaUrl = storedMedia.publicUrl;
-    persistedMimeType = storedMedia.mimeType;
-    mergedMetadata = {
-      ...(metadata || {}),
-      media_id: mediaId,
-      storage_path: storedMedia.storagePath,
-      storage_bucket: storedMedia.bucket,
-      size_bytes: storedMedia.sizeBytes,
-    };
-  }
+    const expectedUnread = conversationUnread + 1;
+    const { data: updatedConversation, error: updateConversationError } =
+      await supabase
+        .from("conversations")
+        .update({
+          preview,
+          unread: expectedUnread,
+          updated_at: timestamp,
+          last_message_at: timestamp,
+          wa_phone_number_id: phoneNumberId,
+          customer_phone: from,
+        })
+        .eq("id", conversationId)
+        .select(
+          "id, unread, preview, updated_at, last_message_at, customer_phone",
+        )
+        .single();
 
-  const { data: insertedMessage, error: insertMessageError } = await supabase
-    .from("messages")
-    .insert({
-      conversation_id: conversation.id,
-      wa_message_id: messageId,
-      type: "in",
-      content,
-      sender_type: "client",
-      sent_by: waName,
-      status: "delivered",
-      media_url: persistedMediaUrl,
-      media_type: mediaType,
-      mime_type: persistedMimeType,
-      caption,
-      metadata: mergedMetadata,
-      latitude,
-      longitude,
-      location_name: locationName,
-      location_address: locationAddress,
-      created_at: timestamp,
-    })
-    .select("id, conversation_id, wa_message_id")
-    .single();
+    if (updateConversationError) throw updateConversationError;
+    console.log(`${WEBHOOK_LOG_PREFIX} conversation_updated_after_message`, {
+      conversationId: updatedConversation?.id,
+      unread: updatedConversation?.unread,
+      expectedUnread,
+      preview: updatedConversation?.preview,
+      updatedAt: updatedConversation?.updated_at,
+      lastMessageAt: updatedConversation?.last_message_at,
+    });
 
-  if (insertMessageError) {
-    const duplicateMessage =
-      insertMessageError &&
-      typeof insertMessageError === "object" &&
-      "code" in insertMessageError &&
-      String((insertMessageError as { code?: string }).code) === "23505";
+    console.log(`${WEBHOOK_LOG_PREFIX} message_saved`, {
+      messageId,
+      messageType,
+      clientId: client.id,
+      conversationId,
+      mediaType,
+      hasMediaUrl: Boolean(persistedMediaUrl),
+      preview,
+    });
 
-    if (!duplicateMessage) throw insertMessageError;
     return {
-      ignored: true as const,
-      reason: "duplicate_on_insert",
+      ignored: false as const,
+      reason: "saved",
       messageType,
       messageId,
       clientId: client.id,
-      conversationId: conversation.id,
-      dbMessageId: null as number | null,
-      humanMode: Boolean(conversation.human_mode),
-      botEngine:
-        typeof conversation.bot_engine === "string"
-          ? conversation.bot_engine
-          : null,
+      conversationId,
+      dbMessageId: insertedMessage?.id ?? null,
+      humanMode: conversationHumanMode,
+      botEngine: conversationBotEngine,
       mediaUrl: persistedMediaUrl,
     };
+  } catch (error) {
+    await deleteEmptyConversationIfNew(
+      supabase,
+      conversationId,
+      conversationCreated,
+    );
+    throw error;
   }
-  console.log(`${WEBHOOK_LOG_PREFIX} message_inserted`, {
-    messageId: insertedMessage?.id,
-    waMessageId: insertedMessage?.wa_message_id,
-    conversationId: insertedMessage?.conversation_id,
-    messageType,
-  });
-
-  const expectedUnread = (conversation.unread ?? 0) + 1;
-  const { data: updatedConversation, error: updateConversationError } =
-    await supabase
-      .from("conversations")
-      .update({
-        preview,
-        unread: expectedUnread,
-        updated_at: timestamp,
-        last_message_at: timestamp,
-        wa_phone_number_id: phoneNumberId,
-        customer_phone: from,
-      })
-      .eq("id", conversation.id)
-      .select(
-        "id, unread, preview, updated_at, last_message_at, customer_phone",
-      )
-      .single();
-
-  if (updateConversationError) throw updateConversationError;
-  console.log(`${WEBHOOK_LOG_PREFIX} conversation_updated_after_message`, {
-    conversationId: updatedConversation?.id,
-    unread: updatedConversation?.unread,
-    expectedUnread,
-    preview: updatedConversation?.preview,
-    updatedAt: updatedConversation?.updated_at,
-    lastMessageAt: updatedConversation?.last_message_at,
-  });
-
-  console.log(`${WEBHOOK_LOG_PREFIX} message_saved`, {
-    messageId,
-    messageType,
-    clientId: client.id,
-    conversationId: conversation.id,
-    mediaType,
-    hasMediaUrl: Boolean(persistedMediaUrl),
-    preview,
-  });
-
-  return {
-    ignored: false as const,
-    reason: "saved",
-    messageType,
-    messageId,
-    clientId: client.id,
-    conversationId: conversation.id,
-    dbMessageId: insertedMessage?.id ?? null,
-    humanMode: Boolean(conversation.human_mode),
-    botEngine:
-      typeof conversation.bot_engine === "string"
-        ? conversation.bot_engine
-        : null,
-    mediaUrl: persistedMediaUrl,
-  };
 };
 
 export async function GET(req: NextRequest) {
