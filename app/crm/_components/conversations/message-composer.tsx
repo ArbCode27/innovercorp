@@ -124,8 +124,15 @@ export const MessageComposer = ({
   const recorder = useVoiceRecorder();
   const isBusy = isSending || isSendingVoice || isSendingImage;
   const isInputLocked = disabled || isBusy || readOnly;
+  const hasSendableContent = Boolean(value.trim()) || Boolean(selectedImage);
+  const showSendAction = hasSendableContent;
+  const isRecordingUiActive =
+    recorder.status === "recording" || recorder.status === "recorded";
   const canStartRecording =
-    !isInputLocked && recorder.supportsRecording && recorder.status !== "recording";
+    !isInputLocked &&
+    recorder.supportsRecording &&
+    recorder.status !== "recording" &&
+    recorder.status !== "recorded";
   const canOpenImagePicker = !isInputLocked && recorder.status !== "recording";
   const canOpenEmojiPicker =
     !isInputLocked && recorder.status !== "recording";
@@ -599,15 +606,6 @@ export const MessageComposer = ({
           aria-label="Adjuntar imagen">
           <ImagePlus className="size-4" aria-hidden="true" />
         </CrmButton>
-        <CrmButton
-          type="button"
-          variant="secondary"
-          onClick={handleStartRecording}
-          disabled={!canStartRecording}
-          className="size-11 rounded-full p-0"
-          aria-label="Grabar nota de voz">
-          <Mic className="size-4" aria-hidden="true" />
-        </CrmButton>
         <Popover
           open={isEmojiPickerOpen}
           onOpenChange={(open) => {
@@ -674,24 +672,34 @@ export const MessageComposer = ({
           aria-label="Mensaje"
           aria-readonly={readOnly}
         />
+        {/* WhatsApp-style: one trailing action — Mic when empty, Send when content. */}
         <CrmButton
           type="button"
-          onClick={handleSendMessage}
-          disabled={isInputLocked || (!value.trim() && !selectedImage)}
-          className="size-11 rounded-full p-0"
+          variant={showSendAction ? "primary" : "secondary"}
+          onClick={showSendAction ? handleSendMessage : handleStartRecording}
+          disabled={
+            showSendAction
+              ? isInputLocked || !hasSendableContent
+              : !canStartRecording || isRecordingUiActive
+          }
+          className="size-11 rounded-full p-0 transition-colors duration-150"
           aria-label={
-            isSendingImage
-              ? "Enviando imagen"
-              : isSending
-                ? "Enviando mensaje"
-                : selectedImage
-                  ? "Enviar imagen"
-                  : "Enviar mensaje"
+            showSendAction
+              ? isSendingImage
+                ? "Enviando imagen"
+                : isSending
+                  ? "Enviando mensaje"
+                  : selectedImage
+                    ? "Enviar imagen"
+                    : "Enviar mensaje"
+              : "Grabar nota de voz"
           }>
           {isSending || isSendingImage ? (
             <Spinner className="size-4 text-white" aria-hidden="true" />
+          ) : showSendAction ? (
+            <Send className="size-4 transition-opacity duration-150" aria-hidden="true" />
           ) : (
-            <Send className="size-4" aria-hidden="true" />
+            <Mic className="size-4 transition-opacity duration-150" aria-hidden="true" />
           )}
         </CrmButton>
       </div>
