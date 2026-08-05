@@ -2,6 +2,7 @@ import { NextRequest, NextResponse, after } from "next/server";
 // ⚠️ Si tu Next.js es 14.1–14.x (no 15+), `after` todavía es experimental:
 //    import { NextRequest, NextResponse, unstable_after as after } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getInitials, toJsonSafeText } from "@/app/crm/_lib/formatters";
 import { normalizeStorageMimeType } from "../_lib/media-mime";
 import { replyToConversationWithGemini } from "@/app/api/crm/ai/_lib/reply-to-conversation";
 import { sendGuaranteedClientReply } from "@/app/api/crm/ai/_lib/guaranteed-reply";
@@ -70,23 +71,24 @@ const parseWhatsappTimestamp = (value: unknown) => {
     : new Date().toISOString();
 };
 
-const getInitials = (name: string) => {
-  const initials = name
-    .trim()
-    .split(/\s+/)
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
-
-  return initials || "??";
-};
-
 const getSupabaseServerClient = () =>
   createClient(
     getServerEnv("NEXT_PUBLIC_SUPABASE_URL"),
     getServerEnv("SUPABASE_SERVICE_ROLE_KEY"),
   );
+
+const isUniqueViolation = (error: unknown) =>
+  Boolean(
+    error &&
+      typeof error === "object" &&
+      "code" in error &&
+      String((error as { code?: string }).code) === "23505",
+  );
+
+const resolveClientDisplayName = (waName: string | null) => {
+  const safe = toJsonSafeText(waName)?.trim() || "";
+  return safe || "Número desconocido";
+};
 
 const sanitizePathSegment = (value: string) =>
   value
@@ -247,6 +249,9 @@ const findOrCreateClient = async (
   from: string,
   waName: string | null,
 ) => {
+  const profileWaName = toJsonSafeText(waName)?.trim() || null;
+  const displayName = resolveClientDisplayName(waName);
+
   const { data: byWhatsappId, error: byWhatsappIdError } = await supabase
     .from("clients")
     .select("*")
@@ -276,7 +281,7 @@ const findOrCreateClient = async (
       .from("clients")
       .update({
         whatsapp_id: byPhone.whatsapp_id || from,
-        wa_name: byPhone.wa_name || waName,
+        wa_name: byPhone.wa_name || profileWaName,
       })
       .eq("id", byPhone.id)
       .select("*")
@@ -290,40 +295,99 @@ const findOrCreateClient = async (
     return updatedClient;
   }
 
-  const safeName = (waName || "").trim() || "Número desconocido";
+  const buildClientRow = (name: string, storedWaName: string | null) => ({
+    name,
+    phone: from,
+    whatsapp_id: from,
+    wa_name: storedWaName,
+    account: "Prospecto",
+    plan: null,
+    zone: null,
+    color: DEFAULT_CLIENT_COLOR,
+    bg: DEFAULT_CLIENT_BG,
+    initials: getInitials(name),
+    created_at: new Date().toISOString(),
+  });
+
   const { data: createdClient, error: createClientError } = await supabase
     .from("clients")
-    .insert({
-      name: safeName,
-      phone: from,
-      whatsapp_id: from,
-      wa_name: waName,
-      account: "Prospecto",
-      plan: null,
-      zone: null,
-      color: DEFAULT_CLIENT_COLOR,
-      bg: DEFAULT_CLIENT_BG,
-      initials: getInitials(safeName),
-      created_at: new Date().toISOString(),
-    })
+    .insert(buildClientRow(displayName, profileWaName))
     .select("*")
     .single();
 
-  if (createClientError) throw createClientError;
-  console.log(`${WEBHOOK_LOG_PREFIX} client_created`, {
-    clientId: createdClient.id,
-    from: maskPhone(from),
-  });
-  return createdClient;
-};
+  if (!createClientError && createdClient) {
+    console.log(`${WEBHOOK_LOG_PREFIX} client_created`, {
+      clientId: createdClient.id,
+      from: maskPhone(from),
+      initials: createdClient.initials,
+    });
+    return createdClient;
+  }
 
-const isUniqueViolation = (error: unknown) =>
-  Boolean(
-    error &&
-      typeof error === "object" &&
-      "code" in error &&
-      String((error as { code?: string }).code) === "23505",
-  );
+  const findExistingClientAfterRace = async () => {
+    const { data: byId, error: byIdError } = await supabase
+      .from("clients")
+      .select("*")
+      .eq("whatsapp_id", from)
+      .limit(1)
+      .maybeSingle();
+    if (byIdError) throw byIdError;
+    if (byId) return byId;
+
+    const { data: byPhoneAgain, error: byPhoneAgainError } = await supabase
+      .from("clients")
+      .select("*")
+      .eq("phone", from)
+      .limit(1)
+      .maybeSingle();
+    if (byPhoneAgainError) throw byPhoneAgainError;
+    return byPhoneAgain;
+  };
+
+  // Race: another webhook created the same phone/whatsapp_id first.
+  if (isUniqueViolation(createClientError)) {
+    const racedClient = await findExistingClientAfterRace();
+    if (racedClient) {
+      console.log(`${WEBHOOK_LOG_PREFIX} client_create_race_recovered`, {
+        clientId: racedClient.id,
+        from: maskPhone(from),
+      });
+      return racedClient;
+    }
+  }
+
+  // Degraded retry: drop profile fields so a bad name never blocks inbound messages.
+  console.warn(`${WEBHOOK_LOG_PREFIX} client_create_retry_degraded`, {
+    from: maskPhone(from),
+    error:
+      createClientError &&
+      typeof createClientError === "object" &&
+      "message" in createClientError
+        ? String((createClientError as { message?: string }).message)
+        : "unknown_create_error",
+  });
+
+  const { data: degradedClient, error: degradedError } = await supabase
+    .from("clients")
+    .insert(buildClientRow("Número desconocido", null))
+    .select("*")
+    .single();
+
+  if (!degradedError && degradedClient) {
+    console.log(`${WEBHOOK_LOG_PREFIX} client_created_degraded`, {
+      clientId: degradedClient.id,
+      from: maskPhone(from),
+    });
+    return degradedClient;
+  }
+
+  if (isUniqueViolation(degradedError)) {
+    const racedClient = await findExistingClientAfterRace();
+    if (racedClient) return racedClient;
+  }
+
+  throw degradedError || createClientError;
+};
 
 const patchConversationPhoneIfNeeded = async (
   supabase: ReturnType<typeof getSupabaseServerClient>,

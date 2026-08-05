@@ -1,15 +1,41 @@
 import { CRM_COLORS } from "./constants";
 
-export const getInitials = (value: string) => {
-  const initials = value
-    .trim()
-    .split(/\s+/)
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
+/**
+ * Removes unpaired UTF-16 surrogates that break JSON payloads (PostgREST PGRST102).
+ * Well-formed emoji (paired surrogates) are kept.
+ */
+export const toJsonSafeText = (value: string | null | undefined) => {
+  if (value == null) return value ?? null;
 
-  return initials || "??";
+  let output = "";
+  for (const char of value) {
+    const code = char.codePointAt(0);
+    if (code == null) continue;
+    if (code >= 0xd800 && code <= 0xdfff) continue;
+    output += char;
+  }
+
+  return output;
+};
+
+/**
+ * Initials Unicode-aware (emoji-safe): 2 letters from a single token,
+ * or first letter of the first two words. Never indexes UTF-16 code units.
+ */
+export const getInitials = (value: string) => {
+  const words = (value || "").trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return "??";
+
+  if (words.length === 1) {
+    const letters = [...words[0]].filter((char) => /\p{L}/u.test(char));
+    return letters.slice(0, 2).join("").toUpperCase() || "??";
+  }
+
+  const letters = words
+    .map((word) => [...word].find((char) => /\p{L}/u.test(char)))
+    .filter((char): char is string => Boolean(char));
+
+  return letters.slice(0, 2).join("").toUpperCase() || "??";
 };
 
 export const formatCrmTime = (value: string | null) => {
