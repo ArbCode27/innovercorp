@@ -267,50 +267,33 @@ export const runGeminiAgent = async (input: {
   ].join("\n");
 
   const hasInlineMedia = attachedMediaIds.length > 0;
-  // Primary: longer budget for multimodal + tools. Retries bump further.
-  const primaryTimeouts = hasInlineMedia ? [60000, 75000] : [35000, 50000];
-  const degradedTimeouts = [45000, 60000];
+  // Text: 3 attempts. Media: longer primary + degraded text-only path.
+  const primaryTimeouts = hasInlineMedia
+    ? [60000, 75000, 90000]
+    : [40000, 55000, 70000];
+  const degradedTimeouts = [45000, 60000, 70000];
+  const fallbackModel = (
+    process.env.GEMINI_FALLBACK_MODEL || "gemini-2.0-flash"
+  ).trim();
+  const primaryModel = (input.model || "").trim() || "gemini-2.0-flash";
 
   console.log(`${LOG_PREFIX} started`, {
     conversationId: input.conversationId,
     runId,
-    model: input.model,
+    model: primaryModel,
+    fallbackModel:
+      fallbackModel && fallbackModel !== primaryModel ? fallbackModel : null,
     contentsCount: contents.length,
     attachedMediaIds,
     linkedWispro: Boolean(input.client?.wispro_id),
     primaryTimeouts,
   });
 
-  const ctx = createAgentContext({
-    supabase: input.supabase,
-    conversationId: input.conversationId,
-    customerPhone: input.customerPhone,
-    client: input.client,
-    runId,
-    triggerMessageId: input.triggerMessageId,
-  });
-
-  try {
-    return await runAgentLoop({
-      systemPrompt,
-      contents,
-      model: input.model,
-      ctx,
-      timeoutsMs: primaryTimeouts,
-      degraded: false,
-    });
-  } catch (error) {
-    if (!hasInlineMedia || !isRetryableGeminiError(error)) {
-      throw error;
-    }
-
-    console.warn(`${LOG_PREFIX} degraded_retry`, {
-      conversationId: input.conversationId,
-      runId,
-      reason: error instanceof Error ? error.message : "unknown_error",
-    });
-
-    const degradedCtx = createAgentContext({
+  const runWithModel = async (
+    model: string,
+    options?: { degraded?: boolean; contentsOverride?: GeminiContent[] },
+  ) => {
+    const ctx = createAgentContext({
       supabase: input.supabase,
       conversationId: input.conversationId,
       customerPhone: input.customerPhone,
@@ -319,20 +302,85 @@ export const runGeminiAgent = async (input: {
       triggerMessageId: input.triggerMessageId,
     });
 
-    const decision = await runAgentLoop({
-      systemPrompt: `${systemPrompt}\n\nNota: el media inline se omitió por timeout. Usa el historial de texto ([Imagen]) y tools.`,
-      contents: stripInlineMediaFromContents(contents),
-      model: input.model,
-      ctx: degradedCtx,
-      timeoutsMs: degradedTimeouts,
-      degraded: true,
+    const degraded = Boolean(options?.degraded);
+    return runAgentLoop({
+      systemPrompt: degraded
+        ? `${systemPrompt}\n\nNota: el media inline se omitió por timeout. Usa el historial de texto ([Imagen]) y tools.`
+        : systemPrompt,
+      contents: options?.contentsOverride ?? contents,
+      model,
+      ctx,
+      timeoutsMs: degraded ? degradedTimeouts : primaryTimeouts,
+      degraded,
     });
+  };
 
-    return {
-      ...decision,
-      reason: decision.reason
-        ? `${decision.reason}|degraded_no_inline_media`
-        : "degraded_no_inline_media",
-    };
+  try {
+    return await runWithModel(primaryModel);
+  } catch (primaryError) {
+    let lastError: unknown = primaryError;
+
+    // Multimodal path: retry without inline media on the same model.
+    if (hasInlineMedia && isRetryableGeminiError(primaryError)) {
+      console.warn(`${LOG_PREFIX} degraded_retry`, {
+        conversationId: input.conversationId,
+        runId,
+        model: primaryModel,
+        reason:
+          primaryError instanceof Error
+            ? primaryError.message
+            : "unknown_error",
+      });
+
+      try {
+        const decision = await runWithModel(primaryModel, {
+          degraded: true,
+          contentsOverride: stripInlineMediaFromContents(contents),
+        });
+        return {
+          ...decision,
+          reason: decision.reason
+            ? `${decision.reason}|degraded_no_inline_media`
+            : "degraded_no_inline_media",
+        };
+      } catch (degradedError) {
+        lastError = degradedError;
+      }
+    }
+
+    // Capacity/outage: try a different model before giving up to the caller.
+    if (
+      fallbackModel &&
+      fallbackModel !== primaryModel &&
+      isRetryableGeminiError(lastError)
+    ) {
+      console.warn(`${LOG_PREFIX} model_fallback_used`, {
+        conversationId: input.conversationId,
+        runId,
+        from: primaryModel,
+        to: fallbackModel,
+        reason:
+          lastError instanceof Error ? lastError.message : "unknown_error",
+      });
+
+      try {
+        const decision = await runWithModel(fallbackModel, {
+          degraded: hasInlineMedia,
+          contentsOverride: hasInlineMedia
+            ? stripInlineMediaFromContents(contents)
+            : contents,
+        });
+        return {
+          ...decision,
+          reason: decision.reason
+            ? `${decision.reason}|model_fallback:${fallbackModel}`
+            : `model_fallback:${fallbackModel}`,
+        };
+      } catch (fallbackError) {
+        lastError = fallbackError;
+      }
+    }
+
+    throw lastError;
   }
 };

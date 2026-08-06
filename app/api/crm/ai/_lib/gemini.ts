@@ -1,5 +1,25 @@
 import { GEMINI_TOOL_DECLARATIONS } from "./gemini-tools";
 
+export class GeminiApiError extends Error {
+  status: number | null;
+  statusText: string | null;
+
+  constructor(
+    message: string,
+    status?: number | null,
+    statusText?: string | null,
+  ) {
+    const statusPrefix =
+      status != null
+        ? `Gemini ${status}${statusText ? ` ${statusText}` : ""}: `
+        : "Gemini: ";
+    super(`${statusPrefix}${message}`);
+    this.name = "GeminiApiError";
+    this.status = status ?? null;
+    this.statusText = statusText ?? null;
+  }
+}
+
 export type GeminiContentPart =
   | { text: string }
   | {
@@ -188,14 +208,16 @@ export const generateGeminiWithTools = async (input: {
       const message =
         raw?.error?.message ||
         `Gemini respondió con estado ${response.status}`;
+      const statusText =
+        typeof raw?.error?.status === "string" ? raw.error.status : null;
       console.error(`${LOG_PREFIX} api_error`, {
         model,
         status: response.status,
         code: raw?.error?.code ?? null,
-        statusText: raw?.error?.status ?? null,
+        statusText,
         message,
       });
-      throw new Error(message);
+      throw new GeminiApiError(message, response.status, statusText);
     }
 
     if (!functionCalls.length && !text) {

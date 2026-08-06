@@ -1,9 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ensureConversationLabel } from "@/app/api/crm/_lib/conversation-labels";
 import type { AgentHistoryMessage } from "./context-builder";
+import { isTransientGeminiErrorMessage } from "./gemini-retry";
 
 const LOG_PREFIX = "[AI_FALLBACK]";
 const GRAPH_API_VERSION = "v19.0";
+/** Soft holds allowed in the window before hard human handoff. */
+const SOFT_FAIL_LIMIT = 2;
+const SOFT_FAIL_WINDOW_MS = 15 * 60 * 1000;
 
 const normalizePhone = (value: string) => value.replace(/\D/g, "");
 
@@ -64,6 +68,30 @@ const recentInboundHasImage = (messages: AgentHistoryMessage[]) =>
       String(message.media_type || "").toLowerCase() === "image",
   );
 
+export const buildSoftHoldClientMessage = (input: {
+  latestInbound?: AgentHistoryMessage | null;
+  messages?: AgentHistoryMessage[];
+}) => {
+  const content = String(input.latestInbound?.content || "").trim();
+  const hasImage =
+    String(input.latestInbound?.media_type || "").toLowerCase() === "image" ||
+    recentInboundHasImage(input.messages || []);
+
+  if (looksLikeCedula(content) && hasImage) {
+    return "Recibí tu cédula y tu comprobante. Tuve una demora momentánea; en unos segundos continúo contigo. Si quieres, reenvía la cédula 😊";
+  }
+
+  if (looksLikeCedula(content)) {
+    return "Recibí tu cédula. Tuve una demora momentánea al consultarla; reenvíamela en unos segundos y sigo contigo 😊";
+  }
+
+  if (hasImage) {
+    return "Recibí tu mensaje/comprobante. Dame un momento para procesarlo. Si puedes, indícame tu número de cédula por aquí 😊";
+  }
+
+  return "Un momento, estoy procesando tu mensaje 😊";
+};
+
 export const buildFallbackClientMessage = (input: {
   latestInbound?: AgentHistoryMessage | null;
   messages?: AgentHistoryMessage[];
@@ -93,11 +121,42 @@ export type GuaranteedReplyResult = {
   reason: string;
   messageId?: number | null;
   skipped?: boolean;
+  recovery?: "soft" | "hard";
+};
+
+const countRecentSoftHolds = async (
+  supabase: SupabaseClient,
+  conversationId: number,
+) => {
+  const since = new Date(Date.now() - SOFT_FAIL_WINDOW_MS).toISOString();
+  const { data, error } = await supabase
+    .from("messages")
+    .select("id, metadata")
+    .eq("conversation_id", conversationId)
+    .eq("type", "out")
+    .gte("created_at", since)
+    .limit(50);
+
+  if (error) {
+    console.warn(`${LOG_PREFIX} soft_fail_count_failed`, {
+      conversationId,
+      error: error.message,
+    });
+    return 0;
+  }
+
+  return (data || []).filter((row) => {
+    const metadata =
+      row.metadata && typeof row.metadata === "object"
+        ? (row.metadata as Record<string, unknown>)
+        : null;
+    return metadata?.ai_recovery === "soft";
+  }).length;
 };
 
 /**
- * Last-resort path: message the client first, then hand off.
- * Never marks human_mode on empty conversations.
+ * Recovery path after Gemini failures.
+ * Transient errors: soft hold (bot stays active) until SOFT_FAIL_LIMIT, then hard handoff.
  */
 export const sendGuaranteedClientReply = async (
   supabase: SupabaseClient,
@@ -110,6 +169,8 @@ export const sendGuaranteedClientReply = async (
     latestInbound?: AgentHistoryMessage | null;
     messages?: AgentHistoryMessage[];
     errorMessage?: string | null;
+    /** Force hard handoff (e.g. failed business handoff send). */
+    forceHardHandoff?: boolean;
   },
 ): Promise<GuaranteedReplyResult> => {
   const { data: conversation, error: conversationError } = await supabase
@@ -172,14 +233,31 @@ export const sendGuaranteedClientReply = async (
     return { ok: false, reason: "missing_recipient" };
   }
 
-  const message = buildFallbackClientMessage({
-    latestInbound: input.latestInbound,
-    messages: input.messages,
-  });
-
   const hasImage =
     String(input.latestInbound?.media_type || "").toLowerCase() === "image" ||
     recentInboundHasImage(input.messages || []);
+
+  const recentSoftFails = await countRecentSoftHolds(
+    supabase,
+    input.conversationId,
+  );
+  const isTransient = isTransientGeminiErrorMessage(input.errorMessage);
+  const useSoft =
+    !input.forceHardHandoff &&
+    isTransient &&
+    recentSoftFails < SOFT_FAIL_LIMIT;
+
+  const message = useSoft
+    ? buildSoftHoldClientMessage({
+        latestInbound: input.latestInbound,
+        messages: input.messages,
+      })
+    : buildFallbackClientMessage({
+        latestInbound: input.latestInbound,
+        messages: input.messages,
+      });
+
+  const recovery: "soft" | "hard" = useSoft ? "soft" : "hard";
 
   try {
     const waMessageId = await sendWhatsAppText(to, message);
@@ -198,9 +276,12 @@ export const sendGuaranteedClientReply = async (
         created_at: now,
         metadata: {
           engine: "gemini",
-          action: "handoff",
-          reason: "ai_guaranteed_fallback",
-          ai_fallback: true,
+          action: recovery === "soft" ? "soft_hold" : "handoff",
+          reason:
+            recovery === "soft" ? "ai_soft_hold" : "ai_guaranteed_fallback",
+          ai_fallback: recovery === "hard",
+          ai_recovery: recovery,
+          ai_soft_fail_count: recentSoftFails + (recovery === "soft" ? 1 : 0),
           ai_error: input.errorMessage || null,
           trigger_message_id: input.triggerMessageId ?? null,
         },
@@ -212,25 +293,37 @@ export const sendGuaranteedClientReply = async (
       console.error(`${LOG_PREFIX} message_persist_failed`, {
         conversationId: input.conversationId,
         error: saveError.message,
+        recovery,
       });
-      return { ok: false, reason: "fallback_persist_failed" };
+      return { ok: false, reason: "fallback_persist_failed", recovery };
     }
 
-    await supabase
-      .from("conversations")
-      .update({
-        human_mode: true,
-        preview: message,
-        updated_at: now,
-        last_message_at: now,
-      })
-      .eq("id", input.conversationId);
+    if (recovery === "hard") {
+      await supabase
+        .from("conversations")
+        .update({
+          human_mode: true,
+          preview: message,
+          updated_at: now,
+          last_message_at: now,
+        })
+        .eq("id", input.conversationId);
 
-    await ensureConversationLabel(
-      supabase,
-      input.conversationId,
-      hasImage ? "verificar_pago" : "soporte",
-    );
+      await ensureConversationLabel(
+        supabase,
+        input.conversationId,
+        hasImage ? "verificar_pago" : "soporte",
+      );
+    } else {
+      await supabase
+        .from("conversations")
+        .update({
+          preview: message,
+          updated_at: now,
+          last_message_at: now,
+        })
+        .eq("id", input.conversationId);
+    }
 
     if (input.triggerMessageId) {
       const { data: trigger } = await supabase
@@ -249,7 +342,9 @@ export const sendGuaranteedClientReply = async (
           .update({
             metadata: {
               ...metadata,
-              ai_fallback: true,
+              ai_recovery: recovery,
+              ai_fallback: recovery === "hard",
+              ai_soft_hold: recovery === "soft",
               ai_fallback_at: now,
               ai_error: input.errorMessage || null,
             },
@@ -263,22 +358,29 @@ export const sendGuaranteedClientReply = async (
       messageId: saved?.id ?? null,
       to,
       hasImage,
+      recovery,
+      recentSoftFails,
+      softFailLimit: SOFT_FAIL_LIMIT,
+      isTransient,
       willReplyToClient: true,
     });
 
     return {
       ok: true,
-      reason: "fallback_sent",
+      reason: recovery === "soft" ? "soft_hold_sent" : "fallback_sent",
       messageId: saved?.id ?? null,
+      recovery,
     };
   } catch (error) {
     console.error(`${LOG_PREFIX} failed`, {
       conversationId: input.conversationId,
+      recovery,
       error: error instanceof Error ? error.message : "unknown_error",
     });
     return {
       ok: false,
       reason: "fallback_send_failed",
+      recovery,
     };
   }
 };

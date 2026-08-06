@@ -280,10 +280,11 @@ export const replyToConversationWithGemini = async (
       });
 
       if (fallback.ok) {
+        const isSoft = fallback.recovery === "soft";
         return {
           ok: true,
-          reason: "fallback_sent",
-          action: "handoff",
+          reason: fallback.reason,
+          action: isSoft ? "reply" : "handoff",
           messageId: fallback.messageId ?? null,
         };
       }
@@ -351,6 +352,7 @@ export const replyToConversationWithGemini = async (
 
     if (decision.action === "handoff") {
       const tryHandoffFallback = async (errorMessage: string) => {
+        // Business handoff already decided — keep hard path so the client is covered.
         const fallback = await sendGuaranteedClientReply(supabase, {
           conversationId: conversation.id,
           triggerMessageId: input.triggerMessageId,
@@ -360,12 +362,13 @@ export const replyToConversationWithGemini = async (
           latestInbound,
           messages: chronological,
           errorMessage,
+          forceHardHandoff: true,
         });
 
         if (fallback.ok) {
           return {
             ok: true as const,
-            reason: "fallback_sent",
+            reason: fallback.reason,
             action: "handoff" as const,
             messageId: fallback.messageId ?? null,
             runId: decision.runId,
@@ -597,10 +600,11 @@ export const replyToConversationWithGemini = async (
       });
 
       if (fallback.ok) {
+        const isSoft = fallback.recovery === "soft";
         return {
           ok: true,
-          reason: "fallback_sent",
-          action: "handoff",
+          reason: fallback.reason,
+          action: isSoft ? "reply" : "handoff",
           messageId: fallback.messageId ?? null,
         };
       }

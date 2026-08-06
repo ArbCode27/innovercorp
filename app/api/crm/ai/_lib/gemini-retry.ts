@@ -1,5 +1,6 @@
 import {
   generateGeminiWithTools,
+  GeminiApiError,
   type GeminiContent,
   type GeminiGenerateResult,
 } from "./gemini";
@@ -7,12 +8,27 @@ import {
 const LOG_PREFIX = "[GEMINI_RETRY]";
 
 export const isRetryableGeminiError = (error: unknown): boolean => {
+  if (error instanceof GeminiApiError) {
+    if (error.status != null) {
+      if (error.status === 429) return true;
+      if (error.status >= 500 && error.status <= 599) return true;
+    }
+    const statusText = String(error.statusText || "").toLowerCase();
+    if (
+      statusText.includes("unavailable") ||
+      statusText.includes("resource_exhausted")
+    ) {
+      return true;
+    }
+  }
+
   if (!(error instanceof Error)) return false;
   const message = error.message.toLowerCase();
   const name = error.name.toLowerCase();
 
   return (
     name === "aborterror" ||
+    name === "geminiapierror" ||
     message.includes("timeout") ||
     message.includes("abort") ||
     message.includes("fetch failed") ||
@@ -22,12 +38,40 @@ export const isRetryableGeminiError = (error: unknown): boolean => {
     message.includes("429") ||
     message.includes("rate limit") ||
     message.includes("resource exhausted") ||
+    message.includes("resource_exhausted") ||
     message.includes("503") ||
     message.includes("502") ||
     message.includes("500") ||
     message.includes("unavailable") ||
-    message.includes("overloaded")
+    message.includes("overloaded") ||
+    message.includes("high demand") ||
+    message.includes("try again later") ||
+    message.includes("temporarily")
   );
+};
+
+/** Transient capacity/network errors that should soft-hold before human handoff. */
+export const isTransientGeminiError = (error: unknown): boolean =>
+  isRetryableGeminiError(error);
+
+export const isTransientGeminiErrorMessage = (message: string | null | undefined) =>
+  isRetryableGeminiError(new Error(String(message || "")));
+
+const resolveBackoffMs = (error: unknown, attempt: number, baseMs: number) => {
+  const message =
+    error instanceof Error ? error.message.toLowerCase() : "";
+  const status = error instanceof GeminiApiError ? error.status : null;
+  const isCapacity =
+    status === 429 ||
+    status === 503 ||
+    message.includes("high demand") ||
+    message.includes("unavailable") ||
+    message.includes("rate limit") ||
+    message.includes("429") ||
+    message.includes("503");
+
+  const multiplier = isCapacity ? 2.5 : 1;
+  return Math.round(baseMs * multiplier * Math.max(1, attempt));
 };
 
 const sleep = (ms: number) =>
@@ -60,15 +104,20 @@ export const generateGeminiWithRetry = async (input: {
     const timeoutMs = timeouts[attempt];
     try {
       if (attempt > 0) {
+        const waitMs = resolveBackoffMs(lastError, attempt, backoffMs);
         console.warn(`${LOG_PREFIX} retrying`, {
           attempt: attempt + 1,
           maxAttempts: timeouts.length,
           timeoutMs,
+          waitMs,
+          model: input.model ?? null,
           ...input.logContext,
           previousError:
             lastError instanceof Error ? lastError.message : "unknown_error",
+          previousStatus:
+            lastError instanceof GeminiApiError ? lastError.status : null,
         });
-        await sleep(backoffMs * attempt);
+        await sleep(waitMs);
       }
 
       return await generateGeminiWithTools({
@@ -86,6 +135,10 @@ export const generateGeminiWithRetry = async (input: {
         maxAttempts: timeouts.length,
         timeoutMs,
         retryable,
+        httpStatus: error instanceof GeminiApiError ? error.status : null,
+        statusText:
+          error instanceof GeminiApiError ? error.statusText : null,
+        model: input.model ?? null,
         error: error instanceof Error ? error.message : "unknown_error",
         ...input.logContext,
       });
