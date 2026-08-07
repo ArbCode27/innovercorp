@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
-import { createPaymentPromiseForClient } from "@/app/api/crm/_lib/wispro-api";
+import {
+  createPaymentPromiseForClient,
+  DEFAULT_PAYMENT_PROMISE_HOURS,
+} from "@/app/api/crm/_lib/wispro-api";
 
 const bodySchema = z.object({
   clientId: z.coerce.number().int().positive().optional(),
@@ -98,16 +101,18 @@ export async function POST(req: NextRequest) {
     const result = await createPaymentPromiseForClient({
       wisproClientId: wisproId,
       cedula,
-      hours: hours ?? 24,
+      hours: hours ?? DEFAULT_PAYMENT_PROMISE_HOURS,
     });
 
     if (!result.ok) {
       const status =
-        result.reason === "no_contract" || result.reason === "invalid"
-          ? 404
-          : result.reason === "config"
-            ? 503
-            : 502;
+        result.reason === "service_active"
+          ? 409
+          : result.reason === "no_contract" || result.reason === "invalid"
+            ? 404
+            : result.reason === "config"
+              ? 503
+              : 502;
 
       return NextResponse.json(
         {

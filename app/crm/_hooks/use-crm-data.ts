@@ -946,7 +946,7 @@ export const useCrmData = (agent: Agent | null) => {
     const result = await wisproService.createPaymentPromise({
       clientId: selectedClient?.id,
       conversationId: selectedConversation?.id,
-      hours: 24,
+      hours: 48,
     });
 
     toast.success(`Promesa de pago creada hasta ${result.validUntil}`);

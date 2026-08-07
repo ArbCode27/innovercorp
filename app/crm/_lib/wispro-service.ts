@@ -94,7 +94,7 @@ export const wisproService = {
       body: JSON.stringify({
         clientId: input.clientId,
         conversationId: input.conversationId,
-        hours: input.hours ?? 24,
+        hours: input.hours ?? 48,
       }),
     });
 

@@ -371,15 +371,16 @@ export const ConversationPanel = ({
         <AlertDialogContent className={CRM_DIALOG}>
           <AlertDialogHeader>
             <AlertDialogTitle className={CRM_SURFACES.textPrimary}>
-              ¿Crear promesa de pago (24h)?
+              ¿Crear promesa de pago (48h)?
             </AlertDialogTitle>
             <AlertDialogDescription className={CRM_SURFACES.textMuted}>
               Se creará una promesa de pago en Wispro para{" "}
               <span className={`font-medium ${CRM_SURFACES.textPrimary}`}>
                 {clientDisplayName}
               </span>
-              , válida por 24 horas. El cliente no recibirá ningún mensaje de
-              WhatsApp sobre esta acción.
+              , válida por 48 horas, solo si el servicio está suspendido. Si el
+              servicio está activo, no se crea. El cliente no recibirá ningún
+              mensaje de WhatsApp sobre esta acción.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

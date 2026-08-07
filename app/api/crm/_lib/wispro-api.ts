@@ -335,7 +335,12 @@ export type CreatePaymentPromiseResult =
   | {
       ok: false;
       created: false;
-      reason: "no_contract" | "upstream" | "config" | "invalid";
+      reason:
+        | "no_contract"
+        | "service_active"
+        | "upstream"
+        | "config"
+        | "invalid";
       error: string;
     };
 
@@ -361,6 +366,22 @@ const normalizeContract = (record: unknown): WisproContract | null => {
   };
 };
 
+const normalizeContractState = (state: string | null | undefined) =>
+  String(state || "")
+    .trim()
+    .toLowerCase();
+
+/**
+ * Wispro contract states eligible for payment promises.
+ * Only suspended (`disabled`) service should get a temporary reactivation promise.
+ * @see https://doc.cloud.wispro.co/reference/contracts
+ */
+export const PROMISE_ELIGIBLE_CONTRACT_STATES = new Set(["disabled"]);
+
+export const isContractSuspendedForPromise = (
+  state: string | null | undefined,
+): boolean => PROMISE_ELIGIBLE_CONTRACT_STATES.has(normalizeContractState(state));
+
 const CONTRACT_STATE_PRIORITY: Record<string, number> = {
   enabled: 0,
   alerted: 1,
@@ -368,6 +389,10 @@ const CONTRACT_STATE_PRIORITY: Record<string, number> = {
   disabled: 3,
 };
 
+const contractRecency = (contract: WisproContract) =>
+  Date.parse(contract.updated_at || contract.created_at || "") || 0;
+
+/** Prefer active/healthier contracts (general CRM use). */
 export const resolvePreferredContract = (
   contracts: WisproContract[],
 ): WisproContract | null => {
@@ -375,15 +400,29 @@ export const resolvePreferredContract = (
 
   return [...contracts].sort((left, right) => {
     const leftPriority =
-      CONTRACT_STATE_PRIORITY[String(left.state || "").toLowerCase()] ?? 99;
+      CONTRACT_STATE_PRIORITY[normalizeContractState(left.state)] ?? 99;
     const rightPriority =
-      CONTRACT_STATE_PRIORITY[String(right.state || "").toLowerCase()] ?? 99;
+      CONTRACT_STATE_PRIORITY[normalizeContractState(right.state)] ?? 99;
     if (leftPriority !== rightPriority) return leftPriority - rightPriority;
-
-    const leftTime = Date.parse(left.updated_at || left.created_at || "") || 0;
-    const rightTime = Date.parse(right.updated_at || right.created_at || "") || 0;
-    return rightTime - leftTime;
+    return contractRecency(right) - contractRecency(left);
   })[0];
+};
+
+/**
+ * Pick a suspended contract for payment-promise creation.
+ * Newest `disabled` contract wins when several exist.
+ */
+export const resolveSuspendedContractForPromise = (
+  contracts: WisproContract[],
+): WisproContract | null => {
+  const suspended = contracts.filter((contract) =>
+    isContractSuspendedForPromise(contract.state),
+  );
+  if (!suspended.length) return null;
+
+  return [...suspended].sort(
+    (left, right) => contractRecency(right) - contractRecency(left),
+  )[0];
 };
 
 export const listContractsByClientId = async (
@@ -408,8 +447,13 @@ export const listContractsByCedula = async (
     .filter((contract): contract is WisproContract => contract !== null);
 };
 
+/** Default duration for Wispro payment promises (auto + CRM UI). */
+export const DEFAULT_PAYMENT_PROMISE_HOURS = 48;
+
 /** valid_until as YYYY-MM-DD, +hours from now in America/Caracas calendar day. */
-export const buildPaymentPromiseValidUntil = (hours = 24): string => {
+export const buildPaymentPromiseValidUntil = (
+  hours = DEFAULT_PAYMENT_PROMISE_HOURS,
+): string => {
   const now = new Date();
   const target = new Date(now.getTime() + hours * 60 * 60 * 1000);
   // Format in America/Caracas to match ISP local day boundaries.
@@ -470,7 +514,8 @@ export const createPaymentPromiseForClient = async (input: {
   cedula?: string | null;
   hours?: number;
 }): Promise<CreatePaymentPromiseResult> => {
-  const hours = input.hours && input.hours > 0 ? input.hours : 24;
+  const hours =
+    input.hours && input.hours > 0 ? input.hours : DEFAULT_PAYMENT_PROMISE_HOURS;
   const wisproClientId = input.wisproClientId?.trim() || "";
   const cedula = input.cedula?.trim() || "";
 
@@ -492,8 +537,7 @@ export const createPaymentPromiseForClient = async (input: {
       contracts = await listContractsByCedula(cedula);
     }
 
-    const contract = resolvePreferredContract(contracts);
-    if (!contract) {
+    if (!contracts.length) {
       console.warn(`${LOG_PREFIX} promise_skipped_no_contract`, {
         wisproClientId: wisproClientId || null,
         cedula: cedula || null,
@@ -506,12 +550,32 @@ export const createPaymentPromiseForClient = async (input: {
       };
     }
 
+    // Only create promises when service is suspended (disabled). Active = skip.
+    const contract = resolveSuspendedContractForPromise(contracts);
+    if (!contract) {
+      const states = contracts.map((item) => normalizeContractState(item.state) || "unknown");
+      console.warn(`${LOG_PREFIX} promise_skipped_service_active`, {
+        wisproClientId: wisproClientId || null,
+        cedula: cedula || null,
+        contractStates: states,
+        preferredActiveId: resolvePreferredContract(contracts)?.id ?? null,
+      });
+      return {
+        ok: false,
+        created: false,
+        reason: "service_active",
+        error:
+          "No se creó la promesa: el servicio del cliente está activo (no suspendido).",
+      };
+    }
+
     const validUntil = buildPaymentPromiseValidUntil(hours);
     const promise = await createPaymentPromise(contract.id, validUntil);
 
     console.log(`${LOG_PREFIX} promise_created`, {
       promiseId: promise.id,
       contractId: contract.id,
+      contractState: normalizeContractState(contract.state),
       validUntil,
       sourceClientId: wisproClientId || null,
     });

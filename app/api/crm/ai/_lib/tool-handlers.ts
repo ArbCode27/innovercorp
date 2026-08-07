@@ -3,6 +3,7 @@ import { associateWisproClient } from "@/app/crm/_lib/wispro-associate";
 import type { WisproSearchResult } from "@/app/crm/_lib/types";
 import {
   createPaymentPromiseForClient,
+  DEFAULT_PAYMENT_PROMISE_HOURS,
   searchWisproByCedula,
   WisproApiError,
 } from "@/app/api/crm/_lib/wispro-api";
@@ -600,7 +601,7 @@ const handleSubmitPaymentReceipt = async (
   try {
     const result = await submitInnoverPayment(payload);
 
-    // Silent Wispro payment promise (+24h). Never changes the client-facing message.
+    // Silent Wispro payment promise. Never changes the client-facing message.
     // Failure must not undo or block the successful payment registration.
     let promiseMetadata: Record<string, unknown> = {
       payment_promise_created: false,
@@ -612,7 +613,7 @@ const handleSubmitPaymentReceipt = async (
       const promiseResult = await createPaymentPromiseForClient({
         wisproClientId: payload.client_id,
         cedula: payload.cedula,
-        hours: 24,
+        hours: DEFAULT_PAYMENT_PROMISE_HOURS,
       });
 
       promiseCreated = promiseResult.ok;

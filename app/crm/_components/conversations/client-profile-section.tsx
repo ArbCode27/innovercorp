@@ -185,13 +185,13 @@ export const ClientProfileSection = ({
             className="w-full"
             disabled={isCreatingPaymentPromise}
             onClick={onCreatePaymentPromise}
-            aria-label="Crear promesa de pago por 24 horas en Wispro">
+            aria-label="Crear promesa de pago por 48 horas en Wispro">
             {isCreatingPaymentPromise
               ? "Creando promesa..."
-              : "Crear promesa 24h"}
+              : "Crear promesa 48h"}
           </CrmButton>
           <p className={`text-[11px] leading-snug ${CRM_SURFACES.textMuted}`}>
-            Acción interna. No se notifica al cliente por WhatsApp.
+            Solo si el servicio está suspendido. No se notifica por WhatsApp.
           </p>
         </div>
       ) : null}
