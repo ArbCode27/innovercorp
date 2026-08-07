@@ -18,6 +18,8 @@ const wisproInvoicingSchema = z.object({
   debt: z.number(),
   hasDebt: z.boolean(),
   accountStatus: z.enum(["Al día", "Con deuda", "Suspendido", "Prospecto"]),
+  serviceSuspended: z.boolean().optional().default(false),
+  contractState: z.string().nullable().optional().default(null),
   snapshot: z
     .object({
       invoiceIndex: z.number(),

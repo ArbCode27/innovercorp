@@ -97,7 +97,7 @@ export const GEMINI_TOOL_DECLARATIONS = [
   {
     name: LOOKUP_WISPRO_TOOL,
     description:
-      "Busca al abonado en Wispro por cédula/documento. Devuelve saldo en USD y su equivalente en bolívares (debt_bs) con la tasa BCV del día ya calculada. Úsala cuando el usuario envíe su cédula. Si el chat empezó con un comprobante, pide la cédula primero y luego usa esta tool.",
+      "Busca al abonado en Wispro por cédula/documento. Devuelve saldo (debt_usd/debt_bs), account_status y service_suspended (true si el contrato está disabled/suspendido). Si service_suspended=true, incentiva el pago e indica activación inmediata. Úsala cuando el usuario envíe su cédula.",
     parameters: {
       type: "object",
       properties: {
@@ -201,7 +201,7 @@ export const GEMINI_TOOL_DECLARATIONS = [
 ] as const;
 
 export const GEMINI_TOOLS_CONTRACT_PROMPT = `Herramientas disponibles (obligatorio respetar):
-1) lookup_wispro_by_cedula — cédula del abonado. Trae debt_usd, debt_bs, bcv_rate ya calculados.
+1) lookup_wispro_by_cedula — cédula del abonado. Trae debt_usd, debt_bs, bcv_rate, account_status y service_suspended (contrato disabled).
 2) get_bcv_rate — solo si preguntan la tasa BCV del día sin consultar saldo (fuente rates.dolarvzla.com/bcv).
 3) link_wispro_client — opcional; no bloquea pagos.
 4) submit_payment_receipt — registrar comprobante (requiere lookup previo). Tras éxito/error: etiqueta "Verificar pago" + handoff. Tras éxito el sistema puede crear una promesa Wispro en segundo plano: NUNCA la menciones al cliente; confirma solo el registro del comprobante.
@@ -227,4 +227,5 @@ Flujo obligatorio de soporte técnico:
 Reglas:
 - No inventes monto, referencia ni banco.
 - Si hay varios matches Wispro, confirma cuál es antes del submit.
+- Si service_suspended=true: incentiva el pago y di que al registrar el comprobante el servicio se activa de forma inmediata. No digas "suspendido" si service_suspended=false.
 - Responde siempre en texto claro por WhatsApp (sin JSON).`;

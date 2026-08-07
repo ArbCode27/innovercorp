@@ -234,6 +234,9 @@ export const WisproSearchDialog = ({
                       {result.invoicing.hasDebt
                         ? formatClientDebt(result.invoicing.debt)
                         : "Sin deuda"}
+                      {" · "}
+                      Estado: {result.invoicing.accountStatus}
+                      {result.invoicing.serviceSuspended ? " (suspendido)" : ""}
                     </p>
                     <span
                       className={`mt-2 inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${CRM_BADGE_TONES.emerald}`}>

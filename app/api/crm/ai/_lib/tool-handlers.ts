@@ -78,6 +78,8 @@ const summarizeMatch = async (result: WisproSearchResult) => {
     city: result.customer.city ?? null,
     phone_mobile: result.customer.phone_mobile ?? null,
     account_status: result.invoicing.accountStatus,
+    service_suspended: Boolean(result.invoicing.serviceSuspended),
+    contract_state: result.invoicing.contractState ?? null,
     debt: debtUsd,
     has_debt: result.invoicing.hasDebt,
     debt_usd: fx.debt_usd,
@@ -284,6 +286,8 @@ const handleLookup = async (
     }
 
     const matches = await Promise.all(results.map((result) => summarizeMatch(result)));
+    const singleSuspended =
+      results.length === 1 && Boolean(results[0]?.invoicing.serviceSuspended);
 
     return {
       name: LOOKUP_WISPRO_TOOL,
@@ -297,8 +301,10 @@ const handleLookup = async (
           results.length === 0
             ? "No se encontró abonado. Pide verificar la cédula."
             : results.length === 1
-              ? "Un solo match. Informa saldo con debt_usd_formatted y debt_bs_formatted. Si hay comprobante pendiente, llama submit_payment_receipt."
-              : "Varios matches. Confirma nombre/zona antes del pago.",
+              ? singleSuspended
+                ? "Servicio suspendido (service_suspended=true). Informa saldo, incentiva el pago y di que al registrar el comprobante se activa de forma inmediata. No menciones promesas internas."
+                : "Un solo match. Informa saldo con debt_usd_formatted y debt_bs_formatted. Si hay comprobante pendiente, llama submit_payment_receipt."
+              : "Varios matches. Confirma nombre/zona antes del pago. Revisa service_suspended por cada match.",
       },
     };
   } catch (error) {
@@ -414,6 +420,8 @@ const handleLink = async (
         debt: match.invoicing.debt,
         has_debt: match.invoicing.hasDebt,
         account_status: match.invoicing.accountStatus,
+        service_suspended: Boolean(match.invoicing.serviceSuspended),
+        contract_state: match.invoicing.contractState ?? null,
         hint: "Cliente vinculado. Puedes continuar con submit_payment_receipt si hay comprobante.",
       },
     };

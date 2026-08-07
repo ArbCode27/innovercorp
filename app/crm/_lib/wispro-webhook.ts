@@ -129,29 +129,31 @@ export const normalizeWisproCustomer = (
   };
 };
 
+const emptyInvoicingSummary = (
+  overrides?: Partial<WisproInvoicingSummary>,
+): WisproInvoicingSummary => ({
+  debt: 0,
+  hasDebt: false,
+  accountStatus: "Al día",
+  serviceSuspended: false,
+  contractState: null,
+  snapshot: null,
+  ...overrides,
+});
+
 export const parseInvoicingDebt = (
   proxyData: unknown,
 ): WisproInvoicingSummary => {
   const invoices = extractInvoicingRecords(proxyData);
 
   if (!invoices.length) {
-    return {
-      debt: 0,
-      hasDebt: false,
-      accountStatus: "Al día",
-      snapshot: null,
-    };
+    return emptyInvoicingSummary();
   }
 
   const invoice = invoices[0];
 
   if (!invoice || typeof invoice !== "object") {
-    return {
-      debt: 0,
-      hasDebt: false,
-      accountStatus: "Al día",
-      snapshot: null,
-    };
+    return emptyInvoicingSummary();
   }
 
   const invoiceRecord = invoice as Record<string, unknown>;
@@ -159,41 +161,32 @@ export const parseInvoicingDebt = (
 
   if (!items.length) {
     console.warn("[Wispro webhook] factura sin items en envoicing.data[0]");
-    return {
-      debt: 0,
-      hasDebt: false,
-      accountStatus: "Al día",
-      snapshot: null,
-    };
+    return emptyInvoicingSummary();
   }
 
   const item = items[0];
 
   if (!item || typeof item !== "object") {
-    return {
-      debt: 0,
-      hasDebt: false,
-      accountStatus: "Al día",
-      snapshot: null,
-    };
+    return emptyInvoicingSummary();
   }
 
   const itemRecord = item as Record<string, unknown>;
   const grossAmount = parseAmount(itemRecord.gross_amount);
   const amount = parseAmount(itemRecord.amount);
   const debt = roundMoney(grossAmount + amount);
+  const hasDebt = debt > 0;
 
-  return {
+  return emptyInvoicingSummary({
     debt,
-    hasDebt: debt > 0,
-    accountStatus: debt > 0 ? "Con deuda" : "Al día",
+    hasDebt,
+    accountStatus: hasDebt ? "Con deuda" : "Al día",
     snapshot: {
       invoiceIndex: 0,
       itemIndex: 0,
       gross_amount: grossAmount,
       amount,
     },
-  };
+  });
 };
 
 export const serializeInvoicingForDb = (
@@ -206,6 +199,8 @@ export const serializeInvoicingForDb = (
   return JSON.stringify({
     debt: invoicing.debt,
     hasDebt: invoicing.hasDebt,
+    serviceSuspended: Boolean(invoicing.serviceSuspended),
+    contractState: invoicing.contractState ?? null,
     calculatedAt: new Date().toISOString(),
     source: invoicing.snapshot,
   });

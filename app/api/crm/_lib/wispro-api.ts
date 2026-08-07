@@ -200,28 +200,6 @@ export const getClientCurrentAccount = async (
   };
 };
 
-/** Map current_account.invoice_balance_amount → CRM invoicing summary. */
-export const buildInvoicingSummaryFromCurrentAccount = (
-  account: WisproCurrentAccount | null,
-): WisproInvoicingSummary => {
-  // invoice_balance_amount = total debt (Wispro docs). Never treat credit as debt.
-  const debt = roundMoney(Math.max(0, account?.invoice_balance_amount ?? 0));
-
-  return {
-    debt,
-    hasDebt: debt > 0,
-    accountStatus: debt > 0 ? "Con deuda" : "Al día",
-    snapshot: account
-      ? {
-          invoiceIndex: 0,
-          itemIndex: 0,
-          gross_amount: debt,
-          amount: debt,
-        }
-      : null,
-  };
-};
-
 const wisproPost = async (
   path: string,
   body: Record<string, unknown>,
@@ -423,6 +401,63 @@ export const resolveSuspendedContractForPromise = (
   return [...suspended].sort(
     (left, right) => contractRecency(right) - contractRecency(left),
   )[0];
+};
+
+/** Suspended if any contract is Wispro `disabled`. */
+export const resolveServiceSuspended = (contracts: WisproContract[]): boolean =>
+  contracts.some((contract) => isContractSuspendedForPromise(contract.state));
+
+/** Prefer suspended contract state for messaging; else preferred active contract. */
+export const resolvePrimaryContractState = (
+  contracts: WisproContract[],
+): string | null => {
+  const suspended = resolveSuspendedContractForPromise(contracts);
+  if (suspended) {
+    return normalizeContractState(suspended.state) || "disabled";
+  }
+  const preferred = resolvePreferredContract(contracts);
+  return preferred ? normalizeContractState(preferred.state) || null : null;
+};
+
+export const buildAccountStatusFromService = (input: {
+  hasDebt: boolean;
+  serviceSuspended: boolean;
+}): WisproInvoicingSummary["accountStatus"] => {
+  if (input.serviceSuspended) return "Suspendido";
+  if (input.hasDebt) return "Con deuda";
+  return "Al día";
+};
+
+/**
+ * Map current_account.invoice_balance_amount → CRM invoicing summary.
+ * Optional contracts enrich suspension detection (Wispro contract.state).
+ */
+export const buildInvoicingSummaryFromCurrentAccount = (
+  account: WisproCurrentAccount | null,
+  options?: { contracts?: WisproContract[] | null },
+): WisproInvoicingSummary => {
+  // invoice_balance_amount = total debt (Wispro docs). Never treat credit as debt.
+  const debt = roundMoney(Math.max(0, account?.invoice_balance_amount ?? 0));
+  const hasDebt = debt > 0;
+  const contracts = options?.contracts ?? [];
+  const serviceSuspended = resolveServiceSuspended(contracts);
+  const contractState = resolvePrimaryContractState(contracts);
+
+  return {
+    debt,
+    hasDebt,
+    serviceSuspended,
+    contractState,
+    accountStatus: buildAccountStatusFromService({ hasDebt, serviceSuspended }),
+    snapshot: account
+      ? {
+          invoiceIndex: 0,
+          itemIndex: 0,
+          gross_amount: debt,
+          amount: debt,
+        }
+      : null,
+  };
 };
 
 export const listContractsByClientId = async (
@@ -634,11 +669,37 @@ export const searchWisproByCedula = async (
     return [];
   }
 
-  // Debt per client UUID via current_account (not summed pending invoices).
+  // Debt (current_account) + suspension (contracts.state) per client UUID.
   const results = await Promise.all(
     customers.map(async (customer) => {
-      const account = await getClientCurrentAccount(customer.id);
-      const invoicing = buildInvoicingSummaryFromCurrentAccount(account);
+      const [accountResult, contractsResult] = await Promise.allSettled([
+        getClientCurrentAccount(customer.id),
+        listContractsByClientId(customer.id),
+      ]);
+
+      if (accountResult.status === "rejected") {
+        throw accountResult.reason;
+      }
+
+      const account = accountResult.value;
+      let contracts: WisproContract[] = [];
+
+      if (contractsResult.status === "fulfilled") {
+        contracts = contractsResult.value;
+      } else {
+        // Soft-fail: never invent suspension when contracts lookup fails.
+        console.warn(`${LOG_PREFIX} contracts_lookup_failed`, {
+          wisproId: customer.id,
+          error:
+            contractsResult.reason instanceof Error
+              ? contractsResult.reason.message
+              : String(contractsResult.reason),
+        });
+      }
+
+      const invoicing = buildInvoicingSummaryFromCurrentAccount(account, {
+        contracts,
+      });
 
       console.log(`${LOG_PREFIX} current_account_ok`, {
         wisproId: customer.id,
@@ -646,6 +707,9 @@ export const searchWisproByCedula = async (
         balance: account.balance_amount,
         credit: account.credit_amount,
         debt: invoicing.debt,
+        serviceSuspended: invoicing.serviceSuspended,
+        contractState: invoicing.contractState,
+        contractsCount: contracts.length,
       });
 
       return { customer, invoicing };
@@ -656,6 +720,8 @@ export const searchWisproByCedula = async (
     cedula: normalizedCedula,
     clients: results.length,
     withDebt: results.filter((result) => result.invoicing.hasDebt).length,
+    suspended: results.filter((result) => result.invoicing.serviceSuspended)
+      .length,
   });
 
   return results;

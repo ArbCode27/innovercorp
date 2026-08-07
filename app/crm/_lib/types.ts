@@ -83,6 +83,10 @@ export interface WisproInvoicingSummary {
   debt: number;
   hasDebt: boolean;
   accountStatus: ClientAccountStatus;
+  /** True when any Wispro contract is `disabled` (service cut). */
+  serviceSuspended: boolean;
+  /** Primary contract state used for messaging (disabled preferred if present). */
+  contractState: string | null;
   snapshot: {
     invoiceIndex: number;
     itemIndex: number;
