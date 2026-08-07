@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { associateWisproClient } from "@/app/crm/_lib/wispro-associate";
 import type { WisproSearchResult } from "@/app/crm/_lib/types";
 import {
+  createPaymentPromiseForClient,
   searchWisproByCedula,
   WisproApiError,
 } from "@/app/api/crm/_lib/wispro-api";
@@ -599,6 +600,57 @@ const handleSubmitPaymentReceipt = async (
   try {
     const result = await submitInnoverPayment(payload);
 
+    // Silent Wispro payment promise (+24h). Never changes the client-facing message.
+    // Failure must not undo or block the successful payment registration.
+    let promiseMetadata: Record<string, unknown> = {
+      payment_promise_created: false,
+      payment_promise_source: "auto_submit",
+    };
+    let promiseCreated = false;
+
+    try {
+      const promiseResult = await createPaymentPromiseForClient({
+        wisproClientId: payload.client_id,
+        cedula: payload.cedula,
+        hours: 24,
+      });
+
+      promiseCreated = promiseResult.ok;
+      promiseMetadata = promiseResult.ok
+        ? {
+            payment_promise_created: true,
+            payment_promise_id: promiseResult.promise.id,
+            payment_promise_contract_id: promiseResult.contract.id,
+            payment_promise_valid_until: promiseResult.validUntil,
+            payment_promise_source: "auto_submit",
+            payment_promise_error: null,
+          }
+        : {
+            payment_promise_created: false,
+            payment_promise_id: null,
+            payment_promise_contract_id: null,
+            payment_promise_valid_until: null,
+            payment_promise_source: "auto_submit",
+            payment_promise_error: promiseResult.error,
+            payment_promise_skip_reason: promiseResult.reason,
+          };
+    } catch (promiseError) {
+      console.warn("[AI_PAYMENT] promise_unexpected_error", {
+        error:
+          promiseError instanceof Error
+            ? promiseError.message
+            : String(promiseError),
+      });
+      promiseMetadata = {
+        payment_promise_created: false,
+        payment_promise_source: "auto_submit",
+        payment_promise_error:
+          promiseError instanceof Error
+            ? promiseError.message
+            : "Error inesperado al crear promesa",
+      };
+    }
+
     if (receiptMessage?.id) {
       const { error: updateError } = await ctx.supabase
         .from("messages")
@@ -612,6 +664,7 @@ const handleSubmitPaymentReceipt = async (
             payment_api_status: result.status,
             payment_comment: comment,
             pending_receipt: null,
+            ...promiseMetadata,
           },
         })
         .eq("id", receiptMessage.id);
@@ -646,6 +699,8 @@ const handleSubmitPaymentReceipt = async (
         cedula: payload.cedula,
         label_applied: label.applied,
         label_id: label.labelId,
+        // Internal only — do not tell the WhatsApp client about promises.
+        payment_promise_created: promiseCreated,
         hint: message,
       },
       stopAgent: true,

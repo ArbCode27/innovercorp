@@ -78,4 +78,46 @@ export const wisproService = {
 
     return payload.client;
   },
+
+  async createPaymentPromise(input: {
+    clientId?: number;
+    conversationId?: number;
+    hours?: number;
+  }): Promise<{
+    validUntil: string;
+    contractId: string;
+    promiseId: string;
+  }> {
+    const response = await fetch("/api/crm/wispro/payment-promise", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        clientId: input.clientId,
+        conversationId: input.conversationId,
+        hours: input.hours ?? 24,
+      }),
+    });
+
+    const payload = (await response.json()) as {
+      ok?: boolean;
+      error?: string;
+      validUntil?: string;
+      contractId?: string;
+      promise?: { id?: string };
+    };
+
+    if (!response.ok || !payload.ok) {
+      throw new Error(payload.error || "No se pudo crear la promesa de pago");
+    }
+
+    if (!payload.validUntil || !payload.contractId || !payload.promise?.id) {
+      throw new Error("Wispro no devolvió los datos de la promesa");
+    }
+
+    return {
+      validUntil: payload.validUntil,
+      contractId: payload.contractId,
+      promiseId: payload.promise.id,
+    };
+  },
 };

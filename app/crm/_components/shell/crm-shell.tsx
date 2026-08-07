@@ -102,6 +102,7 @@ export const CrmShell = () => {
                 onAssignAgent={crm.assignAgent}
                 onAssociateWispro={crm.associateWisproToConversation}
                 onUnlinkWispro={crm.unlinkWisproFromClient}
+                onCreatePaymentPromise={crm.createWisproPaymentPromise}
                 onOpenSettingsView={handleSelectView}
               />
             ) : null}
@@ -145,6 +146,7 @@ export const CrmShell = () => {
                 onAssignAgent={crm.assignAgent}
                 onAssociateWispro={crm.associateWisproToConversation}
                 onUnlinkWispro={crm.unlinkWisproFromClient}
+                onCreatePaymentPromise={crm.createWisproPaymentPromise}
                 onOpenSettingsView={handleSelectView}
               />
             ) : null}

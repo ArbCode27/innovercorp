@@ -938,6 +938,21 @@ export const useCrmData = (agent: Agent | null) => {
     toast.success("Cliente desvinculado de Wispro");
   };
 
+  const createWisproPaymentPromise = async () => {
+    if (!selectedClient?.id && !selectedConversation?.id) {
+      throw new Error("Selecciona una conversación con cliente vinculado");
+    }
+
+    const result = await wisproService.createPaymentPromise({
+      clientId: selectedClient?.id,
+      conversationId: selectedConversation?.id,
+      hours: 24,
+    });
+
+    toast.success(`Promesa de pago creada hasta ${result.validUntil}`);
+    return result;
+  };
+
   const createTicket = async (input: CreateTicketInput) => {
     const saved = await crmService.createTicket(input);
     setData((current) => ({
@@ -1109,6 +1124,7 @@ export const useCrmData = (agent: Agent | null) => {
     createClient,
     associateWisproToConversation,
     unlinkWisproFromClient,
+    createWisproPaymentPromise,
     createTicket,
     createLabel,
     deleteLabel,

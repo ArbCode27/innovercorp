@@ -69,69 +69,22 @@ const extractDataRecords = (payload: unknown): unknown[] => {
   return [];
 };
 
-const invoiceOutstandingAmount = (invoice: Record<string, unknown>) => {
-  const balance = parseAmount(invoice.balance);
-  if (balance > 0) return balance;
-
-  const amount = parseAmount(invoice.amount);
-  if (amount > 0) return amount;
-
-  return parseAmount(invoice.gross_amount);
+export type WisproCurrentAccount = {
+  id: string;
+  balance_amount: number;
+  credit_amount: number;
+  invoice_balance_amount: number;
+  created_at: string | null;
+  updated_at: string | null;
 };
 
-export const buildInvoicingSummaryFromInvoices = (
-  invoices: unknown[],
-): WisproInvoicingSummary => {
-  if (!invoices.length) {
-    return {
-      debt: 0,
-      hasDebt: false,
-      accountStatus: "Al día",
-      snapshot: null,
-    };
+const extractDataObject = (payload: unknown): Record<string, unknown> | null => {
+  if (!payload || typeof payload !== "object") return null;
+  const root = payload as { data?: unknown };
+  if (!root.data || typeof root.data !== "object" || Array.isArray(root.data)) {
+    return null;
   }
-
-  let totalDebt = 0;
-  let snapshotGross = 0;
-  let snapshotAmount = 0;
-
-  invoices.forEach((invoice, index) => {
-    if (!invoice || typeof invoice !== "object") return;
-
-    const record = invoice as Record<string, unknown>;
-    totalDebt += invoiceOutstandingAmount(record);
-
-    if (index !== 0) return;
-
-    const items = Array.isArray(record.items) ? record.items : [];
-    const firstItem =
-      items[0] && typeof items[0] === "object"
-        ? (items[0] as Record<string, unknown>)
-        : null;
-
-    if (firstItem) {
-      snapshotGross = parseAmount(firstItem.gross_amount);
-      snapshotAmount = parseAmount(firstItem.amount);
-      return;
-    }
-
-    snapshotGross = parseAmount(record.gross_amount);
-    snapshotAmount = parseAmount(record.amount);
-  });
-
-  const debt = roundMoney(totalDebt);
-
-  return {
-    debt,
-    hasDebt: debt > 0,
-    accountStatus: debt > 0 ? "Con deuda" : "Al día",
-    snapshot: {
-      invoiceIndex: 0,
-      itemIndex: 0,
-      gross_amount: snapshotGross,
-      amount: snapshotAmount,
-    },
-  };
+  return root.data as Record<string, unknown>;
 };
 
 const wisproGet = async (
@@ -208,38 +161,438 @@ const wisproGet = async (
   return payload;
 };
 
+/**
+ * Official Wispro source for pending client balance.
+ * GET /clients/{uuid}/current_account
+ * @see https://doc.cloud.wispro.co/reference/clientsidcurrent_account
+ */
+export const getClientCurrentAccount = async (
+  wisproClientId: string,
+): Promise<WisproCurrentAccount> => {
+  const clientId = wisproClientId.trim();
+  if (!clientId) {
+    throw new WisproApiError(
+      "wispro_id es requerido para consultar cuenta corriente",
+      { status: 400, code: "invalid_response" },
+    );
+  }
+
+  const payload = await wisproGet(
+    `/clients/${encodeURIComponent(clientId)}/current_account`,
+    {},
+  );
+
+  const row = extractDataObject(payload);
+  if (!row) {
+    throw new WisproApiError(
+      "Wispro no devolvió la cuenta corriente del cliente",
+      { status: 502, code: "invalid_response" },
+    );
+  }
+
+  return {
+    id: String(row.id || clientId),
+    balance_amount: parseAmount(row.balance_amount),
+    credit_amount: parseAmount(row.credit_amount),
+    invoice_balance_amount: parseAmount(row.invoice_balance_amount),
+    created_at: row.created_at ? String(row.created_at) : null,
+    updated_at: row.updated_at ? String(row.updated_at) : null,
+  };
+};
+
+/** Map current_account.invoice_balance_amount → CRM invoicing summary. */
+export const buildInvoicingSummaryFromCurrentAccount = (
+  account: WisproCurrentAccount | null,
+): WisproInvoicingSummary => {
+  // invoice_balance_amount = total debt (Wispro docs). Never treat credit as debt.
+  const debt = roundMoney(Math.max(0, account?.invoice_balance_amount ?? 0));
+
+  return {
+    debt,
+    hasDebt: debt > 0,
+    accountStatus: debt > 0 ? "Con deuda" : "Al día",
+    snapshot: account
+      ? {
+          invoiceIndex: 0,
+          itemIndex: 0,
+          gross_amount: debt,
+          amount: debt,
+        }
+      : null,
+  };
+};
+
+const wisproPost = async (
+  path: string,
+  body: Record<string, unknown>,
+): Promise<unknown> => {
+  const { token, baseUrl } = getWisproConfig();
+  const url = `${baseUrl}${path.startsWith("/") ? path : `/${path}`}`;
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        Authorization: token,
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      cache: "no-store",
+    });
+  } catch (error) {
+    console.error(`${LOG_PREFIX} post_failed`, {
+      path,
+      error: error instanceof Error ? error.message : error,
+    });
+    throw new WisproApiError("No se pudo conectar con Wispro", {
+      status: 502,
+      code: "upstream",
+      cause: error,
+    });
+  }
+
+  const rawBody = await response.text();
+  let payload: unknown = null;
+
+  if (rawBody) {
+    try {
+      payload = JSON.parse(rawBody);
+    } catch {
+      console.error(`${LOG_PREFIX} post_invalid_json`, {
+        path,
+        status: response.status,
+      });
+      throw new WisproApiError("La respuesta de Wispro no es válida", {
+        status: 502,
+        code: "invalid_response",
+      });
+    }
+  }
+
+  if (response.status === 401 || response.status === 403) {
+    console.error(`${LOG_PREFIX} post_unauthorized`, {
+      path,
+      status: response.status,
+    });
+    throw new WisproApiError("Wispro rechazó las credenciales de API", {
+      status: 502,
+      code: "unauthorized",
+    });
+  }
+
+  if (!response.ok) {
+    const message =
+      payload &&
+      typeof payload === "object" &&
+      "message" in payload &&
+      typeof (payload as { message?: unknown }).message === "string"
+        ? String((payload as { message: string }).message)
+        : "No se pudo completar la operación en Wispro";
+
+    console.error(`${LOG_PREFIX} post_upstream_error`, {
+      path,
+      status: response.status,
+      message,
+    });
+    throw new WisproApiError(message, {
+      status: response.status >= 400 && response.status < 600 ? response.status : 502,
+      code: "upstream",
+    });
+  }
+
+  return payload;
+};
+
+export type WisproContract = {
+  id: string;
+  public_id: number | null;
+  client_id: string | null;
+  state: string | null;
+  plan_id: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export type WisproPaymentPromise = {
+  id: string;
+  valid_until: string;
+  contract_id: string;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export type CreatePaymentPromiseResult =
+  | {
+      ok: true;
+      created: true;
+      promise: WisproPaymentPromise;
+      contract: WisproContract;
+      validUntil: string;
+    }
+  | {
+      ok: false;
+      created: false;
+      reason: "no_contract" | "upstream" | "config" | "invalid";
+      error: string;
+    };
+
+const normalizeContract = (record: unknown): WisproContract | null => {
+  if (!record || typeof record !== "object") return null;
+  const row = record as Record<string, unknown>;
+  const id = String(row.id || "").trim();
+  if (!id) return null;
+
+  return {
+    id,
+    public_id:
+      typeof row.public_id === "number"
+        ? row.public_id
+        : Number.isFinite(Number(row.public_id))
+          ? Number(row.public_id)
+          : null,
+    client_id: row.client_id ? String(row.client_id) : null,
+    state: row.state ? String(row.state) : null,
+    plan_id: row.plan_id ? String(row.plan_id) : null,
+    created_at: row.created_at ? String(row.created_at) : null,
+    updated_at: row.updated_at ? String(row.updated_at) : null,
+  };
+};
+
+const CONTRACT_STATE_PRIORITY: Record<string, number> = {
+  enabled: 0,
+  alerted: 1,
+  degraded: 2,
+  disabled: 3,
+};
+
+export const resolvePreferredContract = (
+  contracts: WisproContract[],
+): WisproContract | null => {
+  if (!contracts.length) return null;
+
+  return [...contracts].sort((left, right) => {
+    const leftPriority =
+      CONTRACT_STATE_PRIORITY[String(left.state || "").toLowerCase()] ?? 99;
+    const rightPriority =
+      CONTRACT_STATE_PRIORITY[String(right.state || "").toLowerCase()] ?? 99;
+    if (leftPriority !== rightPriority) return leftPriority - rightPriority;
+
+    const leftTime = Date.parse(left.updated_at || left.created_at || "") || 0;
+    const rightTime = Date.parse(right.updated_at || right.created_at || "") || 0;
+    return rightTime - leftTime;
+  })[0];
+};
+
+export const listContractsByClientId = async (
+  wisproClientId: string,
+): Promise<WisproContract[]> => {
+  const payload = await wisproGet("/contracts", {
+    client_id_eq: wisproClientId.trim(),
+  });
+  return extractDataRecords(payload)
+    .map(normalizeContract)
+    .filter((contract): contract is WisproContract => contract !== null);
+};
+
+export const listContractsByCedula = async (
+  cedula: string,
+): Promise<WisproContract[]> => {
+  const payload = await wisproGet("/contracts", {
+    client_national_identification_number_eq: cedula.trim(),
+  });
+  return extractDataRecords(payload)
+    .map(normalizeContract)
+    .filter((contract): contract is WisproContract => contract !== null);
+};
+
+/** valid_until as YYYY-MM-DD, +hours from now in America/Caracas calendar day. */
+export const buildPaymentPromiseValidUntil = (hours = 24): string => {
+  const now = new Date();
+  const target = new Date(now.getTime() + hours * 60 * 60 * 1000);
+  // Format in America/Caracas to match ISP local day boundaries.
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Caracas",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(target);
+
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+  if (!year || !month || !day) {
+    return target.toISOString().slice(0, 10);
+  }
+  return `${year}-${month}-${day}`;
+};
+
+export const createPaymentPromise = async (
+  contractId: string,
+  validUntil: string,
+): Promise<WisproPaymentPromise> => {
+  const payload = await wisproPost(
+    `/contracts/${encodeURIComponent(contractId)}/payment_promises`,
+    { valid_until: validUntil },
+  );
+
+  const records = extractDataRecords(payload);
+  const row =
+    records[0] && typeof records[0] === "object"
+      ? (records[0] as Record<string, unknown>)
+      : null;
+
+  const id = String(row?.id || "").trim();
+  if (!id) {
+    throw new WisproApiError("Wispro no devolvió la promesa de pago", {
+      status: 502,
+      code: "invalid_response",
+    });
+  }
+
+  return {
+    id,
+    valid_until: String(row?.valid_until || validUntil),
+    contract_id: String(row?.contract_id || contractId),
+    created_at: row?.created_at ? String(row.created_at) : null,
+    updated_at: row?.updated_at ? String(row.updated_at) : null,
+  };
+};
+
+/**
+ * Resolve contract + create a payment promise. Never throws for business skips;
+ * throws only unexpected programmer issues — callers should catch WisproApiError.
+ */
+export const createPaymentPromiseForClient = async (input: {
+  wisproClientId?: string | null;
+  cedula?: string | null;
+  hours?: number;
+}): Promise<CreatePaymentPromiseResult> => {
+  const hours = input.hours && input.hours > 0 ? input.hours : 24;
+  const wisproClientId = input.wisproClientId?.trim() || "";
+  const cedula = input.cedula?.trim() || "";
+
+  if (!wisproClientId && !cedula) {
+    return {
+      ok: false,
+      created: false,
+      reason: "invalid",
+      error: "Se requiere wispro_id o cédula",
+    };
+  }
+
+  try {
+    let contracts: WisproContract[] = [];
+    if (wisproClientId) {
+      contracts = await listContractsByClientId(wisproClientId);
+    }
+    if (!contracts.length && cedula) {
+      contracts = await listContractsByCedula(cedula);
+    }
+
+    const contract = resolvePreferredContract(contracts);
+    if (!contract) {
+      console.warn(`${LOG_PREFIX} promise_skipped_no_contract`, {
+        wisproClientId: wisproClientId || null,
+        cedula: cedula || null,
+      });
+      return {
+        ok: false,
+        created: false,
+        reason: "no_contract",
+        error: "No se encontró un contrato Wispro para este cliente",
+      };
+    }
+
+    const validUntil = buildPaymentPromiseValidUntil(hours);
+    const promise = await createPaymentPromise(contract.id, validUntil);
+
+    console.log(`${LOG_PREFIX} promise_created`, {
+      promiseId: promise.id,
+      contractId: contract.id,
+      validUntil,
+      sourceClientId: wisproClientId || null,
+    });
+
+    return {
+      ok: true,
+      created: true,
+      promise,
+      contract,
+      validUntil,
+    };
+  } catch (error) {
+    const message =
+      error instanceof WisproApiError
+        ? error.message
+        : error instanceof Error
+          ? error.message
+          : "No se pudo crear la promesa de pago";
+
+    console.error(`${LOG_PREFIX} promise_failed`, {
+      wisproClientId: wisproClientId || null,
+      cedula: cedula || null,
+      error: message,
+    });
+
+    return {
+      ok: false,
+      created: false,
+      reason:
+        error instanceof WisproApiError && error.code === "config"
+          ? "config"
+          : "upstream",
+      error: message,
+    };
+  }
+};
+
 export const searchWisproByCedula = async (
   cedula: string,
 ): Promise<WisproSearchResult[]> => {
   const normalizedCedula = cedula.trim();
 
-  const [clientsPayload, invoicesPayload] = await Promise.all([
-    wisproGet("/clients", {
-      national_identification_number_eq: normalizedCedula,
-    }),
-    wisproGet("/invoicing/invoices", {
-      client_national_identification_number_eq: normalizedCedula,
-      state_eq: "pending",
-    }),
-  ]);
+  const clientsPayload = await wisproGet("/clients", {
+    national_identification_number_eq: normalizedCedula,
+  });
 
   const customers = extractDataRecords(clientsPayload)
     .map((record) => normalizeWisproCustomer(record, normalizedCedula))
     .filter((customer): customer is WisproCustomer => customer !== null);
 
-  const invoicing = buildInvoicingSummaryFromInvoices(
-    extractDataRecords(invoicesPayload),
+  if (!customers.length) {
+    console.log(`${LOG_PREFIX} search_ok`, {
+      cedula: normalizedCedula,
+      clients: 0,
+    });
+    return [];
+  }
+
+  // Debt per client UUID via current_account (not summed pending invoices).
+  const results = await Promise.all(
+    customers.map(async (customer) => {
+      const account = await getClientCurrentAccount(customer.id);
+      const invoicing = buildInvoicingSummaryFromCurrentAccount(account);
+
+      console.log(`${LOG_PREFIX} current_account_ok`, {
+        wisproId: customer.id,
+        invoiceBalance: account.invoice_balance_amount,
+        balance: account.balance_amount,
+        credit: account.credit_amount,
+        debt: invoicing.debt,
+      });
+
+      return { customer, invoicing };
+    }),
   );
 
   console.log(`${LOG_PREFIX} search_ok`, {
     cedula: normalizedCedula,
-    clients: customers.length,
-    hasDebt: invoicing.hasDebt,
-    debt: invoicing.debt,
+    clients: results.length,
+    withDebt: results.filter((result) => result.invoicing.hasDebt).length,
   });
 
-  return customers.map((customer) => ({
-    customer,
-    invoicing,
-  }));
+  return results;
 };

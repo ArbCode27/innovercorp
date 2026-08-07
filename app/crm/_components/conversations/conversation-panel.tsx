@@ -73,6 +73,7 @@ interface ConversationPanelProps {
   onAssignAgent: (conversationId: number, agentId: number) => Promise<void>;
   onAssociateWispro: (result: WisproSearchResult) => Promise<void>;
   onUnlinkWispro: () => Promise<void>;
+  onCreatePaymentPromise: () => Promise<void>;
 }
 
 export const ConversationPanel = ({
@@ -104,6 +105,7 @@ export const ConversationPanel = ({
   onAssignAgent,
   onAssociateWispro,
   onUnlinkWispro,
+  onCreatePaymentPromise,
 }: ConversationPanelProps) => {
   const [isLabelDialogOpen, setIsLabelDialogOpen] = useState(false);
   const [isNoteDialogOpen, setIsNoteDialogOpen] = useState(false);
@@ -111,6 +113,8 @@ export const ConversationPanel = ({
   const [isWisproDialogOpen, setIsWisproDialogOpen] = useState(false);
   const [isUnlinkDialogOpen, setIsUnlinkDialogOpen] = useState(false);
   const [isUnlinkingWispro, setIsUnlinkingWispro] = useState(false);
+  const [isPromiseDialogOpen, setIsPromiseDialogOpen] = useState(false);
+  const [isCreatingPaymentPromise, setIsCreatingPaymentPromise] = useState(false);
   const [isResolveDialogOpen, setIsResolveDialogOpen] = useState(false);
   const [isDetailsSheetOpen, setIsDetailsSheetOpen] = useState(false);
   const [note, setNote] = useState("");
@@ -169,6 +173,22 @@ export const ConversationPanel = ({
       );
     } finally {
       setIsUnlinkingWispro(false);
+    }
+  };
+
+  const handleConfirmPaymentPromise = async () => {
+    setIsCreatingPaymentPromise(true);
+    try {
+      await onCreatePaymentPromise();
+      setIsPromiseDialogOpen(false);
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "No se pudo crear la promesa de pago",
+      );
+    } finally {
+      setIsCreatingPaymentPromise(false);
     }
   };
 
@@ -265,6 +285,10 @@ export const ConversationPanel = ({
               isWisproLinked ? () => setIsUnlinkDialogOpen(true) : undefined
             }
             isUnlinkingWispro={isUnlinkingWispro}
+            onCreatePaymentPromise={
+              isWisproLinked ? () => setIsPromiseDialogOpen(true) : undefined
+            }
+            isCreatingPaymentPromise={isCreatingPaymentPromise}
           />
         </SheetContent>
       </Sheet>
@@ -281,6 +305,10 @@ export const ConversationPanel = ({
           isWisproLinked ? () => setIsUnlinkDialogOpen(true) : undefined
         }
         isUnlinkingWispro={isUnlinkingWispro}
+        onCreatePaymentPromise={
+          isWisproLinked ? () => setIsPromiseDialogOpen(true) : undefined
+        }
+        isCreatingPaymentPromise={isCreatingPaymentPromise}
       />
 
       <WisproSearchDialog
@@ -330,6 +358,41 @@ export const ConversationPanel = ({
               }}
               className="bg-rose-600 text-white hover:bg-rose-700 dark:bg-rose-600 dark:hover:bg-rose-500">
               {isUnlinkingWispro ? "Desvinculando..." : "Desvincular"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={isPromiseDialogOpen}
+        onOpenChange={(open) => {
+          if (!isCreatingPaymentPromise) setIsPromiseDialogOpen(open);
+        }}>
+        <AlertDialogContent className={CRM_DIALOG}>
+          <AlertDialogHeader>
+            <AlertDialogTitle className={CRM_SURFACES.textPrimary}>
+              ¿Crear promesa de pago (24h)?
+            </AlertDialogTitle>
+            <AlertDialogDescription className={CRM_SURFACES.textMuted}>
+              Se creará una promesa de pago en Wispro para{" "}
+              <span className={`font-medium ${CRM_SURFACES.textPrimary}`}>
+                {clientDisplayName}
+              </span>
+              , válida por 24 horas. El cliente no recibirá ningún mensaje de
+              WhatsApp sobre esta acción.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isCreatingPaymentPromise}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isCreatingPaymentPromise}
+              onClick={(event) => {
+                event.preventDefault();
+                void handleConfirmPaymentPromise();
+              }}>
+              {isCreatingPaymentPromise ? "Creando..." : "Crear promesa"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -63,6 +63,7 @@ interface MyConversationsViewProps {
   onAssignAgent: (conversationId: number, agentId: number) => Promise<void>;
   onAssociateWispro: (result: WisproSearchResult) => Promise<void>;
   onUnlinkWispro: () => Promise<void>;
+  onCreatePaymentPromise: () => Promise<void>;
   onOpenSettingsView: (view: CrmView) => void;
 }
 
@@ -105,6 +106,7 @@ export const MyConversationsView = ({
   onAssignAgent,
   onAssociateWispro,
   onUnlinkWispro,
+  onCreatePaymentPromise,
   onOpenSettingsView,
 }: MyConversationsViewProps) => {
   const selectedTickets =
@@ -202,6 +204,7 @@ export const MyConversationsView = ({
           onAssignAgent={onAssignAgent}
           onAssociateWispro={onAssociateWispro}
           onUnlinkWispro={onUnlinkWispro}
+          onCreatePaymentPromise={onCreatePaymentPromise}
         />
       </div>
     </div>

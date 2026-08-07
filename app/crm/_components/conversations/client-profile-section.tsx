@@ -18,6 +18,8 @@ interface ClientProfileSectionProps {
   onOpenWispro?: () => void;
   onUnlinkWispro?: () => void;
   isUnlinkingWispro?: boolean;
+  onCreatePaymentPromise?: () => void;
+  isCreatingPaymentPromise?: boolean;
 }
 
 const fieldClass = "space-y-1";
@@ -43,6 +45,8 @@ export const ClientProfileSection = ({
   onOpenWispro,
   onUnlinkWispro,
   isUnlinkingWispro = false,
+  onCreatePaymentPromise,
+  isCreatingPaymentPromise = false,
 }: ClientProfileSectionProps) => {
   const locationLabel = wisproSnapshot
     ? [wisproSnapshot.city, wisproSnapshot.state].filter(Boolean).join(", ")
@@ -171,6 +175,26 @@ export const ClientProfileSection = ({
           {formatClientPlan(client.plan)}
         </p>
       </ProfileField>
+
+      {client.wispro_id && onCreatePaymentPromise ? (
+        <div className="space-y-1.5 pt-1">
+          <CrmButton
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="w-full"
+            disabled={isCreatingPaymentPromise}
+            onClick={onCreatePaymentPromise}
+            aria-label="Crear promesa de pago por 24 horas en Wispro">
+            {isCreatingPaymentPromise
+              ? "Creando promesa..."
+              : "Crear promesa 24h"}
+          </CrmButton>
+          <p className={`text-[11px] leading-snug ${CRM_SURFACES.textMuted}`}>
+            Acción interna. No se notifica al cliente por WhatsApp.
+          </p>
+        </div>
+      ) : null}
     </div>
   );
 };

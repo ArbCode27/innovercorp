@@ -29,6 +29,8 @@ interface ConversationDetailsProps {
   onOpenWispro?: () => void;
   onUnlinkWispro?: () => void;
   isUnlinkingWispro?: boolean;
+  onCreatePaymentPromise?: () => void;
+  isCreatingPaymentPromise?: boolean;
 }
 
 export const ConversationDetails = ({
@@ -43,6 +45,8 @@ export const ConversationDetails = ({
   onOpenWispro,
   onUnlinkWispro,
   isUnlinkingWispro = false,
+  onCreatePaymentPromise,
+  isCreatingPaymentPromise = false,
 }: ConversationDetailsProps) => {
   const activeTicket =
     tickets.find((ticket) => ticket.status !== "Resuelto") ||
@@ -69,6 +73,8 @@ export const ConversationDetails = ({
             onOpenWispro={onOpenWispro}
             onUnlinkWispro={onUnlinkWispro}
             isUnlinkingWispro={isUnlinkingWispro}
+            onCreatePaymentPromise={onCreatePaymentPromise}
+            isCreatingPaymentPromise={isCreatingPaymentPromise}
           />
         ) : (
           <div className="space-y-3">
