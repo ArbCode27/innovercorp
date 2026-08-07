@@ -429,15 +429,29 @@ export const buildAccountStatusFromService = (input: {
 };
 
 /**
- * Map current_account.invoice_balance_amount → CRM invoicing summary.
+ * Client-facing debt from current_account.balance_amount (Innover business rule).
+ * Wispro typically stores a negative balance when the subscriber owes money;
+ * a positive balance is credit (no debt to collect).
+ */
+export const resolveDebtFromCurrentAccount = (
+  account: WisproCurrentAccount | null,
+): number => {
+  const balanceAmount = account?.balance_amount ?? 0;
+  if (balanceAmount < 0) {
+    return roundMoney(Math.abs(balanceAmount));
+  }
+  return 0;
+};
+
+/**
+ * Map current_account.balance_amount → CRM invoicing summary.
  * Optional contracts enrich suspension detection (Wispro contract.state).
  */
 export const buildInvoicingSummaryFromCurrentAccount = (
   account: WisproCurrentAccount | null,
   options?: { contracts?: WisproContract[] | null },
 ): WisproInvoicingSummary => {
-  // invoice_balance_amount = total debt (Wispro docs). Never treat credit as debt.
-  const debt = roundMoney(Math.max(0, account?.invoice_balance_amount ?? 0));
+  const debt = resolveDebtFromCurrentAccount(account);
   const hasDebt = debt > 0;
   const contracts = options?.contracts ?? [];
   const serviceSuspended = resolveServiceSuspended(contracts);
@@ -703,10 +717,11 @@ export const searchWisproByCedula = async (
 
       console.log(`${LOG_PREFIX} current_account_ok`, {
         wisproId: customer.id,
+        balanceAmount: account.balance_amount,
         invoiceBalance: account.invoice_balance_amount,
-        balance: account.balance_amount,
         credit: account.credit_amount,
         debt: invoicing.debt,
+        debtSource: "balance_amount",
         serviceSuspended: invoicing.serviceSuspended,
         contractState: invoicing.contractState,
         contractsCount: contracts.length,
