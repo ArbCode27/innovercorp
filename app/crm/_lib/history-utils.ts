@@ -1,4 +1,4 @@
-import { formatCrmDayLabel, getCrmDateKey } from "./formatters";
+import { formatCrmDayLabel, getCrmDateKey, groupMessagesByDay } from "./formatters";
 import type { ConversationHistory, HistoryMessage, Message } from "./types";
 
 export interface HistoryDateGroup {
@@ -7,11 +7,8 @@ export interface HistoryDateGroup {
   entries: ConversationHistory[];
 }
 
-export interface MessageDayGroup {
-  dateKey: string;
-  label: string;
-  messages: HistoryMessage[];
-}
+export type { MessageDayGroupOf as MessageDayGroup } from "./formatters";
+export { groupMessagesByDay };
 
 export const getHistoryMessageCount = (entry: ConversationHistory) =>
   entry.history_messages?.length ?? entry.total_messages ?? 0;
@@ -58,35 +55,6 @@ export const groupHistoryByResolvedDate = (
       dateKey,
       label: formatCrmDayLabel(entry.resolved_at),
       entries: [entry],
-    });
-  }
-
-  return Array.from(groups.values());
-};
-
-export const groupMessagesByDay = (
-  messages: HistoryMessage[],
-): MessageDayGroup[] => {
-  const sorted = [...messages].sort(
-    (a, b) =>
-      new Date(a.created_at || 0).getTime() -
-      new Date(b.created_at || 0).getTime(),
-  );
-  const groups = new Map<string, MessageDayGroup>();
-
-  for (const message of sorted) {
-    const dateKey = getCrmDateKey(message.created_at);
-    const existing = groups.get(dateKey);
-
-    if (existing) {
-      existing.messages.push(message);
-      continue;
-    }
-
-    groups.set(dateKey, {
-      dateKey,
-      label: formatCrmDayLabel(message.created_at),
-      messages: [message],
     });
   }
 

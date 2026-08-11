@@ -58,15 +58,16 @@ export const formatCrmDate = (value: string | null) => {
   }).format(new Date(value));
 };
 
-export const getCrmDateKey = (value: string | null) => {
-  if (!value) return "unknown";
-
-  const date = new Date(value);
+export const getCrmDateKeyFromDate = (date: Date) => {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
-
   return `${year}-${month}-${day}`;
+};
+
+export const getCrmDateKey = (value: string | null) => {
+  if (!value) return "unknown";
+  return getCrmDateKeyFromDate(new Date(value));
 };
 
 export const formatCrmDayLabel = (value: string | null) => {
@@ -79,15 +80,56 @@ export const formatCrmDayLabel = (value: string | null) => {
 
   const dateKey = getCrmDateKey(value);
 
-  if (dateKey === getCrmDateKey(today.toISOString())) return "Hoy";
-  if (dateKey === getCrmDateKey(yesterday.toISOString())) return "Ayer";
+  if (dateKey === getCrmDateKeyFromDate(today)) return "Hoy";
+  if (dateKey === getCrmDateKeyFromDate(yesterday)) return "Ayer";
 
-  return new Intl.DateTimeFormat("es-VE", {
+  const label = new Intl.DateTimeFormat("es-VE", {
     weekday: "long",
     day: "numeric",
     month: "long",
-    ...(date.getFullYear() !== today.getFullYear() ? { year: "numeric" as const } : {}),
+    ...(date.getFullYear() !== today.getFullYear()
+      ? { year: "numeric" as const }
+      : {}),
   }).format(date);
+
+  // WhatsApp-style: capitalize first letter (es-VE often returns lowercase weekday).
+  return label ? label.charAt(0).toUpperCase() + label.slice(1) : label;
+};
+
+export type MessageDayGroupOf<T extends { created_at: string | null }> = {
+  dateKey: string;
+  label: string;
+  messages: T[];
+};
+
+/** Group messages by local calendar day for WhatsApp-style date dividers. */
+export const groupMessagesByDay = <T extends { created_at: string | null }>(
+  messages: T[],
+): MessageDayGroupOf<T>[] => {
+  const sorted = [...messages].sort(
+    (a, b) =>
+      new Date(a.created_at || 0).getTime() -
+      new Date(b.created_at || 0).getTime(),
+  );
+  const groups = new Map<string, MessageDayGroupOf<T>>();
+
+  for (const message of sorted) {
+    const dateKey = getCrmDateKey(message.created_at);
+    const existing = groups.get(dateKey);
+
+    if (existing) {
+      existing.messages.push(message);
+      continue;
+    }
+
+    groups.set(dateKey, {
+      dateKey,
+      label: formatCrmDayLabel(message.created_at),
+      messages: [message],
+    });
+  }
+
+  return Array.from(groups.values());
 };
 
 export const formatCrmResolvedLabel = (value: string | null) => {

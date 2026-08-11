@@ -12,6 +12,7 @@ import {
 } from "../../_lib/history-utils";
 import type { Agent, ConversationHistory, Label } from "../../_lib/types";
 import { EmptyState } from "../shared/empty-state";
+import { DateDivider } from "../shared/date-divider";
 import { MessageBubble } from "../conversations/message-bubble";
 import { LabelChip } from "../shared/label-chip";
 
@@ -20,17 +21,6 @@ interface HistoryMessagesProps {
   resolvedByAgent: Agent | null;
   labels: Label[];
 }
-
-const DateDivider = ({ label }: { label: string }) => (
-  <div
-    role="separator"
-    aria-label={label}
-    className={`flex items-center gap-3 py-1 text-[11px] font-medium ${CRM_SURFACES.textLabel}`}>
-    <span className="h-px flex-1 bg-slate-200 dark:bg-white/10" />
-    <time>{label}</time>
-    <span className="h-px flex-1 bg-slate-200 dark:bg-white/10" />
-  </div>
-);
 
 const ResolvedSessionBanner = ({
   entry,
