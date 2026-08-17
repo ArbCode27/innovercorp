@@ -58,6 +58,8 @@ const emptyData: CrmData = {
     bot_engine: DEFAULT_BOT_ENGINE,
     gemini_model: "gemini-2.0-flash",
     ai_system_prompt: null,
+    office_hours: undefined,
+    after_hours_payments: undefined,
     updated_at: null,
     updated_by: null,
   },
@@ -795,6 +797,33 @@ export const useCrmData = (agent: Agent | null) => {
     }
   };
 
+  const updateOfficeHoursSettings = async (input: {
+    office_hours: import("../_lib/office-hours").OfficeHoursConfig;
+    after_hours_payments: import("../_lib/office-hours").AfterHoursPaymentsConfig;
+  }) => {
+    if (!agent) return;
+    if (!isAdminRole(agent.role)) {
+      toast.error("Solo un administrador puede cambiar los horarios");
+      return;
+    }
+
+    try {
+      const settings = await crmService.updateCrmSettings(agent.id, {
+        office_hours: input.office_hours,
+        after_hours_payments: input.after_hours_payments,
+      });
+      setData((current) => ({ ...current, settings }));
+      toast.success("Horario de oficina actualizado");
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "No se pudo guardar el horario de oficina",
+      );
+      throw error;
+    }
+  };
+
   const resolveConversation = async () => {
     if (!selectedConversation || !agent) return;
 
@@ -1180,6 +1209,7 @@ export const useCrmData = (agent: Agent | null) => {
     takeControl,
     reactivateBot,
     updateAiSystemPrompt,
+    updateOfficeHoursSettings,
     resolveConversation,
     updateLabels,
     quickToggleLabel,

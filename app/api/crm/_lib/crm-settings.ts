@@ -128,10 +128,19 @@ export const updateCrmSettings = async (
     bot_engine?: BotEngine;
     gemini_model?: string;
     ai_system_prompt?: string | null;
+    office_hours?: OfficeHoursConfig;
+    after_hours_payments?: AfterHoursPaymentsConfig;
     updated_by?: number | null;
   },
 ): Promise<CrmSettings> => {
   const current = await getCrmSettings(supabase);
+  const nextOfficeHours = payload.office_hours
+    ? parseOfficeHoursConfig(payload.office_hours)
+    : current.office_hours;
+  const nextAfterHours = payload.after_hours_payments
+    ? parseAfterHoursPaymentsConfig(payload.after_hours_payments)
+    : current.after_hours_payments;
+
   const next = {
     id: 1,
     bot_engine: payload.bot_engine ?? current.bot_engine,
@@ -140,6 +149,8 @@ export const updateCrmSettings = async (
       payload.ai_system_prompt === undefined
         ? current.ai_system_prompt
         : payload.ai_system_prompt,
+    office_hours: nextOfficeHours,
+    after_hours_payments: nextAfterHours,
     updated_at: new Date().toISOString(),
     updated_by:
       payload.updated_by === undefined
@@ -153,7 +164,17 @@ export const updateCrmSettings = async (
     .select("*")
     .single();
 
-  if (error) throw error;
+  if (error) {
+    // Soft message if migration not applied yet.
+    if (
+      /office_hours|after_hours_payments|column/i.test(error.message || "")
+    ) {
+      throw new Error(
+        "Falta la migración de horarios en Supabase (office_hours / after_hours_payments). Ejecuta supabase/migrations/20260817140000_crm_settings_office_hours.sql",
+      );
+    }
+    throw error;
+  }
 
   return mapSettingsRow(data as Record<string, unknown>);
 };

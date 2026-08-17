@@ -205,6 +205,7 @@ export const CrmShell = () => {
                 currentAgent={auth.agent}
                 settings={crm.settings}
                 onUpdateAiSystemPrompt={crm.updateAiSystemPrompt}
+                onUpdateOfficeHours={crm.updateOfficeHoursSettings}
               />
             ) : null}
           </>

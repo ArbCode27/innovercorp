@@ -9,20 +9,30 @@ import {
   promptLooksCompatibleWithGeminiParser,
 } from "../../_lib/ai-default-prompt";
 import type { Agent, CrmSettings } from "../../_lib/types";
+import type {
+  AfterHoursPaymentsConfig,
+  OfficeHoursConfig,
+} from "../../_lib/office-hours";
 import { isAdminRole } from "../../_lib/agent-role-utils";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
 import { CrmButton } from "../shared/crm-button";
+import { OfficeHoursSettingsSection } from "./office-hours-settings-section";
 
 interface SettingsViewProps {
   currentAgent: Agent;
   settings: CrmSettings;
   onUpdateAiSystemPrompt: (prompt: string | null) => Promise<void>;
+  onUpdateOfficeHours: (input: {
+    office_hours: OfficeHoursConfig;
+    after_hours_payments: AfterHoursPaymentsConfig;
+  }) => Promise<void>;
 }
 
 export const SettingsView = ({
   currentAgent,
   settings,
   onUpdateAiSystemPrompt,
+  onUpdateOfficeHours,
 }: SettingsViewProps) => {
   const isAdmin = isAdminRole(currentAgent.role);
   const savedPrompt = settings.ai_system_prompt?.trim() || "";
@@ -90,7 +100,8 @@ export const SettingsView = ({
           Ajustes del CRM
         </h2>
         <p className={`mt-1 text-sm ${CRM_SURFACES.textMuted}`}>
-          Configura el prompt del asistente Gemini cuando el bot está activo
+          Configura el asistente Gemini y el horario en que Nova atiende pagos
+          fuera de oficina
         </p>
       </div>
 
@@ -120,6 +131,13 @@ export const SettingsView = ({
             </div>
           </div>
         </section>
+
+        <OfficeHoursSettingsSection
+          isAdmin={isAdmin}
+          officeHours={settings.office_hours}
+          afterHoursPayments={settings.after_hours_payments}
+          onSave={onUpdateOfficeHours}
+        />
 
         <section
           className={`rounded-xl border p-4 md:p-5 ${CRM_SURFACES.border} ${CRM_SURFACES.elevated}`}>

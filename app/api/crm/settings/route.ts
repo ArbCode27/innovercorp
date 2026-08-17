@@ -3,6 +3,38 @@ import { z } from "zod";
 import { createClient } from "@supabase/supabase-js";
 import { AI_SYSTEM_PROMPT_MAX_LENGTH } from "@/app/crm/_lib/ai-default-prompt";
 import { getCrmSettings, updateCrmSettings } from "../_lib/crm-settings";
+import {
+  DEFAULT_AFTER_HOURS_PAYMENT_TOOLS,
+  parseAfterHoursPaymentsConfig,
+  parseOfficeHoursConfig,
+} from "../_lib/office-hours";
+
+const timeWindowSchema = z.tuple([
+  z.string().regex(/^\d{1,2}:\d{2}$/, "Hora inválida"),
+  z.string().regex(/^\d{1,2}:\d{2}$/, "Hora inválida"),
+]);
+
+const weekdayWindowsSchema = z.array(timeWindowSchema);
+
+const officeHoursSchema = z.object({
+  enabled: z.boolean(),
+  timezone: z.string().trim().min(1).max(80),
+  days: z.object({
+    mon: weekdayWindowsSchema,
+    tue: weekdayWindowsSchema,
+    wed: weekdayWindowsSchema,
+    thu: weekdayWindowsSchema,
+    fri: weekdayWindowsSchema,
+    sat: weekdayWindowsSchema,
+    sun: weekdayWindowsSchema,
+  }),
+  holidays: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).optional(),
+});
+
+const afterHoursPaymentsSchema = z.object({
+  enabled: z.boolean(),
+  allowedTools: z.array(z.string().trim().min(1)).min(1).optional(),
+});
 
 const updateSchema = z
   .object({
@@ -16,11 +48,15 @@ const updateSchema = z
       )
       .nullable()
       .optional(),
+    office_hours: officeHoursSchema.optional(),
+    after_hours_payments: afterHoursPaymentsSchema.optional(),
   })
   .refine(
     (value) =>
       value.gemini_model !== undefined ||
-      value.ai_system_prompt !== undefined,
+      value.ai_system_prompt !== undefined ||
+      value.office_hours !== undefined ||
+      value.after_hours_payments !== undefined,
     { message: "Debes enviar al menos un campo para actualizar" },
   );
 
@@ -101,12 +137,27 @@ export async function PATCH(req: NextRequest) {
       return adminCheck.error;
     }
 
+    const officeHours = payload.data.office_hours
+      ? parseOfficeHoursConfig(payload.data.office_hours)
+      : undefined;
+
+    const afterHoursPayments = payload.data.after_hours_payments
+      ? parseAfterHoursPaymentsConfig({
+          enabled: payload.data.after_hours_payments.enabled,
+          allowedTools:
+            payload.data.after_hours_payments.allowedTools ||
+            [...DEFAULT_AFTER_HOURS_PAYMENT_TOOLS],
+        })
+      : undefined;
+
     const settings = await updateCrmSettings(supabase, {
       gemini_model: payload.data.gemini_model,
       ai_system_prompt:
         typeof payload.data.ai_system_prompt === "string"
           ? payload.data.ai_system_prompt.trim() || null
           : payload.data.ai_system_prompt,
+      office_hours: officeHours,
+      after_hours_payments: afterHoursPayments,
       updated_by: payload.data.agent_id,
     });
 

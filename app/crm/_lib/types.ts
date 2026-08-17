@@ -1,3 +1,8 @@
+import type {
+  AfterHoursPaymentsConfig,
+  OfficeHoursConfig,
+} from "./office-hours";
+
 export type AgentRole = "admin" | "agent";
 
 export type AgentStatus = "online" | "busy" | "offline" | "inactive";
@@ -43,6 +48,8 @@ export interface CrmSettings {
   bot_engine: BotEngine;
   gemini_model: string;
   ai_system_prompt: string | null;
+  office_hours?: OfficeHoursConfig;
+  after_hours_payments?: AfterHoursPaymentsConfig;
   updated_at: string | null;
   updated_by: number | null;
 }

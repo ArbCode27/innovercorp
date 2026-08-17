@@ -23,6 +23,12 @@ import type {
   UpsertAgentInput,
 } from "./types";
 import { DEFAULT_BOT_ENGINE, normalizeBotEngine } from "./bot-engine";
+import {
+  DEFAULT_AFTER_HOURS_PAYMENTS,
+  DEFAULT_OFFICE_HOURS,
+  parseAfterHoursPaymentsConfig,
+  parseOfficeHoursConfig,
+} from "./office-hours";
 
 const db = () => getSupabaseClient();
 
@@ -108,21 +114,48 @@ export const crmService = {
       })
     );
 
-    const settingsRow = settings.data as CrmSettings | null;
+    const settingsRow = settings.data as Record<string, unknown> | null;
     const crmSettings: CrmSettings = settingsRow
       ? {
-          id: settingsRow.id || 1,
+          id: Number(settingsRow.id) || 1,
           bot_engine: normalizeBotEngine(settingsRow.bot_engine),
-          gemini_model: settingsRow.gemini_model || "gemini-2.0-flash",
-          ai_system_prompt: settingsRow.ai_system_prompt ?? null,
-          updated_at: settingsRow.updated_at ?? null,
-          updated_by: settingsRow.updated_by ?? null,
+          gemini_model:
+            typeof settingsRow.gemini_model === "string" &&
+            settingsRow.gemini_model.trim()
+              ? settingsRow.gemini_model.trim()
+              : "gemini-2.0-flash",
+          ai_system_prompt:
+            typeof settingsRow.ai_system_prompt === "string"
+              ? settingsRow.ai_system_prompt
+              : null,
+          office_hours:
+            settingsRow.office_hours !== undefined &&
+            settingsRow.office_hours !== null
+              ? parseOfficeHoursConfig(settingsRow.office_hours)
+              : DEFAULT_OFFICE_HOURS,
+          after_hours_payments:
+            settingsRow.after_hours_payments !== undefined &&
+            settingsRow.after_hours_payments !== null
+              ? parseAfterHoursPaymentsConfig(settingsRow.after_hours_payments)
+              : DEFAULT_AFTER_HOURS_PAYMENTS,
+          updated_at:
+            typeof settingsRow.updated_at === "string"
+              ? settingsRow.updated_at
+              : null,
+          updated_by:
+            typeof settingsRow.updated_by === "number"
+              ? settingsRow.updated_by
+              : settingsRow.updated_by
+                ? Number(settingsRow.updated_by)
+                : null,
         }
       : {
           id: 1,
           bot_engine: DEFAULT_BOT_ENGINE,
           gemini_model: "gemini-2.0-flash",
           ai_system_prompt: null,
+          office_hours: DEFAULT_OFFICE_HOURS,
+          after_hours_payments: DEFAULT_AFTER_HOURS_PAYMENTS,
           updated_at: null,
           updated_by: null,
         };
@@ -149,6 +182,8 @@ export const crmService = {
     patch: {
       gemini_model?: string;
       ai_system_prompt?: string | null;
+      office_hours?: import("./office-hours").OfficeHoursConfig;
+      after_hours_payments?: import("./office-hours").AfterHoursPaymentsConfig;
     },
   ) {
     const response = await fetch("/api/crm/settings", {
