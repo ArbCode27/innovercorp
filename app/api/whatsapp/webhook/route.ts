@@ -6,6 +6,7 @@ import { getInitials, toJsonSafeText } from "@/app/crm/_lib/formatters";
 import { normalizeStorageMimeType } from "../_lib/media-mime";
 import { replyToConversationWithGemini } from "@/app/api/crm/ai/_lib/reply-to-conversation";
 import { sendGuaranteedClientReply } from "@/app/api/crm/ai/_lib/guaranteed-reply";
+import { refreshClientBillingFromWispro } from "@/app/api/crm/_lib/wispro-billing-refresh";
 
 // Fuerza runtime Node.js explícitamente: el handler usa Buffer y fetch a Graph API,
 // y `after()` se comporta de forma más predecible si esto está declarado a propósito.
@@ -815,6 +816,30 @@ const upsertIncomingMessage = async (
       hasMediaUrl: Boolean(persistedMediaUrl),
       preview,
     });
+
+    // Re-evaluate debt + service before Gemini / CRM agents read the client.
+    // Soft-fail + TTL: never blocks inbound message persistence.
+    const wisproId = String(client.wispro_id || "").trim();
+    if (wisproId) {
+      const billingRefresh = await refreshClientBillingFromWispro({
+        supabase,
+        clientId: Number(client.id),
+        wisproId,
+        envoicing:
+          typeof client.envoicing === "string" ? client.envoicing : null,
+        clientName: typeof client.name === "string" ? client.name : null,
+        conversationId,
+        conversationCreated,
+      });
+
+      console.log(`${WEBHOOK_LOG_PREFIX} billing_refresh_result`, {
+        messageId,
+        conversationId,
+        clientId: client.id,
+        conversationCreated,
+        ...billingRefresh,
+      });
+    }
 
     return {
       ignored: false as const,

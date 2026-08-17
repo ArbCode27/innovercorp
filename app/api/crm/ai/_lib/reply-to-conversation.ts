@@ -178,7 +178,7 @@ export const replyToConversationWithGemini = async (
       const { data: clientRow, error: clientError } = await supabase
         .from("clients")
         .select(
-          "id, name, phone, whatsapp_id, wa_name, plan, zone, account, wispro_id",
+          "id, name, phone, whatsapp_id, wa_name, plan, zone, account, wispro_id, envoicing",
         )
         .eq("id", conversation.client_id)
         .maybeSingle<AgentClientSnapshot>();
@@ -309,7 +309,7 @@ export const replyToConversationWithGemini = async (
       const { data: linkedClient } = await supabase
         .from("clients")
         .select(
-          "id, name, phone, whatsapp_id, wa_name, plan, zone, account, wispro_id",
+          "id, name, phone, whatsapp_id, wa_name, plan, zone, account, wispro_id, envoicing",
         )
         .eq("id", decision.clientId)
         .maybeSingle<AgentClientSnapshot>();
@@ -318,7 +318,7 @@ export const replyToConversationWithGemini = async (
       const { data: refreshedClient } = await supabase
         .from("clients")
         .select(
-          "id, name, phone, whatsapp_id, wa_name, plan, zone, account, wispro_id",
+          "id, name, phone, whatsapp_id, wa_name, plan, zone, account, wispro_id, envoicing",
         )
         .eq("id", client.id)
         .maybeSingle<AgentClientSnapshot>();

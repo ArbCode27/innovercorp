@@ -14,6 +14,8 @@ export interface ClientEnvoicingData {
   hasDebt: boolean;
   calculatedAt?: string;
   cedula?: string;
+  serviceSuspended?: boolean;
+  contractState?: string | null;
 }
 
 export const parseClientEnvoicing = (
@@ -24,6 +26,8 @@ export const parseClientEnvoicing = (
   try {
     const parsed = JSON.parse(envoicing) as ClientEnvoicingData & {
       cedula?: string;
+      serviceSuspended?: boolean;
+      contractState?: string | null;
     };
 
     if (typeof parsed.debt !== "number") return null;
@@ -34,6 +38,12 @@ export const parseClientEnvoicing = (
       calculatedAt:
         typeof parsed.calculatedAt === "string" ? parsed.calculatedAt : undefined,
       cedula: typeof parsed.cedula === "string" ? parsed.cedula : undefined,
+      serviceSuspended:
+        typeof parsed.serviceSuspended === "boolean"
+          ? parsed.serviceSuspended
+          : undefined,
+      contractState:
+        typeof parsed.contractState === "string" ? parsed.contractState : null,
     };
   } catch {
     return null;

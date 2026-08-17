@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { DEFAULT_AI_SYSTEM_PROMPT } from "@/app/crm/_lib/ai-default-prompt";
+import { parseClientEnvoicing } from "@/app/crm/_lib/client-profile-utils";
 import {
   buildAgentContents,
   GEMINI_MEDIA_CONTRACT_PROMPT,
@@ -30,6 +31,7 @@ export type AgentClientSnapshot = {
   zone: string | null;
   account: string | null;
   wispro_id: string | null;
+  envoicing?: string | null;
 };
 
 export type AgentDecision = {
@@ -46,6 +48,15 @@ const buildIdentityBlock = (input: {
   client: AgentClientSnapshot | null;
 }) => {
   const linked = Boolean(input.client?.wispro_id);
+  const billing = parseClientEnvoicing(input.client?.envoicing);
+  const debtUsd =
+    billing && Number.isFinite(billing.debt) ? billing.debt.toFixed(2) : "N/D";
+  const serviceSuspended =
+    typeof billing?.serviceSuspended === "boolean"
+      ? billing.serviceSuspended
+        ? "sí"
+        : "no"
+      : "N/D";
 
   return [
     "Identidad de ESTE chat (inyectada por el sistema; no la inventes):",
@@ -57,6 +68,8 @@ const buildIdentityBlock = (input: {
     `- plan: ${input.client?.plan || "N/D"}`,
     `- zona: ${input.client?.zone || "N/D"}`,
     `- estado_cuenta_crm: ${input.client?.account || "N/D"}`,
+    `- deuda_usd_crm: ${debtUsd}`,
+    `- service_suspended: ${serviceSuspended}`,
     `- wispro_id: ${input.client?.wispro_id || "N/D"}`,
     `- vinculado_wispro: ${linked ? "sí" : "no"}`,
   ].join("\n");
