@@ -97,7 +97,7 @@ export const GEMINI_TOOL_DECLARATIONS = [
   {
     name: LOOKUP_WISPRO_TOOL,
     description:
-      "Busca al abonado en Wispro por cédula o RIF (solo números, sin V/J). El sistema prueba prefijos VE automáticamente. Devuelve saldo (debt_usd/debt_bs), account_status y service_suspended (true si el contrato está disabled/suspendido). Si service_suspended=true, incentiva el pago e indica activación inmediata. Úsala cuando el usuario envíe su cédula o RIF.",
+      "Busca al abonado en Wispro por cédula o RIF (solo números, sin V/J). El sistema prueba prefijos VE automáticamente. Si hay exactamente 1 match, vincula el abonado a ESTE chat de forma automática (también en modo humano). Devuelve saldo (debt_usd/debt_bs), account_status, service_suspended y linked. Si service_suspended=true, incentiva el pago e indica activación inmediata. Úsala cuando el usuario envíe su cédula o RIF.",
     parameters: {
       type: "object",
       properties: {
@@ -123,13 +123,13 @@ export const GEMINI_TOOL_DECLARATIONS = [
   {
     name: LINK_WISPRO_TOOL,
     description:
-      "Vincula un resultado de Wispro a ESTE chat. Opcional; no bloquea el registro de pagos.",
+      "Vincula un match de Wispro a ESTE chat cuando hubo VARIOS resultados en lookup. No hace falta si lookup ya devolvió linked=true (match único). No bloquea el registro de pagos.",
     parameters: {
       type: "object",
       properties: {
         wispro_id: {
           type: "string",
-          description: "ID Wispro del match elegido.",
+          description: "ID Wispro del match elegido tras confirmar con el cliente.",
         },
       },
       required: ["wispro_id"],
@@ -201,9 +201,9 @@ export const GEMINI_TOOL_DECLARATIONS = [
 ] as const;
 
 export const GEMINI_TOOLS_CONTRACT_PROMPT = `Herramientas disponibles (obligatorio respetar):
-1) lookup_wispro_by_cedula — cédula o RIF del abonado (solo números; el sistema prueba prefijos V/E/J/G). Trae debt_usd, debt_bs, bcv_rate, account_status y service_suspended (contrato disabled).
+1) lookup_wispro_by_cedula — cédula o RIF del abonado (solo números; el sistema prueba prefijos V/E/J/G). Trae debt_usd, debt_bs, bcv_rate, account_status y service_suspended. Si hay 1 solo match, vincula automáticamente al chat (linked=true).
 2) get_bcv_rate — solo si preguntan la tasa BCV del día sin consultar saldo (fuente rates.dolarvzla.com/bcv).
-3) link_wispro_client — opcional; no bloquea pagos.
+3) link_wispro_client — SOLO si lookup devolvió varios matches y el cliente confirmó cuál. No la uses si linked=true.
 4) submit_payment_receipt — registrar comprobante (requiere lookup previo). Tras éxito/error: etiqueta "Verificar pago" + handoff. Tras éxito el sistema puede crear una promesa Wispro en segundo plano: NUNCA la menciones al cliente; confirma solo el registro del comprobante.
 5) escalate_to_human — category=support al cerrar diagnóstico; category=general si pide humano. NO al solo recibir comprobante.
 
@@ -215,9 +215,10 @@ Tasa BCV / bolívares (CRÍTICO):
 
 Flujo obligatorio de pagos:
 1) Si llega imagen de comprobante SIN cédula/RIF: analiza y PIDE el documento (solo números). No hagas handoff.
-2) Con cédula o RIF (números): lookup_wispro_by_cedula.
-3) Luego submit_payment_receipt.
-4) Confirma según el resultado de la tool. Nunca digas que el pago está aprobado.
+2) Con cédula o RIF (números): lookup_wispro_by_cedula (vincula solo si hay 1 match).
+3) Si count>1: confirma el abonado y llama link_wispro_client.
+4) Luego submit_payment_receipt.
+5) Confirma según el resultado de la tool. Nunca digas que el pago está aprobado.
 
 Flujo obligatorio de soporte técnico:
 1) Identifica y haz preguntas de diagnóstico breves.

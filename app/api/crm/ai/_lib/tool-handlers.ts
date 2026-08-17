@@ -263,6 +263,136 @@ const handleGetBcvRate = async (): Promise<ToolHandlerResult> => {
   }
 };
 
+const tryAssociateLookupMatch = async (
+  ctx: AgentRunContext,
+  match: WisproSearchResult,
+): Promise<{
+  linked: boolean;
+  skippedReason: string | null;
+  error: string | null;
+  clientId: number | null;
+  wisproId: string | null;
+  name: string | null;
+  zone: string | null;
+  account: string | null;
+}> => {
+  try {
+    const { data: conversation, error: conversationError } = await ctx.supabase
+      .from("conversations")
+      .select("id, client_id, customer_phone, status")
+      .eq("id", ctx.conversationId)
+      .maybeSingle();
+
+    if (conversationError) throw conversationError;
+
+    if (!conversation) {
+      return {
+        linked: false,
+        skippedReason: "conversation_not_found",
+        error: "Conversación no encontrada",
+        clientId: null,
+        wisproId: null,
+        name: null,
+        zone: null,
+        account: null,
+      };
+    }
+
+    if (conversation.status === "resuelto") {
+      return {
+        linked: false,
+        skippedReason: "conversation_resolved",
+        error: null,
+        clientId: null,
+        wisproId: null,
+        name: null,
+        zone: null,
+        account: null,
+      };
+    }
+
+    const client = await associateWisproClient(ctx.supabase, {
+      conversationId: ctx.conversationId,
+      customer: match.customer,
+      invoicing: match.invoicing,
+      existingClientId: conversation.client_id ?? ctx.clientId,
+      conversationPhone:
+        conversation.customer_phone ?? ctx.customerPhone ?? ctx.whatsappId,
+      whatsappId: ctx.whatsappId,
+      waName: ctx.waName,
+    });
+
+    ctx.clientId = client.id;
+
+    console.log("[AI_TOOL] wispro_auto_link_ok", {
+      conversationId: ctx.conversationId,
+      runId: ctx.runId,
+      clientId: client.id,
+      wisproId: client.wispro_id ?? match.customer.id,
+      humanModeAllowed: true,
+    });
+
+    return {
+      linked: true,
+      skippedReason: null,
+      error: null,
+      clientId: client.id,
+      wisproId: client.wispro_id ?? match.customer.id,
+      name: client.name,
+      zone: client.zone,
+      account: client.account,
+    };
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "No se pudo vincular Wispro";
+
+    console.warn("[AI_TOOL] wispro_auto_link_soft_failed", {
+      conversationId: ctx.conversationId,
+      runId: ctx.runId,
+      wisproId: match.customer.id,
+      error: message,
+    });
+
+    return {
+      linked: false,
+      skippedReason: "associate_failed",
+      error: message,
+      clientId: null,
+      wisproId: match.customer.id,
+      name: null,
+      zone: null,
+      account: null,
+    };
+  }
+};
+
+const buildLookupHint = (input: {
+  count: number;
+  linked: boolean;
+  serviceSuspended: boolean;
+  linkError: string | null;
+}) => {
+  if (input.count === 0) {
+    return "No se encontró abonado. Pide verificar la cédula o RIF.";
+  }
+
+  if (input.count > 1) {
+    return "Varios matches. Confirma nombre/zona y llama link_wispro_client con el wispro_id elegido antes del pago.";
+  }
+
+  if (!input.linked) {
+    return input.linkError
+      ? `Lookup ok pero no se pudo vincular automáticamente (${input.linkError}). Informa saldo; puedes reintentar con link_wispro_client.`
+      : "Un solo match. Informa saldo. Si aún no está vinculado, llama link_wispro_client.";
+  }
+
+  if (input.serviceSuspended) {
+    return "Cliente vinculado. Servicio suspendido (service_suspended=true). Informa saldo, incentiva el pago y di que al registrar el comprobante se activa de forma inmediata. No menciones promesas internas.";
+  }
+
+  return "Cliente vinculado automáticamente. Informa saldo con debt_usd_formatted y debt_bs_formatted. Si hay comprobante pendiente, llama submit_payment_receipt.";
+};
+
 const handleLookup = async (
   ctx: AgentRunContext,
   rawArgs: unknown,
@@ -287,7 +417,36 @@ const handleLookup = async (
       ctx.lastLookupByWisproId.set(result.customer.id, result);
     }
 
-    const matches = await Promise.all(results.map((result) => summarizeMatch(result)));
+    const matches = await Promise.all(
+      results.map((result) => summarizeMatch(result)),
+    );
+
+    let linked = false;
+    let linkError: string | null = null;
+    let linkSkippedReason: string | null = null;
+    let linkedClientId: number | null = null;
+    let linkedWisproId: string | null = null;
+    let linkedName: string | null = null;
+    let linkedZone: string | null = null;
+    let linkedAccount: string | null = null;
+
+    // Auto-link only on a unique match (deterministic; do not rely on a 2nd tool call).
+    if (results.length === 1 && results[0]) {
+      const linkResult = await tryAssociateLookupMatch(ctx, results[0]);
+      linked = linkResult.linked;
+      linkError = linkResult.error;
+      linkSkippedReason = linkResult.skippedReason;
+      linkedClientId = linkResult.clientId;
+      linkedWisproId = linkResult.wisproId;
+      linkedName = linkResult.name;
+      linkedZone = linkResult.zone;
+      linkedAccount = linkResult.account;
+    } else if (results.length > 1) {
+      linkSkippedReason = "multiple_matches";
+    } else {
+      linkSkippedReason = "no_matches";
+    }
+
     const singleSuspended =
       results.length === 1 && Boolean(results[0]?.invoicing.serviceSuspended);
 
@@ -298,15 +457,21 @@ const handleLookup = async (
         ok: true,
         cedula: parsed.data.cedula,
         count: results.length,
+        linked,
+        link_skipped_reason: linkSkippedReason,
+        link_error: linkError,
+        client_id: linkedClientId,
+        wispro_id: linkedWisproId,
+        linked_name: linkedName,
+        linked_zone: linkedZone,
+        linked_account: linkedAccount,
         matches,
-        hint:
-          results.length === 0
-            ? "No se encontró abonado. Pide verificar la cédula."
-            : results.length === 1
-              ? singleSuspended
-                ? "Servicio suspendido (service_suspended=true). Informa saldo, incentiva el pago y di que al registrar el comprobante se activa de forma inmediata. No menciones promesas internas."
-                : "Un solo match. Informa saldo con debt_usd_formatted y debt_bs_formatted. Si hay comprobante pendiente, llama submit_payment_receipt."
-              : "Varios matches. Confirma nombre/zona antes del pago. Revisa service_suspended por cada match.",
+        hint: buildLookupHint({
+          count: results.length,
+          linked,
+          serviceSuspended: singleSuspended,
+          linkError,
+        }),
       },
     };
   } catch (error) {
@@ -358,86 +523,44 @@ const handleLink = async (
     };
   }
 
-  try {
-    const { data: conversation, error: conversationError } = await ctx.supabase
-      .from("conversations")
-      .select("id, client_id, human_mode, customer_phone, status")
-      .eq("id", ctx.conversationId)
-      .maybeSingle();
+  const linkResult = await tryAssociateLookupMatch(ctx, match);
 
-    if (conversationError) throw conversationError;
-    if (!conversation) {
-      return {
-        name: LINK_WISPRO_TOOL,
-        ok: false,
-        response: { ok: false, error: "Conversación no encontrada" },
-      };
-    }
-
-    if (Boolean(conversation.human_mode)) {
-      return {
-        name: LINK_WISPRO_TOOL,
-        ok: false,
-        response: {
-          ok: false,
-          error: "La conversación está en modo humano; no se puede vincular.",
-        },
-        stopAgent: true,
-      };
-    }
-
-    if (conversation.status === "resuelto") {
-      return {
-        name: LINK_WISPRO_TOOL,
-        ok: false,
-        response: { ok: false, error: "La conversación ya está resuelta" },
-        stopAgent: true,
-      };
-    }
-
-    const client = await associateWisproClient(ctx.supabase, {
-      conversationId: ctx.conversationId,
-      customer: match.customer,
-      invoicing: match.invoicing,
-      existingClientId: conversation.client_id ?? ctx.clientId,
-      conversationPhone:
-        conversation.customer_phone ?? ctx.customerPhone ?? ctx.whatsappId,
-      whatsappId: ctx.whatsappId,
-      waName: ctx.waName,
-    });
-
-    ctx.clientId = client.id;
-
-    return {
-      name: LINK_WISPRO_TOOL,
-      ok: true,
-      response: {
-        ok: true,
-        linked: true,
-        client_id: client.id,
-        wispro_id: client.wispro_id ?? match.customer.id,
-        name: client.name,
-        zone: client.zone,
-        account: client.account,
-        debt: match.invoicing.debt,
-        has_debt: match.invoicing.hasDebt,
-        account_status: match.invoicing.accountStatus,
-        service_suspended: Boolean(match.invoicing.serviceSuspended),
-        contract_state: match.invoicing.contractState ?? null,
-        hint: "Cliente vinculado. Puedes continuar con submit_payment_receipt si hay comprobante.",
-      },
-    };
-  } catch (error) {
+  if (!linkResult.linked) {
     return {
       name: LINK_WISPRO_TOOL,
       ok: false,
       response: {
         ok: false,
         error:
-          error instanceof Error ? error.message : "No se pudo vincular Wispro",
+          linkResult.error ||
+          (linkResult.skippedReason === "conversation_resolved"
+            ? "La conversación ya está resuelta"
+            : "No se pudo vincular Wispro"),
+        link_skipped_reason: linkResult.skippedReason,
       },
+      stopAgent: linkResult.skippedReason === "conversation_resolved",
     };
   }
+
+  return {
+    name: LINK_WISPRO_TOOL,
+    ok: true,
+    response: {
+      ok: true,
+      linked: true,
+      client_id: linkResult.clientId,
+      wispro_id: linkResult.wisproId,
+      name: linkResult.name,
+      zone: linkResult.zone,
+      account: linkResult.account,
+      debt: match.invoicing.debt,
+      has_debt: match.invoicing.hasDebt,
+      account_status: match.invoicing.accountStatus,
+      service_suspended: Boolean(match.invoicing.serviceSuspended),
+      contract_state: match.invoicing.contractState ?? null,
+      hint: "Cliente vinculado. Puedes continuar con submit_payment_receipt si hay comprobante.",
+    },
+  };
 };
 
 const handleSubmitPaymentReceipt = async (
