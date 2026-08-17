@@ -39,6 +39,8 @@ export type AgentRunContext = {
   waName: string | null;
   runId: string;
   triggerMessageId: number | null;
+  replyMode?: "full" | "after_hours_payments" | "forced" | "skip";
+  allowedToolNames?: string[] | null;
   lastLookupByWisproId: Map<string, WisproSearchResult>;
   lastLookupCedula: string | null;
   escalated: boolean;
@@ -834,6 +836,39 @@ export const executeAgentTool = async (
   rawArgs: unknown,
 ): Promise<ToolHandlerResult> => {
   const started = Date.now();
+
+  if (
+    ctx.allowedToolNames &&
+    ctx.allowedToolNames.length > 0 &&
+    !ctx.allowedToolNames.includes(toolName)
+  ) {
+    const blocked: ToolHandlerResult = {
+      name: toolName,
+      ok: false,
+      response: {
+        ok: false,
+        error: `Tool no permitida en modo ${ctx.replyMode || "restricted"}: ${toolName}`,
+        hint:
+          ctx.replyMode === "after_hours_payments"
+            ? "Fuera de oficina solo puedes gestionar pagos/comprobantes. Indica que un asesor atenderá el resto en horario laboral."
+            : "Tool no disponible en este modo.",
+      },
+    };
+
+    await auditToolInvocation(ctx.supabase, {
+      conversationId: ctx.conversationId,
+      runId: ctx.runId,
+      toolName,
+      args: rawArgs,
+      result: blocked.response,
+      ok: false,
+      durationMs: Date.now() - started,
+      error: String(blocked.response.error),
+    });
+
+    return blocked;
+  }
+
   let result: ToolHandlerResult;
 
   switch (toolName) {

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { resolveBotReplyPolicy } from "@/app/api/crm/_lib/bot-reply-policy";
 import { getCrmSettings } from "../../_lib/crm-settings";
 import type { AgentHistoryMessage } from "./context-builder";
 import { runGeminiAgent, type AgentClientSnapshot } from "./agent-runner";
@@ -158,21 +159,37 @@ export const replyToConversationWithGemini = async (
       return result;
     }
 
-    if (Boolean(conversation.human_mode) && !input.forceRun) {
+    const settings = await getCrmSettings(supabase);
+    const replyPolicy = resolveBotReplyPolicy({
+      humanMode: Boolean(conversation.human_mode),
+      forceRun: Boolean(input.forceRun),
+      officeHours: settings.office_hours,
+      afterHoursPayments: settings.after_hours_payments,
+    });
+
+    console.log(`${LOG_PREFIX} bot_reply_policy`, {
+      ...baseContext,
+      humanMode: Boolean(conversation.human_mode),
+      mode: replyPolicy.mode,
+      reason: replyPolicy.reason,
+      officeClosed: replyPolicy.officeClosed,
+      shouldRun: replyPolicy.shouldRun,
+    });
+
+    if (!replyPolicy.shouldRun) {
       const result = {
         ok: false,
         skipped: true,
-        reason: "human_mode_active",
+        reason: replyPolicy.reason,
       } as const;
       logGeminiNoReply("skipped", {
         ...baseContext,
         ...result,
-        humanMode: true,
+        humanMode: Boolean(conversation.human_mode),
+        replyMode: replyPolicy.mode,
       });
       return result;
     }
-
-    const settings = await getCrmSettings(supabase);
 
     if (conversation.client_id) {
       const { data: clientRow, error: clientError } = await supabase
@@ -227,6 +244,7 @@ export const replyToConversationWithGemini = async (
     console.log(`${LOG_PREFIX} generating`, {
       ...baseContext,
       model: settings.gemini_model,
+      replyMode: replyPolicy.mode,
       historyCount: chronological.length,
       linkedWispro: Boolean(client?.wispro_id),
       latestInboundPreview: latestInbound?.content?.slice(0, 120) ?? null,
@@ -244,6 +262,8 @@ export const replyToConversationWithGemini = async (
         triggerMessageId: input.triggerMessageId,
         businessPrompt: settings.ai_system_prompt,
         model: settings.gemini_model,
+        replyMode: replyPolicy.mode,
+        allowedToolNames: replyPolicy.allowedTools,
       });
     } catch (geminiError) {
       const message =
@@ -332,20 +352,30 @@ export const replyToConversationWithGemini = async (
       .maybeSingle<ConversationRow>();
 
     if (freshError) throw freshError;
-    if (
-      !freshConversation ||
-      (Boolean(freshConversation.human_mode) && !input.forceRun)
-    ) {
+
+    const sendPolicy = resolveBotReplyPolicy({
+      humanMode: Boolean(freshConversation?.human_mode),
+      forceRun: Boolean(input.forceRun),
+      officeHours: settings.office_hours,
+      afterHoursPayments: settings.after_hours_payments,
+    });
+
+    if (!freshConversation || !sendPolicy.shouldRun) {
       const result = {
         ok: false,
         skipped: true,
-        reason: "human_mode_active_before_send",
+        reason: !freshConversation
+          ? "conversation_missing_before_send"
+          : sendPolicy.reason === "human_mode_within_office_hours"
+            ? "human_mode_active_before_send"
+            : sendPolicy.reason,
         runId: decision.runId,
       } as const;
       logGeminiNoReply("skipped", {
         ...baseContext,
         ...result,
         decisionAction: decision.action,
+        replyMode: sendPolicy.mode,
       });
       return result;
     }

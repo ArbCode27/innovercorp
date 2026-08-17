@@ -4,12 +4,23 @@ import {
   normalizeBotEngine,
   type BotEngine,
 } from "./bot-engine";
+import {
+  DEFAULT_AFTER_HOURS_PAYMENTS,
+  DEFAULT_OFFICE_HOURS,
+  parseAfterHoursPaymentsConfig,
+  parseOfficeHoursConfig,
+  resolveOfficeHoursFromEnv,
+  type AfterHoursPaymentsConfig,
+  type OfficeHoursConfig,
+} from "./office-hours";
 
 export type CrmSettings = {
   id: number;
   bot_engine: BotEngine;
   gemini_model: string;
   ai_system_prompt: string | null;
+  office_hours: OfficeHoursConfig;
+  after_hours_payments: AfterHoursPaymentsConfig;
   updated_at: string | null;
   updated_by: number | null;
 };
@@ -21,12 +32,29 @@ const DEFAULT_SETTINGS: CrmSettings = {
   bot_engine: DEFAULT_BOT_ENGINE,
   gemini_model: DEFAULT_GEMINI_MODEL,
   ai_system_prompt: null,
+  office_hours: DEFAULT_OFFICE_HOURS,
+  after_hours_payments: DEFAULT_AFTER_HOURS_PAYMENTS,
   updated_at: null,
   updated_by: null,
 };
 
 const mapSettingsRow = (row: Record<string, unknown> | null): CrmSettings => {
-  if (!row) return DEFAULT_SETTINGS;
+  if (!row) {
+    return {
+      ...DEFAULT_SETTINGS,
+      office_hours: resolveOfficeHoursFromEnv(),
+    };
+  }
+
+  const officeFromDb =
+    row.office_hours !== undefined && row.office_hours !== null
+      ? parseOfficeHoursConfig(row.office_hours)
+      : resolveOfficeHoursFromEnv();
+
+  const afterHoursFromDb =
+    row.after_hours_payments !== undefined && row.after_hours_payments !== null
+      ? parseAfterHoursPaymentsConfig(row.after_hours_payments)
+      : DEFAULT_AFTER_HOURS_PAYMENTS;
 
   return {
     id: Number(row.id) || 1,
@@ -37,6 +65,8 @@ const mapSettingsRow = (row: Record<string, unknown> | null): CrmSettings => {
         : DEFAULT_GEMINI_MODEL,
     ai_system_prompt:
       typeof row.ai_system_prompt === "string" ? row.ai_system_prompt : null,
+    office_hours: officeFromDb,
+    after_hours_payments: afterHoursFromDb,
     updated_at:
       typeof row.updated_at === "string" ? row.updated_at : null,
     updated_by:
@@ -60,7 +90,10 @@ export const getCrmSettings = async (
   if (error) {
     // Table may not exist yet before migration; fail soft to Gemini defaults.
     console.error("[crm_settings] load_failed", error.message);
-    return DEFAULT_SETTINGS;
+    return {
+      ...DEFAULT_SETTINGS,
+      office_hours: resolveOfficeHoursFromEnv(),
+    };
   }
 
   if (!data) {

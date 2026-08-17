@@ -87,6 +87,7 @@ export const generateGeminiWithRetry = async (input: {
   contents: GeminiContent[];
   model?: string;
   enableTools?: boolean;
+  allowedToolNames?: string[] | null;
   /** Per-attempt timeouts in ms (length = max attempts). */
   timeoutsMs: number[];
   backoffMs?: number;
@@ -125,6 +126,7 @@ export const generateGeminiWithRetry = async (input: {
         contents: input.contents,
         model: input.model,
         enableTools: input.enableTools,
+        allowedToolNames: input.allowedToolNames,
         timeoutMs,
       });
     } catch (error) {

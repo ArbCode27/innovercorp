@@ -1105,125 +1105,122 @@ export async function POST(req: NextRequest) {
       requestSummary.saved = !messageResult.ignored;
 
       // Gemini is the sole bot engine (Make removed).
+      // human_mode is enforced inside replyToConversationWithGemini via
+      // resolveBotReplyPolicy (after-hours payments may still run).
       if (!messageResult.ignored && messageResult.conversationId) {
-        if (messageResult.humanMode) {
-          console.log(`${WEBHOOK_LOG_PREFIX} bot_reply_skipped_human_mode`, {
+        // Text + image/audio (multimodal). Video/document remain deferred.
+        const geminiEligible =
+          messageType === "text" ||
+          messageType === "image" ||
+          messageType === "audio";
+
+        if (geminiEligible) {
+          const conversationIdForGemini = messageResult.conversationId;
+          const dbMessageIdForGemini = messageResult.dbMessageId;
+
+          console.log(`${WEBHOOK_LOG_PREFIX} gemini_reply_scheduled`, {
             messageId,
-            conversationId: messageResult.conversationId,
+            conversationId: conversationIdForGemini,
+            messageType,
+            humanMode: messageResult.humanMode,
           });
-        } else {
-          // Text + image/audio (multimodal). Video/document remain deferred.
-          const geminiEligible =
-            messageType === "text" ||
-            messageType === "image" ||
-            messageType === "audio";
 
-          if (geminiEligible) {
-            const conversationIdForGemini = messageResult.conversationId;
-            const dbMessageIdForGemini = messageResult.dbMessageId;
+          // `after()` keeps the serverless invocation alive until Gemini finishes.
+          after(async () => {
+            try {
+              const result = await replyToConversationWithGemini(supabase, {
+                conversationId: conversationIdForGemini,
+                triggerMessageId: dbMessageIdForGemini,
+              });
 
-            console.log(`${WEBHOOK_LOG_PREFIX} gemini_reply_scheduled`, {
-              messageId,
-              conversationId: conversationIdForGemini,
-              messageType,
-            });
-
-            // `after()` keeps the serverless invocation alive until Gemini finishes.
-            after(async () => {
-              try {
-                const result = await replyToConversationWithGemini(supabase, {
+              if (result.ok) {
+                console.log(`${WEBHOOK_LOG_PREFIX} gemini_reply_ok`, {
+                  messageId,
                   conversationId: conversationIdForGemini,
-                  triggerMessageId: dbMessageIdForGemini,
+                  messageType,
+                  action: result.action ?? null,
+                  reason: result.reason,
+                  dbMessageId: result.messageId ?? null,
+                  willReplyToClient: true,
                 });
+                return;
+              }
 
-                if (result.ok) {
-                  console.log(`${WEBHOOK_LOG_PREFIX} gemini_reply_ok`, {
-                    messageId,
-                    conversationId: conversationIdForGemini,
-                    messageType,
-                    action: result.action ?? null,
-                    reason: result.reason,
-                    dbMessageId: result.messageId ?? null,
-                    willReplyToClient: true,
-                  });
-                  return;
-                }
-
-                if (result.skipped) {
-                  console.warn(
-                    `${WEBHOOK_LOG_PREFIX} gemini_reply_skipped`,
-                    {
-                      messageId,
-                      conversationId: conversationIdForGemini,
-                      messageType,
-                      reason: result.reason,
-                      willReplyToClient: false,
-                    },
-                  );
-                  return;
-                }
-
-                console.error(
-                  `${WEBHOOK_LOG_PREFIX} gemini_reply_no_response`,
+              if (result.skipped) {
+                console.warn(
+                  `${WEBHOOK_LOG_PREFIX} gemini_reply_skipped`,
                   {
                     messageId,
                     conversationId: conversationIdForGemini,
                     messageType,
                     reason: result.reason,
+                    humanMode: messageResult.humanMode,
+                    willReplyToClient: false,
                   },
                 );
+                return;
+              }
 
-                // Safety net if reply path returned failure without fallback.
-                const fallback = await sendGuaranteedClientReply(supabase, {
-                  conversationId: conversationIdForGemini,
-                  triggerMessageId: dbMessageIdForGemini,
-                  customerPhone: normalizedFrom,
-                  errorMessage: result.reason,
-                });
-
-                console.log(`${WEBHOOK_LOG_PREFIX} gemini_fallback_result`, {
-                  messageId,
-                  conversationId: conversationIdForGemini,
-                  ok: fallback.ok,
-                  reason: fallback.reason,
-                  willReplyToClient: fallback.ok,
-                });
-              } catch (error) {
-                const errorMessage =
-                  error instanceof Error ? error.message : "unknown_error";
-
-                console.error(`${WEBHOOK_LOG_PREFIX} gemini_reply_failed`, {
+              console.error(
+                `${WEBHOOK_LOG_PREFIX} gemini_reply_no_response`,
+                {
                   messageId,
                   conversationId: conversationIdForGemini,
                   messageType,
-                  error: errorMessage,
-                });
+                  reason: result.reason,
+                },
+              );
 
-                const fallback = await sendGuaranteedClientReply(supabase, {
-                  conversationId: conversationIdForGemini,
-                  triggerMessageId: dbMessageIdForGemini,
-                  customerPhone: normalizedFrom,
-                  errorMessage,
-                });
+              // Safety net if reply path returned failure without fallback.
+              const fallback = await sendGuaranteedClientReply(supabase, {
+                conversationId: conversationIdForGemini,
+                triggerMessageId: dbMessageIdForGemini,
+                customerPhone: normalizedFrom,
+                errorMessage: result.reason,
+              });
 
-                console.log(`${WEBHOOK_LOG_PREFIX} gemini_fallback_result`, {
-                  messageId,
-                  conversationId: conversationIdForGemini,
-                  ok: fallback.ok,
-                  reason: fallback.reason,
-                  willReplyToClient: fallback.ok,
-                });
-              }
-            });
-          } else {
-            console.warn(`${WEBHOOK_LOG_PREFIX} gemini_media_deferred`, {
-              messageId,
-              conversationId: messageResult.conversationId,
-              messageType,
-              reason: "gemini_multimodal_v1_image_audio_only",
-              willReplyToClient: false,
-            });
-          }
+              console.log(`${WEBHOOK_LOG_PREFIX} gemini_fallback_result`, {
+                messageId,
+                conversationId: conversationIdForGemini,
+                ok: fallback.ok,
+                reason: fallback.reason,
+                willReplyToClient: fallback.ok,
+              });
+            } catch (error) {
+              const errorMessage =
+                error instanceof Error ? error.message : "unknown_error";
+
+              console.error(`${WEBHOOK_LOG_PREFIX} gemini_reply_failed`, {
+                messageId,
+                conversationId: conversationIdForGemini,
+                messageType,
+                error: errorMessage,
+              });
+
+              const fallback = await sendGuaranteedClientReply(supabase, {
+                conversationId: conversationIdForGemini,
+                triggerMessageId: dbMessageIdForGemini,
+                customerPhone: normalizedFrom,
+                errorMessage,
+              });
+
+              console.log(`${WEBHOOK_LOG_PREFIX} gemini_fallback_result`, {
+                messageId,
+                conversationId: conversationIdForGemini,
+                ok: fallback.ok,
+                reason: fallback.reason,
+                willReplyToClient: fallback.ok,
+              });
+            }
+          });
+        } else {
+          console.warn(`${WEBHOOK_LOG_PREFIX} gemini_media_deferred`, {
+            messageId,
+            conversationId: messageResult.conversationId,
+            messageType,
+            reason: "gemini_multimodal_v1_image_audio_only",
+            willReplyToClient: false,
+          });
         }
       }
     }

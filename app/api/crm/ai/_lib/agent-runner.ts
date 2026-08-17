@@ -2,6 +2,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { DEFAULT_AI_SYSTEM_PROMPT } from "@/app/crm/_lib/ai-default-prompt";
 import { parseClientEnvoicing } from "@/app/crm/_lib/client-profile-utils";
 import {
+  AFTER_HOURS_PAYMENTS_PROMPT,
+  type BotReplyMode,
+} from "@/app/api/crm/_lib/bot-reply-policy";
+import {
   buildAgentContents,
   GEMINI_MEDIA_CONTRACT_PROMPT,
   type AgentHistoryMessage,
@@ -82,6 +86,8 @@ const createAgentContext = (input: {
   client: AgentClientSnapshot | null;
   runId: string;
   triggerMessageId?: number | null;
+  replyMode?: BotReplyMode;
+  allowedToolNames?: string[] | null;
 }): AgentRunContext => ({
   supabase: input.supabase,
   conversationId: input.conversationId,
@@ -91,6 +97,8 @@ const createAgentContext = (input: {
   waName: input.client?.wa_name ?? null,
   runId: input.runId,
   triggerMessageId: input.triggerMessageId ?? null,
+  replyMode: input.replyMode ?? "full",
+  allowedToolNames: input.allowedToolNames ?? null,
   lastLookupByWisproId: new Map(),
   lastLookupCedula: null,
   escalated: false,
@@ -105,6 +113,7 @@ const runAgentLoop = async (input: {
   ctx: AgentRunContext;
   timeoutsMs: number[];
   degraded: boolean;
+  allowedToolNames?: string[] | null;
 }): Promise<AgentDecision> => {
   const workingContents: GeminiContent[] = input.contents.map((content) => ({
     role: content.role,
@@ -115,6 +124,7 @@ const runAgentLoop = async (input: {
     conversationId: input.ctx.conversationId,
     runId: input.ctx.runId,
     degraded: input.degraded,
+    replyMode: input.ctx.replyMode,
   };
 
   for (let step = 0; step < MAX_TOOL_STEPS; step += 1) {
@@ -123,6 +133,7 @@ const runAgentLoop = async (input: {
       contents: workingContents,
       model: input.model,
       enableTools: true,
+      allowedToolNames: input.allowedToolNames,
       timeoutsMs: input.timeoutsMs,
       logContext: { ...logContext, step },
     });
@@ -254,8 +265,12 @@ export const runGeminiAgent = async (input: {
   triggerMessageId?: number | null;
   businessPrompt: string | null | undefined;
   model: string;
+  replyMode?: BotReplyMode;
+  allowedToolNames?: string[] | null;
 }): Promise<AgentDecision> => {
   const runId = crypto.randomUUID();
+  const replyMode = input.replyMode ?? "full";
+  const allowedToolNames = input.allowedToolNames ?? null;
   const { contents, attachedMediaIds } = await buildAgentContents({
     messages: input.messages,
     triggerMessageId: input.triggerMessageId,
@@ -268,6 +283,8 @@ export const runGeminiAgent = async (input: {
   const systemPrompt = [
     input.businessPrompt?.trim() || DEFAULT_AI_SYSTEM_PROMPT,
     "",
+    replyMode === "after_hours_payments" ? AFTER_HOURS_PAYMENTS_PROMPT : null,
+    replyMode === "after_hours_payments" ? "" : null,
     GEMINI_TOOLS_CONTRACT_PROMPT,
     "",
     GEMINI_MEDIA_CONTRACT_PROMPT,
@@ -277,7 +294,9 @@ export const runGeminiAgent = async (input: {
       customerPhone: input.customerPhone,
       client: input.client,
     }),
-  ].join("\n");
+  ]
+    .filter((block): block is string => block !== null)
+    .join("\n");
 
   const hasInlineMedia = attachedMediaIds.length > 0;
   // Text: 3 attempts. Media: longer primary + degraded text-only path.
@@ -294,6 +313,8 @@ export const runGeminiAgent = async (input: {
     conversationId: input.conversationId,
     runId,
     model: primaryModel,
+    replyMode,
+    allowedToolNames,
     fallbackModel:
       fallbackModel && fallbackModel !== primaryModel ? fallbackModel : null,
     contentsCount: contents.length,
@@ -313,6 +334,8 @@ export const runGeminiAgent = async (input: {
       client: input.client,
       runId,
       triggerMessageId: input.triggerMessageId,
+      replyMode,
+      allowedToolNames,
     });
 
     const degraded = Boolean(options?.degraded);
@@ -325,6 +348,7 @@ export const runGeminiAgent = async (input: {
       ctx,
       timeoutsMs: degraded ? degradedTimeouts : primaryTimeouts,
       degraded,
+      allowedToolNames,
     });
   };
 

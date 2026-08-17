@@ -129,6 +129,8 @@ export const generateGeminiWithTools = async (input: {
   model?: string;
   timeoutMs?: number;
   enableTools?: boolean;
+  /** When set, only these tool names are exposed to Gemini. */
+  allowedToolNames?: string[] | null;
 }): Promise<GeminiGenerateResult> => {
   const apiKey = getGeminiApiKey();
   if (!apiKey) {
@@ -144,11 +146,19 @@ export const generateGeminiWithTools = async (input: {
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   const enableTools = input.enableTools ?? true;
 
+  const toolDeclarations =
+    input.allowedToolNames && input.allowedToolNames.length
+      ? GEMINI_TOOL_DECLARATIONS.filter((tool) =>
+          input.allowedToolNames!.includes(tool.name),
+        )
+      : GEMINI_TOOL_DECLARATIONS;
+
   console.log(`${LOG_PREFIX} request_started`, {
     model,
     contentsCount: input.contents.length,
     timeoutMs,
     enableTools,
+    toolsCount: enableTools ? toolDeclarations.length : 0,
     apiKeyPresent: true,
     apiKeyPrefix: `${apiKey.slice(0, 6)}...`,
   });
@@ -165,10 +175,10 @@ export const generateGeminiWithTools = async (input: {
       },
     };
 
-    if (enableTools) {
+    if (enableTools && toolDeclarations.length > 0) {
       body.tools = [
         {
-          functionDeclarations: GEMINI_TOOL_DECLARATIONS,
+          functionDeclarations: toolDeclarations,
         },
       ];
       body.toolConfig = {
