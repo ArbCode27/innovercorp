@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import {
+  normalizeDocumentDigits,
   searchWisproByCedula,
   WisproApiError,
 } from "@/app/api/crm/_lib/wispro-api";
@@ -11,9 +12,15 @@ const searchSchema = z.object({
   cedula: z
     .string()
     .trim()
-    .min(5, "La cédula debe tener al menos 5 dígitos")
-    .max(12, "La cédula no puede superar 12 dígitos")
-    .regex(/^\d+$/, "La cédula solo puede contener números"),
+    .min(1, "Ingresa la cédula o RIF")
+    .transform((value) => normalizeDocumentDigits(value))
+    .pipe(
+      z
+        .string()
+        .min(5, "El documento debe tener al menos 5 dígitos")
+        .max(12, "El documento no puede superar 12 dígitos")
+        .regex(/^\d+$/, "Usa solo números (sin V, J ni guiones)"),
+    ),
 });
 
 export async function POST(req: NextRequest) {

@@ -14,14 +14,14 @@ export const lookupWisproArgsSchema = z.object({
   cedula: z
     .string()
     .trim()
-    .min(1, "cedula es requerida")
+    .min(1, "cedula o RIF es requerido")
     .transform((value) => value.replace(/[^\d]/g, ""))
     .pipe(
       z
         .string()
-        .min(5, "La cédula debe tener al menos 5 dígitos")
-        .max(12, "La cédula no puede superar 12 dígitos")
-        .regex(/^\d+$/, "La cédula solo puede contener números"),
+        .min(5, "El documento debe tener al menos 5 dígitos")
+        .max(12, "El documento no puede superar 12 dígitos")
+        .regex(/^\d+$/, "Usa solo números (sin V, J ni guiones)"),
     ),
 });
 
@@ -97,14 +97,14 @@ export const GEMINI_TOOL_DECLARATIONS = [
   {
     name: LOOKUP_WISPRO_TOOL,
     description:
-      "Busca al abonado en Wispro por cédula/documento. Devuelve saldo (debt_usd/debt_bs), account_status y service_suspended (true si el contrato está disabled/suspendido). Si service_suspended=true, incentiva el pago e indica activación inmediata. Úsala cuando el usuario envíe su cédula.",
+      "Busca al abonado en Wispro por cédula o RIF (solo números, sin V/J). El sistema prueba prefijos VE automáticamente. Devuelve saldo (debt_usd/debt_bs), account_status y service_suspended (true si el contrato está disabled/suspendido). Si service_suspended=true, incentiva el pago e indica activación inmediata. Úsala cuando el usuario envíe su cédula o RIF.",
     parameters: {
       type: "object",
       properties: {
         cedula: {
           type: "string",
           description:
-            "Cédula del cliente abonado Innover (solo dígitos; no uses la cédula del beneficiario del Tpago si no es el cliente).",
+            "Cédula o RIF del abonado Innover: solo dígitos (sin V, J, E, G ni guiones). No uses la cédula del beneficiario del Tpago si no es el cliente.",
         },
       },
       required: ["cedula"],
@@ -201,7 +201,7 @@ export const GEMINI_TOOL_DECLARATIONS = [
 ] as const;
 
 export const GEMINI_TOOLS_CONTRACT_PROMPT = `Herramientas disponibles (obligatorio respetar):
-1) lookup_wispro_by_cedula — cédula del abonado. Trae debt_usd, debt_bs, bcv_rate, account_status y service_suspended (contrato disabled).
+1) lookup_wispro_by_cedula — cédula o RIF del abonado (solo números; el sistema prueba prefijos V/E/J/G). Trae debt_usd, debt_bs, bcv_rate, account_status y service_suspended (contrato disabled).
 2) get_bcv_rate — solo si preguntan la tasa BCV del día sin consultar saldo (fuente rates.dolarvzla.com/bcv).
 3) link_wispro_client — opcional; no bloquea pagos.
 4) submit_payment_receipt — registrar comprobante (requiere lookup previo). Tras éxito/error: etiqueta "Verificar pago" + handoff. Tras éxito el sistema puede crear una promesa Wispro en segundo plano: NUNCA la menciones al cliente; confirma solo el registro del comprobante.
@@ -214,8 +214,8 @@ Tasa BCV / bolívares (CRÍTICO):
 - Formato bolívares: miles con punto y decimales con coma (ej. Bs. 20.381,75).
 
 Flujo obligatorio de pagos:
-1) Si llega imagen de comprobante SIN cédula: analiza y PIDE la cédula. No hagas handoff.
-2) Con cédula: lookup_wispro_by_cedula.
+1) Si llega imagen de comprobante SIN cédula/RIF: analiza y PIDE el documento (solo números). No hagas handoff.
+2) Con cédula o RIF (números): lookup_wispro_by_cedula.
 3) Luego submit_payment_receipt.
 4) Confirma según el resultado de la tool. Nunca digas que el pago está aprobado.
 

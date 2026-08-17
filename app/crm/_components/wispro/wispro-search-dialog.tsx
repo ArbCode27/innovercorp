@@ -90,7 +90,7 @@ export const WisproSearchDialog = ({
 
     const normalized = cedula.trim();
     if (!normalized) {
-      setError("Ingresa una cédula");
+      setError("Ingresa la cédula o RIF (solo números)");
       return;
     }
 
@@ -105,7 +105,7 @@ export const WisproSearchDialog = ({
       setHasSearched(true);
 
       if (!searchResults.length) {
-        setError("No se encontró ningún cliente con esa cédula.");
+        setError("No se encontró ningún cliente con ese documento.");
       }
     } catch (searchError) {
       setError(getErrorMessage(searchError, "Error al consultar Wispro"));
@@ -152,8 +152,8 @@ export const WisproSearchDialog = ({
             </DialogTitle>
             <DialogDescription className={CRM_SURFACES.textMuted}>
               {isRelink
-                ? "Busca la cédula correcta. El chat de WhatsApp se mantiene; solo se actualiza la ficha Wispro."
-                : "Consulta por cédula y asocia el resultado a la conversación activa."}
+                ? "Busca por cédula o RIF (solo números). El chat de WhatsApp se mantiene; solo se actualiza la ficha Wispro."
+                : "Consulta por cédula o RIF (solo números, sin V ni J) y asocia el resultado a la conversación activa."}
             </DialogDescription>
           </DialogHeader>
 
@@ -164,7 +164,7 @@ export const WisproSearchDialog = ({
               <span className={`font-medium ${CRM_SURFACES.textPrimary}`}>
                 {currentLink.name}
               </span>
-              {currentCedula ? ` · Cédula ${currentCedula}` : null}
+              {currentCedula ? ` · Doc. ${currentCedula}` : null}
             </div>
           ) : null}
 
@@ -173,7 +173,7 @@ export const WisproSearchDialog = ({
               <label
                 htmlFor="wispro-cedula"
                 className={`text-xs font-medium uppercase tracking-wide ${CRM_SURFACES.textLabel}`}>
-                Número de cédula
+                Número de cédula o RIF
               </label>
               <div className="flex gap-2">
                 <Input
@@ -182,7 +182,7 @@ export const WisproSearchDialog = ({
                   onChange={(event) =>
                     setCedula(event.target.value.replace(/\D/g, ""))
                   }
-                  placeholder="Ej: 27915967"
+                  placeholder="Solo números, ej: 299858854"
                   inputMode="numeric"
                   autoComplete="off"
                   disabled={isSearching || isAssociating}
@@ -220,7 +220,7 @@ export const WisproSearchDialog = ({
                       {result.customer.name}
                     </p>
                     <p className={`mt-1 text-xs ${CRM_SURFACES.textMuted}`}>
-                      Cédula: {result.customer.national_identification_number}
+                      Doc.: {result.customer.national_identification_number}
                       {result.customer.city || result.customer.state
                         ? ` · ${[result.customer.city, result.customer.state].filter(Boolean).join(", ")}`
                         : ""}

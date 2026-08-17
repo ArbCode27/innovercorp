@@ -488,12 +488,25 @@ export const listContractsByClientId = async (
 export const listContractsByCedula = async (
   cedula: string,
 ): Promise<WisproContract[]> => {
-  const payload = await wisproGet("/contracts", {
-    client_national_identification_number_eq: cedula.trim(),
-  });
-  return extractDataRecords(payload)
-    .map(normalizeContract)
-    .filter((contract): contract is WisproContract => contract !== null);
+  const digits = normalizeDocumentDigits(cedula);
+  const candidates = digits
+    ? buildVeDocumentCandidates(digits)
+    : [cedula.trim()].filter(Boolean);
+
+  if (!candidates.length) return [];
+
+  // Prefer exact input / digits first, then prefixed variants.
+  for (const candidate of candidates) {
+    const payload = await wisproGet("/contracts", {
+      client_national_identification_number_eq: candidate,
+    });
+    const contracts = extractDataRecords(payload)
+      .map(normalizeContract)
+      .filter((contract): contract is WisproContract => contract !== null);
+    if (contracts.length) return contracts;
+  }
+
+  return [];
 };
 
 /** Default duration for Wispro payment promises (auto + CRM UI). */
@@ -725,22 +738,118 @@ export const fetchInvoicingForWisproClientId = async (
   return { account, contracts, invoicing };
 };
 
+/** Venezuelan document letter prefixes commonly stored in Wispro. */
+const VE_DOCUMENT_PREFIXES = ["V", "E", "J", "G"] as const;
+
+/** Digits only (cédula/RIF without letter). Empty if too short/long after strip. */
+export const normalizeDocumentDigits = (raw: string): string =>
+  String(raw || "").replace(/\D/g, "");
+
+/**
+ * Exact Wispro `_eq` candidates for a numeric document.
+ * Order: bare digits first, then V/E/J/G + digits (no hyphens).
+ */
+export const buildVeDocumentCandidates = (digits: string): string[] => {
+  const normalized = normalizeDocumentDigits(digits);
+  if (!normalized) return [];
+
+  const candidates = [
+    normalized,
+    ...VE_DOCUMENT_PREFIXES.map((prefix) => `${prefix}${normalized}`),
+  ];
+
+  return [...new Set(candidates)];
+};
+
+const lookupClientsByNationalIdExact = async (
+  document: string,
+  fallbackDigits: string,
+): Promise<WisproCustomer[]> => {
+  const clientsPayload = await wisproGet("/clients", {
+    national_identification_number_eq: document,
+  });
+
+  return extractDataRecords(clientsPayload)
+    .map((record) => normalizeWisproCustomer(record, fallbackDigits))
+    .filter((customer): customer is WisproCustomer => customer !== null);
+};
+
+/**
+ * Search Wispro by cédula or RIF using digits only.
+ * Expands VE prefixes (V/E/J/G) when the bare number has no exact match.
+ */
 export const searchWisproByCedula = async (
   cedula: string,
 ): Promise<WisproSearchResult[]> => {
-  const normalizedCedula = cedula.trim();
+  const digits = normalizeDocumentDigits(cedula);
+  if (!digits) {
+    console.log(`${LOG_PREFIX} search_ok`, {
+      query: cedula.trim() || null,
+      digits: null,
+      clients: 0,
+      reason: "empty_digits",
+    });
+    return [];
+  }
 
-  const clientsPayload = await wisproGet("/clients", {
-    national_identification_number_eq: normalizedCedula,
-  });
+  const candidates = buildVeDocumentCandidates(digits);
+  const customersById = new Map<string, WisproCustomer>();
+  let matchedCandidate: string | null = null;
 
-  const customers = extractDataRecords(clientsPayload)
-    .map((record) => normalizeWisproCustomer(record, normalizedCedula))
-    .filter((customer): customer is WisproCustomer => customer !== null);
+  // 1) Prefer exact digits (natural-person cédula without letter).
+  try {
+    const exactMatches = await lookupClientsByNationalIdExact(digits, digits);
+    for (const customer of exactMatches) {
+      customersById.set(customer.id, customer);
+    }
+    if (exactMatches.length) {
+      matchedCandidate = digits;
+    }
+  } catch (error) {
+    console.warn(`${LOG_PREFIX} search_candidate_failed`, {
+      candidate: digits,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
+
+  // 2) If empty, try V/E/J/G in parallel (RIF / prefixed cédula in Wispro).
+  if (!customersById.size) {
+    const prefixed = candidates.filter((candidate) => candidate !== digits);
+    const settled = await Promise.allSettled(
+      prefixed.map(async (candidate) => ({
+        candidate,
+        customers: await lookupClientsByNationalIdExact(candidate, digits),
+      })),
+    );
+
+    for (const result of settled) {
+      if (result.status === "rejected") {
+        console.warn(`${LOG_PREFIX} search_candidate_failed`, {
+          error:
+            result.reason instanceof Error
+              ? result.reason.message
+              : String(result.reason),
+        });
+        continue;
+      }
+
+      const { candidate, customers } = result.value;
+      if (!customers.length) continue;
+
+      if (!matchedCandidate) matchedCandidate = candidate;
+      for (const customer of customers) {
+        customersById.set(customer.id, customer);
+      }
+    }
+  }
+
+  const customers = [...customersById.values()];
 
   if (!customers.length) {
     console.log(`${LOG_PREFIX} search_ok`, {
-      cedula: normalizedCedula,
+      digits,
+      candidatesTried: candidates,
       clients: 0,
     });
     return [];
@@ -754,7 +863,8 @@ export const searchWisproByCedula = async (
   );
 
   console.log(`${LOG_PREFIX} search_ok`, {
-    cedula: normalizedCedula,
+    digits,
+    matchedCandidate,
     clients: results.length,
     withDebt: results.filter((result) => result.invoicing.hasDebt).length,
     suspended: results.filter((result) => result.invoicing.serviceSuspended)

@@ -272,7 +272,7 @@ const handleLookup = async (
       ok: false,
       response: {
         ok: false,
-        error: parsed.error.issues[0]?.message || "Cédula inválida",
+        error: parsed.error.issues[0]?.message || "Documento inválido",
       },
     };
   }
