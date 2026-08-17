@@ -392,6 +392,17 @@ export const crmService = {
     return ensureData(data, "No se pudo crear el cliente");
   },
 
+  async getClientById(clientId: number) {
+    const { data, error } = await db()
+      .from("clients")
+      .select("*")
+      .eq("id", clientId)
+      .maybeSingle<Client>();
+
+    throwIfError(error);
+    return data;
+  },
+
   async createTicket(input: CreateTicketInput) {
     const { data, error } = await db()
       .from("tickets")

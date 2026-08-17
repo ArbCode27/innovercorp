@@ -18,6 +18,11 @@ import {
 import { wisproService } from "../_lib/wispro-service";
 import { isAdminRole } from "../_lib/agent-role-utils";
 import { parseWisproCustomerFromEnvoicing } from "../_lib/wispro-webhook";
+import {
+  didClientGainWisproLink,
+  syncWisproSnapshotFromClient,
+  upsertClientInList,
+} from "../_lib/client-realtime-utils";
 import { useSendMessage } from "./use-send-message";
 import type {
   Agent,
@@ -107,9 +112,78 @@ export const useCrmData = (agent: Agent | null) => {
 
   // Ref para acceder al selectedConversationId dentro de los listeners de Realtime
   const selectedConversationIdRef = useRef<number | null>(null);
+  const conversationsRef = useRef<Conversation[]>([]);
+  const clientsRef = useRef<Client[]>([]);
+
   useEffect(() => {
     selectedConversationIdRef.current = selectedConversationId;
   }, [selectedConversationId]);
+
+  useEffect(() => {
+    conversationsRef.current = data.conversations;
+  }, [data.conversations]);
+
+  useEffect(() => {
+    clientsRef.current = data.clients;
+  }, [data.clients]);
+
+  const applyClientRealtimeRow = useCallback(
+    (incoming: Client, options?: { previous?: Client | null }) => {
+      const previous =
+        options?.previous ??
+        clientsRef.current.find((client) => client.id === incoming.id) ??
+        null;
+
+      clientsRef.current = upsertClientInList(clientsRef.current, incoming);
+
+      setData((current) => ({
+        ...current,
+        clients: upsertClientInList(current.clients, incoming),
+      }));
+
+      setWisproSnapshotsByClientId((current) =>
+        syncWisproSnapshotFromClient(current, incoming),
+      );
+
+      const selectedId = selectedConversationIdRef.current;
+      if (!selectedId) return;
+
+      const openConversation = conversationsRef.current.find(
+        (conversation) => conversation.id === selectedId,
+      );
+      if (!openConversation || openConversation.client_id !== incoming.id) {
+        return;
+      }
+
+      if (didClientGainWisproLink(previous, incoming)) {
+        toast.success(
+          incoming.name
+            ? `Nova vinculó a ${incoming.name}`
+            : "Nova vinculó el cliente Wispro",
+        );
+      }
+    },
+    [],
+  );
+
+  const ensureClientInMemory = useCallback(
+    async (clientId: number) => {
+      if (!clientId) return;
+      if (clientsRef.current.some((client) => client.id === clientId)) return;
+
+      try {
+        const client = await crmService.getClientById(clientId);
+        if (!client) return;
+        applyClientRealtimeRow(client);
+      } catch (error) {
+        console.warn("[CRM_REALTIME] ensure_client_failed", {
+          clientId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    },
+    [applyClientRealtimeRow],
+  );
 
   // ── REALTIME: mensajes nuevos ──────────────────────────
   useEffect(() => {
@@ -189,12 +263,22 @@ export const useCrmData = (agent: Agent | null) => {
         },
         (payload) => {
           const updated = payload.new as Conversation;
+          const previous = conversationsRef.current.find(
+            (conversation) => conversation.id === updated.id,
+          );
+
           setData((current) => ({
             ...current,
             conversations: current.conversations.map((conv) =>
               conv.id === updated.id ? { ...conv, ...updated } : conv,
             ),
           }));
+
+          const nextClientId = Number(updated.client_id || 0);
+          const prevClientId = Number(previous?.client_id || 0);
+          if (nextClientId && nextClientId !== prevClientId) {
+            void ensureClientInMemory(nextClientId);
+          }
         },
       )
       .on(
@@ -230,7 +314,7 @@ export const useCrmData = (agent: Agent | null) => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [ensureClientInMemory]);
 
   // ── REALTIME: clientes ─────────────────────────────────
   useEffect(() => {
@@ -244,16 +328,7 @@ export const useCrmData = (agent: Agent | null) => {
           table: "clients",
         },
         (payload) => {
-          const newClient = payload.new as Client;
-          setData((current) => {
-            const exists = current.clients.some((client) => client.id === newClient.id);
-            if (exists) return current;
-
-            return {
-              ...current,
-              clients: [...current.clients, newClient],
-            };
-          });
+          applyClientRealtimeRow(payload.new as Client);
         },
       )
       .on(
@@ -265,12 +340,10 @@ export const useCrmData = (agent: Agent | null) => {
         },
         (payload) => {
           const updatedClient = payload.new as Client;
-          setData((current) => ({
-            ...current,
-            clients: current.clients.map((client) =>
-              client.id === updatedClient.id ? { ...client, ...updatedClient } : client,
-            ),
-          }));
+          const previous = clientsRef.current.find(
+            (client) => client.id === updatedClient.id,
+          );
+          applyClientRealtimeRow(updatedClient, { previous });
         },
       )
       .subscribe((status) => {
@@ -282,7 +355,7 @@ export const useCrmData = (agent: Agent | null) => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [applyClientRealtimeRow]);
 
   const loadData = useCallback(async () => {
     if (!agent) return;
