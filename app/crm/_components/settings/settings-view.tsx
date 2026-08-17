@@ -93,63 +93,98 @@ export const SettingsView = ({
   return (
     <div
       className={`crm-scrollbar min-h-0 flex-1 overflow-y-auto p-4 md:p-6 ${CRM_SURFACES.page}`}>
-      <div className="mb-6">
-        <h2
-          className={`flex items-center gap-2 text-xl font-semibold md:text-2xl ${CRM_SURFACES.textPrimary}`}>
-          <Settings2 className="size-5" aria-hidden="true" />
-          Ajustes del CRM
-        </h2>
-        <p className={`mt-1 text-sm ${CRM_SURFACES.textMuted}`}>
-          Configura el asistente Gemini y el horario en que Nova atiende pagos
-          fuera de oficina
-        </p>
+      <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2
+            className={`flex items-center gap-2 text-xl font-semibold md:text-2xl ${CRM_SURFACES.textPrimary}`}>
+            <Settings2 className="size-5" aria-hidden="true" />
+            Ajustes del CRM
+          </h2>
+          <p className={`mt-1 text-sm ${CRM_SURFACES.textMuted}`}>
+            Gemini, horarios de oficina y atención de pagos fuera de jornada
+          </p>
+        </div>
       </div>
 
-      <div className="mx-auto flex max-w-2xl flex-col gap-4">
+      <div className="flex w-full flex-col gap-4">
+        <div className="grid gap-4 lg:grid-cols-12">
+          <section
+            className={`rounded-xl border p-4 md:p-5 lg:col-span-4 ${CRM_SURFACES.border} ${CRM_SURFACES.elevated}`}>
+            <h3
+              className={`text-base font-semibold ${CRM_SURFACES.textPrimary}`}>
+              Motor del bot
+            </h3>
+            <div className="mt-3 flex items-start gap-3">
+              <Sparkles
+                className="mt-0.5 size-4 shrink-0 text-blue-500"
+                aria-hidden="true"
+              />
+              <div className="min-w-0">
+                <p
+                  className={`text-sm font-medium ${CRM_SURFACES.textPrimary}`}>
+                  Gemini
+                </p>
+                <p className={`mt-1 text-sm ${CRM_SURFACES.textMuted}`}>
+                  Motor único del CRM. Responde desde este servidor con Google
+                  AI Studio.
+                </p>
+                <p className={`mt-3 text-xs ${CRM_SURFACES.textMuted}`}>
+                  Modelo:{" "}
+                  <span className={CRM_SURFACES.textSecondary}>
+                    {settings.gemini_model || "gemini-2.0-flash"}
+                  </span>
+                </p>
+                <p className={`mt-1 text-xs ${CRM_SURFACES.textMuted}`}>
+                  Requiere `GEMINI_API_KEY` en el servidor.
+                </p>
+              </div>
+            </div>
+          </section>
+
+          <div className="lg:col-span-8">
+            <OfficeHoursSettingsSection
+              isAdmin={isAdmin}
+              officeHours={settings.office_hours}
+              afterHoursPayments={settings.after_hours_payments}
+              onSave={onUpdateOfficeHours}
+            />
+          </div>
+        </div>
+
         <section
           className={`rounded-xl border p-4 md:p-5 ${CRM_SURFACES.border} ${CRM_SURFACES.elevated}`}>
-          <h3 className={`text-base font-semibold ${CRM_SURFACES.textPrimary}`}>
-            Motor del bot
-          </h3>
-          <div className="mt-3 flex items-start gap-3">
-            <Sparkles
-              className="mt-0.5 size-4 shrink-0 text-blue-500"
-              aria-hidden="true"
-            />
+          <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p className={`text-sm font-medium ${CRM_SURFACES.textPrimary}`}>
-                Gemini
-              </p>
+              <h3
+                className={`text-base font-semibold ${CRM_SURFACES.textPrimary}`}>
+                Prompt del agente Gemini
+              </h3>
               <p className={`mt-1 text-sm ${CRM_SURFACES.textMuted}`}>
-                Único motor de IA del CRM. Responde desde este servidor con
-                Google AI Studio.
-              </p>
-              <p className={`mt-2 text-xs ${CRM_SURFACES.textMuted}`}>
-                Modelo: {settings.gemini_model || "gemini-2.0-flash"}. Requiere
-                `GEMINI_API_KEY` en el servidor.
+                Instrucciones de sistema para el asistente.
+                {isUsingDefault
+                  ? " Ahora se usa el prompt predeterminado."
+                  : " Ahora se usa un prompt personalizado."}
               </p>
             </div>
+            {isAdmin ? (
+              <div className="flex flex-wrap gap-2">
+                <CrmButton
+                  type="button"
+                  variant="primary"
+                  disabled={!isDirty || isOverLimit || isSavingPrompt}
+                  onClick={() => void handleSavePrompt()}>
+                  {isSavingPrompt ? "Guardando…" : "Guardar prompt"}
+                </CrmButton>
+                <CrmButton
+                  type="button"
+                  variant="secondary"
+                  disabled={isSavingPrompt || isUsingDefault}
+                  onClick={() => void handleRestoreDefault()}>
+                  Restaurar predeterminado
+                </CrmButton>
+              </div>
+            ) : null}
           </div>
-        </section>
-
-        <OfficeHoursSettingsSection
-          isAdmin={isAdmin}
-          officeHours={settings.office_hours}
-          afterHoursPayments={settings.after_hours_payments}
-          onSave={onUpdateOfficeHours}
-        />
-
-        <section
-          className={`rounded-xl border p-4 md:p-5 ${CRM_SURFACES.border} ${CRM_SURFACES.elevated}`}>
-          <h3 className={`text-base font-semibold ${CRM_SURFACES.textPrimary}`}>
-            Prompt del agente Gemini
-          </h3>
-          <p className={`mt-1 text-sm ${CRM_SURFACES.textMuted}`}>
-            Instrucciones de sistema para el asistente.
-            {isUsingDefault
-              ? " Ahora se usa el prompt predeterminado."
-              : " Ahora se usa un prompt personalizado."}
-          </p>
 
           <label htmlFor="crm-ai-system-prompt" className="sr-only">
             Prompt del sistema para Gemini
@@ -159,7 +194,7 @@ export const SettingsView = ({
             value={draftPrompt}
             onChange={(event) => setDraftPrompt(event.target.value)}
             disabled={!isAdmin || isSavingPrompt}
-            className={`crm-scrollbar mt-4 h-72 resize-none overflow-y-auto font-mono text-xs leading-relaxed ${CRM_SURFACES.input}`}
+            className={`crm-scrollbar mt-4 h-56 resize-none overflow-y-auto font-mono text-xs leading-relaxed md:h-64 ${CRM_SURFACES.input}`}
             aria-describedby="crm-ai-system-prompt-help"
           />
           <div
@@ -181,27 +216,10 @@ export const SettingsView = ({
           </div>
 
           {!isAdmin ? (
-            <p className={`mt-4 text-sm ${CRM_SURFACES.textMuted}`}>
+            <p className={`mt-3 text-sm ${CRM_SURFACES.textMuted}`}>
               Solo un administrador puede editar el prompt.
             </p>
-          ) : (
-            <div className="mt-4 flex flex-wrap gap-2">
-              <CrmButton
-                type="button"
-                variant="primary"
-                disabled={!isDirty || isOverLimit || isSavingPrompt}
-                onClick={() => void handleSavePrompt()}>
-                {isSavingPrompt ? "Guardando…" : "Guardar prompt"}
-              </CrmButton>
-              <CrmButton
-                type="button"
-                variant="secondary"
-                disabled={isSavingPrompt || isUsingDefault}
-                onClick={() => void handleRestoreDefault()}>
-                Restaurar predeterminado
-              </CrmButton>
-            </div>
-          )}
+          ) : null}
         </section>
       </div>
     </div>
