@@ -8,6 +8,7 @@ interface WisproApiPayload {
   data?: WisproSearchResult[];
   client?: Client;
   error?: string;
+  linkId?: string;
 }
 
 const parseApiError = (payload: WisproApiPayload, fallback: string) => {
@@ -39,6 +40,7 @@ export const wisproService = {
     conversationPhone?: string | null;
     whatsappId?: string | null;
     waName?: string | null;
+    linkId?: string | null;
   }): Promise<Client> {
     const response = await fetch("/api/crm/wispro/associate", {
       method: "POST",
@@ -49,12 +51,23 @@ export const wisproService = {
     const payload = (await response.json()) as WisproApiPayload;
 
     if (!response.ok) {
+      console.error("[WISPRO_ASSOCIATE] ui_api_error", {
+        linkId: input.linkId || payload.linkId || null,
+        status: response.status,
+        error: payload.error || "No se pudo asociar el cliente",
+      });
       parseApiError(payload, "No se pudo asociar el cliente");
     }
 
     if (!payload.client) {
       throw new Error("No se recibió el cliente asociado");
     }
+
+    console.log("[WISPRO_ASSOCIATE] ui_api_ok", {
+      linkId: input.linkId || payload.linkId || null,
+      clientId: payload.client.id,
+      wisproId: payload.client.wispro_id || null,
+    });
 
     return payload.client;
   },

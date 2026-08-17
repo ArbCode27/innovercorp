@@ -878,62 +878,106 @@ export const useCrmData = (agent: Agent | null) => {
 
     const { customer, invoicing } = result;
     const wasRelink = Boolean(selectedClient?.wispro_id);
+    const linkId =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `link_${Date.now()}`;
 
-    const saved = await wisproService.associateToConversation({
+    console.log("[WISPRO_ASSOCIATE] ui_associate_start", {
+      linkId,
       conversationId: selectedConversation.id,
-      customer,
-      invoicing,
       existingClientId: selectedConversation.client_id,
-      conversationPhone:
-        selectedConversation.customer_phone ??
-        selectedClient?.phone ??
-        selectedClient?.whatsapp_id ??
-        null,
-      whatsappId:
-        selectedClient?.whatsapp_id ??
-        selectedConversation.customer_phone ??
-        null,
-      waName: selectedClient?.wa_name ?? null,
+      wisproId: customer.id,
+      cedula: customer.national_identification_number,
+      wasRelink,
+      conversationPhone: selectedConversation.customer_phone || null,
+      clientWhatsappId: selectedClient?.whatsapp_id || null,
     });
 
-    setData((current) => {
-      const clientExists = current.clients.some((client) => client.id === saved.id);
+    try {
+      const saved = await wisproService.associateToConversation({
+        conversationId: selectedConversation.id,
+        customer,
+        invoicing,
+        existingClientId: selectedConversation.client_id,
+        conversationPhone:
+          selectedConversation.customer_phone ??
+          selectedClient?.phone ??
+          selectedClient?.whatsapp_id ??
+          null,
+        whatsappId:
+          selectedClient?.whatsapp_id ??
+          selectedConversation.customer_phone ??
+          null,
+        waName: selectedClient?.wa_name ?? null,
+        linkId,
+      });
 
-      return {
+      console.log("[WISPRO_ASSOCIATE] ui_associate_ok", {
+        linkId,
+        conversationId: selectedConversation.id,
+        clientId: saved.id,
+        wisproId: saved.wispro_id || null,
+        hasWhatsappId: Boolean(saved.whatsapp_id),
+        hasEnvoicing: Boolean(saved.envoicing),
+        account: saved.account,
+      });
+
+      if (!saved.wispro_id) {
+        console.error("[WISPRO_ASSOCIATE] ui_verify_failed_wispro_id_null", {
+          linkId,
+          clientId: saved.id,
+          expectedWisproId: customer.id,
+        });
+      }
+
+      setData((current) => {
+        const clientExists = current.clients.some((client) => client.id === saved.id);
+
+        return {
+          ...current,
+          clients: clientExists
+            ? current.clients.map((client) => {
+                if (client.id === saved.id) return saved;
+                // Another row may have been cleared of this wispro_id on the server.
+                if (client.wispro_id === customer.id && client.id !== saved.id) {
+                  return {
+                    ...client,
+                    wispro_id: null,
+                    envoicing: null,
+                    account: "Prospecto",
+                  };
+                }
+                return client;
+              })
+            : [...current.clients, saved],
+          conversations: current.conversations.map((conversation) =>
+            conversation.id === selectedConversation.id
+              ? { ...conversation, client_id: saved.id }
+              : conversation,
+          ),
+        };
+      });
+
+      setWisproSnapshotsByClientId((current) => ({
         ...current,
-        clients: clientExists
-          ? current.clients.map((client) => {
-              if (client.id === saved.id) return saved;
-              // Another row may have been cleared of this wispro_id on the server.
-              if (client.wispro_id === customer.id && client.id !== saved.id) {
-                return {
-                  ...client,
-                  wispro_id: null,
-                  envoicing: null,
-                  account: "Prospecto",
-                };
-              }
-              return client;
-            })
-          : [...current.clients, saved],
-        conversations: current.conversations.map((conversation) =>
-          conversation.id === selectedConversation.id
-            ? { ...conversation, client_id: saved.id }
-            : conversation,
-        ),
-      };
-    });
+        [saved.id]: customer,
+      }));
 
-    setWisproSnapshotsByClientId((current) => ({
-      ...current,
-      [saved.id]: customer,
-    }));
-
-    toast.success(
-      wasRelink
-        ? `Vinculación actualizada: ${saved.name}`
-        : `${saved.name} asociado a la conversación`,
-    );
+      toast.success(
+        wasRelink
+          ? `Vinculación actualizada: ${saved.name}`
+          : `${saved.name} asociado a la conversación`,
+      );
+    } catch (error) {
+      console.error("[WISPRO_ASSOCIATE] ui_associate_error", {
+        linkId,
+        conversationId: selectedConversation.id,
+        wisproId: customer.id,
+        message: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
   };
 
   const unlinkWisproFromClient = async () => {

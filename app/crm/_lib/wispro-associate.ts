@@ -3,13 +3,56 @@ import { getColorByIndex, getInitials } from "./formatters";
 import { serializeWisproLinkForDb } from "./wispro-webhook";
 import type { AssociateWisproInput, Client } from "./types";
 
+const LOG_PREFIX = "[WISPRO_ASSOCIATE]";
 const DEFAULT_PLAN = "Sin asignar";
 const DEFAULT_ZONE = "Sin asignar";
 
-const throwDbError = (error: { message: string } | null, fallback: string) => {
-  if (error) {
-    throw new Error(error.message || fallback);
+const maskPhone = (value?: string | null) => {
+  const digits = String(value || "").replace(/\D/g, "");
+  if (digits.length < 6) return digits ? "***" : null;
+  return `${digits.slice(0, 4)}***${digits.slice(-3)}`;
+};
+
+const createLinkId = () => {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
   }
+  return `link_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+};
+
+const describeDbError = (error: unknown) => {
+  if (!error || typeof error !== "object") {
+    return { message: String(error || "unknown_error") };
+  }
+
+  const record = error as {
+    message?: string;
+    code?: string;
+    details?: string;
+    hint?: string;
+  };
+
+  return {
+    message: record.message || "unknown_error",
+    code: record.code || null,
+    details: record.details || null,
+    hint: record.hint || null,
+  };
+};
+
+const throwDbError = (
+  error: { message: string } | null,
+  fallback: string,
+  context?: Record<string, unknown>,
+) => {
+  if (!error) return;
+
+  console.error(`${LOG_PREFIX} db_error`, {
+    ...context,
+    fallback,
+    ...describeDbError(error),
+  });
+  throw new Error(error.message || fallback);
 };
 
 const ensureClient = (data: Client | null, fallback: string): Client => {
@@ -27,7 +70,13 @@ const normalizePhone = (value?: string | null) => {
 const clearWisproFieldsFromClient = async (
   supabase: SupabaseClient,
   clientId: number,
+  linkId: string,
 ) => {
+  console.warn(`${LOG_PREFIX} wispro_freed_from_other_client`, {
+    linkId,
+    otherClientId: clientId,
+  });
+
   const { error } = await supabase
     .from("clients")
     .update({
@@ -38,13 +87,18 @@ const clearWisproFieldsFromClient = async (
     })
     .eq("id", clientId);
 
-  throwDbError(error, "No se pudo liberar la vinculación Wispro previa");
+  throwDbError(error, "No se pudo liberar la vinculación Wispro previa", {
+    linkId,
+    otherClientId: clientId,
+    step: "clear_other_wispro",
+  });
 };
 
 const findClientByWhatsappOrPhone = async (
   supabase: SupabaseClient,
-  whatsappId?: string | null,
-  conversationPhone?: string | null,
+  whatsappId: string | null | undefined,
+  conversationPhone: string | null | undefined,
+  linkId: string,
 ) => {
   const wa = normalizePhone(whatsappId) || normalizePhone(conversationPhone);
   if (!wa) return null;
@@ -56,8 +110,19 @@ const findClientByWhatsappOrPhone = async (
     .limit(1)
     .maybeSingle<Client>();
 
-  throwDbError(byWhatsappError, "No se pudo buscar el cliente por WhatsApp");
-  if (byWhatsapp) return byWhatsapp;
+  throwDbError(byWhatsappError, "No se pudo buscar el cliente por WhatsApp", {
+    linkId,
+    step: "lookup_by_whatsapp",
+    phone: maskPhone(wa),
+  });
+  if (byWhatsapp) {
+    console.log(`${LOG_PREFIX} lookup_by_whatsapp_hit`, {
+      linkId,
+      clientId: byWhatsapp.id,
+      phone: maskPhone(wa),
+    });
+    return byWhatsapp;
+  }
 
   const { data: byPhone, error: byPhoneError } = await supabase
     .from("clients")
@@ -66,7 +131,20 @@ const findClientByWhatsappOrPhone = async (
     .limit(1)
     .maybeSingle<Client>();
 
-  throwDbError(byPhoneError, "No se pudo buscar el cliente por teléfono");
+  throwDbError(byPhoneError, "No se pudo buscar el cliente por teléfono", {
+    linkId,
+    step: "lookup_by_phone",
+    phone: maskPhone(wa),
+  });
+
+  if (byPhone) {
+    console.log(`${LOG_PREFIX} lookup_by_phone_hit`, {
+      linkId,
+      clientId: byPhone.id,
+      phone: maskPhone(wa),
+    });
+  }
+
   return byPhone;
 };
 
@@ -78,6 +156,7 @@ const createAnchorClient = async (
     whatsappId?: string | null;
     waName?: string | null;
     existingClientsCount?: number;
+    linkId: string;
   },
 ) => {
   let clientsCount = input.existingClientsCount;
@@ -87,7 +166,10 @@ const createAnchorClient = async (
       .from("clients")
       .select("*", { count: "exact", head: true });
 
-    throwDbError(countError, "No se pudo preparar la asociación");
+    throwDbError(countError, "No se pudo preparar la asociación", {
+      linkId: input.linkId,
+      step: "count_clients",
+    });
     clientsCount = count ?? 0;
   }
 
@@ -109,8 +191,19 @@ const createAnchorClient = async (
     .select()
     .single<Client>();
 
-  throwDbError(error, "No se pudo crear el cliente del chat");
-  return ensureClient(data, "No se pudo crear el cliente del chat");
+  throwDbError(error, "No se pudo crear el cliente del chat", {
+    linkId: input.linkId,
+    step: "create_anchor",
+    phone: maskPhone(input.phone),
+  });
+
+  const created = ensureClient(data, "No se pudo crear el cliente del chat");
+  console.log(`${LOG_PREFIX} anchor_created`, {
+    linkId: input.linkId,
+    clientId: created.id,
+    phone: maskPhone(input.phone),
+  });
+  return created;
 };
 
 /**
@@ -121,6 +214,7 @@ export const associateWisproClient = async (
   supabase: SupabaseClient,
   input: AssociateWisproInput,
 ) => {
+  const linkId = input.linkId?.trim() || createLinkId();
   const {
     conversationId,
     customer,
@@ -140,16 +234,49 @@ export const associateWisproClient = async (
     normalizePhone(customer.phone_mobile);
   const displayWaName = waName?.trim() || null;
 
+  console.log(`${LOG_PREFIX} started`, {
+    linkId,
+    conversationId,
+    wisproId: customer.id,
+    cedula: customer.national_identification_number,
+    existingClientId: existingClientId ?? null,
+    accountStatus: invoicing.accountStatus,
+    serviceSuspended: Boolean(invoicing.serviceSuspended),
+    hasDebt: invoicing.hasDebt,
+    debt: invoicing.debt,
+    conversationPhone: maskPhone(conversationPhone),
+    whatsappId: maskPhone(whatsappId),
+    wisproPhone: maskPhone(customer.phone_mobile),
+    waIdentity: maskPhone(waIdentity),
+  });
+
+  if (!waIdentity) {
+    console.warn(`${LOG_PREFIX} warn_missing_wa_identity`, {
+      linkId,
+      conversationId,
+      risk: "webhook_may_create_new_unlinked_client",
+    });
+  }
+
   const { data: existingByWispro, error: lookupError } = await supabase
     .from("clients")
     .select("*")
     .eq("wispro_id", customer.id)
     .maybeSingle<Client>();
 
-  throwDbError(lookupError, "No se pudo buscar el cliente en Wispro");
+  throwDbError(lookupError, "No se pudo buscar el cliente en Wispro", {
+    linkId,
+    step: "lookup_by_wispro_id",
+    wisproId: customer.id,
+  });
 
   // 1) Resolve chat anchor: conversation client → WA/phone match → create.
   let anchor: Client | null = null;
+  let anchorSource:
+    | "conversation_client"
+    | "whatsapp_lookup"
+    | "phone_lookup"
+    | "created" = "created";
 
   if (existingClientId) {
     const { data: currentClient, error: currentError } = await supabase
@@ -158,21 +285,40 @@ export const associateWisproClient = async (
       .eq("id", existingClientId)
       .maybeSingle<Client>();
 
-    throwDbError(currentError, "No se pudo cargar el cliente de la conversación");
+    throwDbError(currentError, "No se pudo cargar el cliente de la conversación", {
+      linkId,
+      step: "load_conversation_client",
+      existingClientId,
+    });
     if (!currentClient) {
+      console.error(`${LOG_PREFIX} conversation_client_missing`, {
+        linkId,
+        conversationId,
+        existingClientId,
+      });
       throw new Error("El cliente de la conversación no existe");
     }
     anchor = currentClient;
+    anchorSource = "conversation_client";
   } else {
-    anchor = await findClientByWhatsappOrPhone(
+    const found = await findClientByWhatsappOrPhone(
       supabase,
       whatsappId,
       conversationPhone,
+      linkId,
     );
+    if (found) {
+      anchor = found;
+      anchorSource = found.whatsapp_id ? "whatsapp_lookup" : "phone_lookup";
+    }
   }
 
   if (!anchor) {
     if (!waIdentity) {
+      console.error(`${LOG_PREFIX} cannot_create_anchor_without_phone`, {
+        linkId,
+        conversationId,
+      });
       throw new Error(
         "No hay teléfono/WhatsApp en la conversación para vincular el cliente",
       );
@@ -189,12 +335,33 @@ export const associateWisproClient = async (
       whatsappId: waIdentity,
       waName: displayWaName,
       existingClientsCount,
+      linkId,
     });
+    anchorSource = "created";
   }
+
+  console.log(`${LOG_PREFIX} anchor_resolved`, {
+    linkId,
+    conversationId,
+    anchorClientId: anchor.id,
+    source: anchorSource,
+    hadWispro: Boolean(anchor.wispro_id),
+    priorWisproId: anchor.wispro_id || null,
+    hadWhatsappId: Boolean(anchor.whatsapp_id),
+    hadPhone: Boolean(anchor.phone),
+    phone: maskPhone(anchor.phone),
+    whatsappId: maskPhone(anchor.whatsapp_id),
+  });
 
   // 2) Free wispro_id if held by another CRM row (keep WA chat as anchor).
   if (existingByWispro && existingByWispro.id !== anchor.id) {
-    await clearWisproFieldsFromClient(supabase, existingByWispro.id);
+    await clearWisproFieldsFromClient(supabase, existingByWispro.id, linkId);
+  } else if (existingByWispro) {
+    console.log(`${LOG_PREFIX} wispro_already_on_anchor`, {
+      linkId,
+      anchorClientId: anchor.id,
+      wisproId: customer.id,
+    });
   }
 
   // 3) Merge Wispro + ensure WhatsApp identity on the same row.
@@ -222,6 +389,17 @@ export const associateWisproClient = async (
     updatePayload.wa_name = displayWaName;
   }
 
+  console.log(`${LOG_PREFIX} client_update_payload`, {
+    linkId,
+    anchorClientId: anchor.id,
+    keys: Object.keys(updatePayload),
+    account: updatePayload.account,
+    zone: updatePayload.zone,
+    willSetPhone: Boolean(updatePayload.phone),
+    willSetWhatsappId: Boolean(updatePayload.whatsapp_id),
+    envoicingBytes: envoicingPayload.length,
+  });
+
   const { data: updated, error: updateError } = await supabase
     .from("clients")
     .update(updatePayload)
@@ -229,10 +407,35 @@ export const associateWisproClient = async (
     .select()
     .single<Client>();
 
-  throwDbError(updateError, "No se pudo actualizar el cliente");
+  if (updateError) {
+    console.error(`${LOG_PREFIX} client_update_failed`, {
+      linkId,
+      anchorClientId: anchor.id,
+      wisproId: customer.id,
+      account: invoicing.accountStatus,
+      ...describeDbError(updateError),
+    });
+    throw new Error(updateError.message || "No se pudo actualizar el cliente");
+  }
+
   const client = ensureClient(updated, "No se pudo actualizar el cliente");
 
+  console.log(`${LOG_PREFIX} client_update_ok`, {
+    linkId,
+    clientId: client.id,
+    wisproId: client.wispro_id || null,
+    account: client.account,
+    whatsappId: maskPhone(client.whatsapp_id),
+    phone: maskPhone(client.phone),
+    hasEnvoicing: Boolean(client.envoicing),
+  });
+
   if (!client.wispro_id) {
+    console.error(`${LOG_PREFIX} verify_failed_wispro_id_null`, {
+      linkId,
+      clientId: client.id,
+      expectedWisproId: customer.id,
+    });
     throw new Error("La vinculación no persistió el wispro_id del cliente");
   }
 
@@ -255,10 +458,38 @@ export const associateWisproClient = async (
     })
     .eq("id", conversationId);
 
-  throwDbError(
-    conversationError,
-    "No se pudo vincular el cliente a la conversación",
-  );
+  if (conversationError) {
+    console.error(`${LOG_PREFIX} conversation_update_failed`, {
+      linkId,
+      conversationId,
+      clientId: client.id,
+      customerPhone: maskPhone(customerPhoneForConversation),
+      ...describeDbError(conversationError),
+    });
+    throw new Error(
+      conversationError.message ||
+        "No se pudo vincular el cliente a la conversación",
+    );
+  }
+
+  console.log(`${LOG_PREFIX} conversation_update_ok`, {
+    linkId,
+    conversationId,
+    clientId: client.id,
+    customerPhone: maskPhone(customerPhoneForConversation),
+  });
+
+  console.log(`${LOG_PREFIX} completed`, {
+    linkId,
+    conversationId,
+    clientId: client.id,
+    wisproId: client.wispro_id,
+    whatsappId: maskPhone(client.whatsapp_id),
+    phone: maskPhone(client.phone),
+    account: client.account,
+    hasEnvoicing: Boolean(client.envoicing),
+    anchorSource,
+  });
 
   return client;
 };
@@ -270,18 +501,26 @@ export const unlinkWisproClient = async (
   supabase: SupabaseClient,
   clientId: number,
 ) => {
+  const linkId = createLinkId();
+  console.log(`${LOG_PREFIX} unlink_started`, { linkId, clientId });
+
   const { data: currentClient, error: lookupError } = await supabase
     .from("clients")
     .select("*")
     .eq("id", clientId)
     .maybeSingle<Client>();
 
-  throwDbError(lookupError, "No se pudo cargar el cliente");
+  throwDbError(lookupError, "No se pudo cargar el cliente", {
+    linkId,
+    clientId,
+    step: "unlink_load",
+  });
   if (!currentClient) {
     throw new Error("El cliente no existe");
   }
 
   if (!currentClient.wispro_id) {
+    console.log(`${LOG_PREFIX} unlink_noop`, { linkId, clientId });
     return currentClient;
   }
 
@@ -304,6 +543,17 @@ export const unlinkWisproClient = async (
     .select()
     .single<Client>();
 
-  throwDbError(error, "No se pudo desvincular Wispro");
-  return ensureClient(data, "No se pudo desvincular Wispro");
+  throwDbError(error, "No se pudo desvincular Wispro", {
+    linkId,
+    clientId,
+    step: "unlink_update",
+  });
+
+  const unlinked = ensureClient(data, "No se pudo desvincular Wispro");
+  console.log(`${LOG_PREFIX} unlink_completed`, {
+    linkId,
+    clientId: unlinked.id,
+    priorWisproId: currentClient.wispro_id,
+  });
+  return unlinked;
 };

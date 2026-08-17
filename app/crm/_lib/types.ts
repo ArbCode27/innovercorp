@@ -119,6 +119,8 @@ export interface AssociateWisproInput {
   conversationPhone?: string | null;
   whatsappId?: string | null;
   waName?: string | null;
+  /** Correlation id for server logs (optional). */
+  linkId?: string | null;
 }
 
 export interface Conversation {
