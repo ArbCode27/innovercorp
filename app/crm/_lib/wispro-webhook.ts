@@ -206,6 +206,65 @@ export const serializeInvoicingForDb = (
   });
 };
 
+/** Always persist Wispro link metadata (incl. cedula) so UI survives reload. */
+export const serializeWisproLinkForDb = (
+  invoicing: WisproInvoicingSummary,
+  customer: WisproCustomer,
+): string => {
+  return JSON.stringify({
+    debt: invoicing.debt,
+    hasDebt: invoicing.hasDebt,
+    serviceSuspended: Boolean(invoicing.serviceSuspended),
+    contractState: invoicing.contractState ?? null,
+    calculatedAt: new Date().toISOString(),
+    source: invoicing.snapshot,
+    cedula: customer.national_identification_number,
+    wisproCustomer: {
+      id: customer.id,
+      name: customer.name,
+      national_identification_number: customer.national_identification_number,
+      phone_mobile: customer.phone_mobile ?? null,
+      zone_name: customer.zone_name ?? null,
+      city: customer.city ?? null,
+      state: customer.state ?? null,
+    },
+  });
+};
+
+export const parseWisproCustomerFromEnvoicing = (
+  envoicing: string | null | undefined,
+): WisproCustomer | null => {
+  if (!envoicing?.trim()) return null;
+
+  try {
+    const parsed = JSON.parse(envoicing) as {
+      wisproCustomer?: Partial<WisproCustomer> | null;
+      cedula?: string | null;
+    };
+
+    const snapshot = parsed.wisproCustomer;
+    const id = String(snapshot?.id || "").trim();
+    const name = String(snapshot?.name || "").trim();
+    const cedula = String(
+      snapshot?.national_identification_number || parsed.cedula || "",
+    ).trim();
+
+    if (!id || !name || !cedula) return null;
+
+    return {
+      id,
+      name,
+      national_identification_number: cedula,
+      phone_mobile: snapshot?.phone_mobile ?? null,
+      zone_name: snapshot?.zone_name ?? null,
+      city: snapshot?.city ?? null,
+      state: snapshot?.state ?? null,
+    };
+  } catch {
+    return null;
+  }
+};
+
 export const parseWisproCustomers = (
   proxyData: unknown,
   options?: { fallbackCedula?: string },

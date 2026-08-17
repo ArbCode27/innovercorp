@@ -17,6 +17,7 @@ import {
 } from "../_lib/conversation-inbox-utils";
 import { wisproService } from "../_lib/wispro-service";
 import { isAdminRole } from "../_lib/agent-role-utils";
+import { parseWisproCustomerFromEnvoicing } from "../_lib/wispro-webhook";
 import { useSendMessage } from "./use-send-message";
 import type {
   Agent,
@@ -288,6 +289,17 @@ export const useCrmData = (agent: Agent | null) => {
     try {
       const nextData = await crmService.loadAll(agent);
       setData(nextData);
+
+      // Rehydrate Wispro snapshots from persisted envoicing (survives reload).
+      const snapshots: Record<number, WisproCustomer> = {};
+      for (const client of nextData.clients) {
+        if (!client.wispro_id) continue;
+        const snapshot = parseWisproCustomerFromEnvoicing(client.envoicing);
+        if (snapshot) {
+          snapshots[client.id] = snapshot;
+        }
+      }
+      setWisproSnapshotsByClientId(snapshots);
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "No se pudo cargar el CRM",
@@ -872,9 +884,16 @@ export const useCrmData = (agent: Agent | null) => {
       customer,
       invoicing,
       existingClientId: selectedConversation.client_id,
-      conversationPhone: selectedClient?.phone ?? selectedClient?.whatsapp_id,
-      whatsappId: selectedClient?.whatsapp_id,
-      waName: selectedClient?.wa_name,
+      conversationPhone:
+        selectedConversation.customer_phone ??
+        selectedClient?.phone ??
+        selectedClient?.whatsapp_id ??
+        null,
+      whatsappId:
+        selectedClient?.whatsapp_id ??
+        selectedConversation.customer_phone ??
+        null,
+      waName: selectedClient?.wa_name ?? null,
     });
 
     setData((current) => {

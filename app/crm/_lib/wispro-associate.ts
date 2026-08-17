@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getColorByIndex, getInitials } from "./formatters";
-import { serializeInvoicingForDb } from "./wispro-webhook";
+import { serializeWisproLinkForDb } from "./wispro-webhook";
 import type { AssociateWisproInput, Client } from "./types";
 
 const DEFAULT_PLAN = "Sin asignar";
@@ -16,23 +16,12 @@ const ensureClient = (data: Client | null, fallback: string): Client => {
   if (!data) {
     throw new Error(fallback);
   }
-
   return data;
 };
 
-const resolveClientPhone = (
-  customerPhone?: string | null,
-  conversationPhone?: string | null,
-) => {
-  const phone = customerPhone?.trim() || conversationPhone?.trim() || "";
-
-  if (!phone) {
-    throw new Error(
-      "El cliente de Wispro no tiene teléfono registrado. No se puede crear el cliente.",
-    );
-  }
-
-  return phone;
+const normalizePhone = (value?: string | null) => {
+  const digits = String(value || "").replace(/\D/g, "");
+  return digits.length >= 8 ? digits : "";
 };
 
 const clearWisproFieldsFromClient = async (
@@ -52,9 +41,81 @@ const clearWisproFieldsFromClient = async (
   throwDbError(error, "No se pudo liberar la vinculación Wispro previa");
 };
 
+const findClientByWhatsappOrPhone = async (
+  supabase: SupabaseClient,
+  whatsappId?: string | null,
+  conversationPhone?: string | null,
+) => {
+  const wa = normalizePhone(whatsappId) || normalizePhone(conversationPhone);
+  if (!wa) return null;
+
+  const { data: byWhatsapp, error: byWhatsappError } = await supabase
+    .from("clients")
+    .select("*")
+    .eq("whatsapp_id", wa)
+    .limit(1)
+    .maybeSingle<Client>();
+
+  throwDbError(byWhatsappError, "No se pudo buscar el cliente por WhatsApp");
+  if (byWhatsapp) return byWhatsapp;
+
+  const { data: byPhone, error: byPhoneError } = await supabase
+    .from("clients")
+    .select("*")
+    .eq("phone", wa)
+    .limit(1)
+    .maybeSingle<Client>();
+
+  throwDbError(byPhoneError, "No se pudo buscar el cliente por teléfono");
+  return byPhone;
+};
+
+const createAnchorClient = async (
+  supabase: SupabaseClient,
+  input: {
+    name: string;
+    phone: string;
+    whatsappId?: string | null;
+    waName?: string | null;
+    existingClientsCount?: number;
+  },
+) => {
+  let clientsCount = input.existingClientsCount;
+
+  if (clientsCount == null) {
+    const { count, error: countError } = await supabase
+      .from("clients")
+      .select("*", { count: "exact", head: true });
+
+    throwDbError(countError, "No se pudo preparar la asociación");
+    clientsCount = count ?? 0;
+  }
+
+  const color = getColorByIndex(clientsCount);
+  const { data, error } = await supabase
+    .from("clients")
+    .insert({
+      name: input.name,
+      phone: input.phone,
+      plan: DEFAULT_PLAN,
+      zone: DEFAULT_ZONE,
+      account: "Prospecto",
+      color: color.color,
+      bg: color.bg,
+      initials: getInitials(input.name),
+      ...(input.whatsappId ? { whatsapp_id: input.whatsappId } : {}),
+      ...(input.waName ? { wa_name: input.waName } : {}),
+    })
+    .select()
+    .single<Client>();
+
+  throwDbError(error, "No se pudo crear el cliente del chat");
+  return ensureClient(data, "No se pudo crear el cliente del chat");
+};
+
 /**
- * Links (or re-links) a Wispro customer to a CRM conversation's client.
- * Preserves WhatsApp identity on re-link; frees wispro_id if held by another client.
+ * Links Wispro to the WhatsApp chat client (single identity).
+ * Never moves the conversation to a Wispro-only row without WA identity.
  */
 export const associateWisproClient = async (
   supabase: SupabaseClient,
@@ -72,7 +133,12 @@ export const associateWisproClient = async (
   } = input;
 
   const zone = customer.zone_name?.trim() || DEFAULT_ZONE;
-  const envoicingPayload = serializeInvoicingForDb(invoicing);
+  const envoicingPayload = serializeWisproLinkForDb(invoicing, customer);
+  const waIdentity =
+    normalizePhone(whatsappId) ||
+    normalizePhone(conversationPhone) ||
+    normalizePhone(customer.phone_mobile);
+  const displayWaName = waName?.trim() || null;
 
   const { data: existingByWispro, error: lookupError } = await supabase
     .from("clients")
@@ -82,7 +148,8 @@ export const associateWisproClient = async (
 
   throwDbError(lookupError, "No se pudo buscar el cliente en Wispro");
 
-  let client: Client;
+  // 1) Resolve chat anchor: conversation client → WA/phone match → create.
+  let anchor: Client | null = null;
 
   if (existingClientId) {
     const { data: currentClient, error: currentError } = await supabase
@@ -95,121 +162,103 @@ export const associateWisproClient = async (
     if (!currentClient) {
       throw new Error("El cliente de la conversación no existe");
     }
-
-    // Same Wispro already on another CRM row → free it so this chat keeps its WA identity.
-    if (existingByWispro && existingByWispro.id !== existingClientId) {
-      await clearWisproFieldsFromClient(supabase, existingByWispro.id);
-    }
-
-    const updatePayload: Record<string, string | null> = {
-      wispro_id: customer.id,
-      name: customer.name,
-      zone,
-      account: invoicing.accountStatus,
-      envoicing: envoicingPayload,
-      initials: getInitials(customer.name),
-    };
-
-    // Preserve WhatsApp identity; only fill missing phone from Wispro/conversation.
-    if (!currentClient.phone?.trim()) {
-      const fallbackPhone =
-        conversationPhone?.trim() ||
-        customer.phone_mobile?.trim() ||
-        whatsappId?.trim() ||
-        "";
-      if (fallbackPhone) {
-        updatePayload.phone = fallbackPhone;
-      }
-    }
-
-    if (whatsappId && !currentClient.whatsapp_id) {
-      updatePayload.whatsapp_id = whatsappId;
-    }
-
-    if (waName && !currentClient.wa_name) {
-      updatePayload.wa_name = waName;
-    }
-
-    const { data, error } = await supabase
-      .from("clients")
-      .update(updatePayload)
-      .eq("id", existingClientId)
-      .select()
-      .single<Client>();
-
-    throwDbError(error, "No se pudo actualizar el cliente");
-    client = ensureClient(data, "No se pudo actualizar el cliente");
-  } else if (existingByWispro) {
-    const { data, error } = await supabase
-      .from("clients")
-      .update({
-        wispro_id: customer.id,
-        name: customer.name,
-        zone,
-        phone: resolveClientPhone(customer.phone_mobile, conversationPhone),
-        account: invoicing.accountStatus,
-        envoicing: envoicingPayload,
-        initials: getInitials(customer.name),
-        ...(whatsappId ? { whatsapp_id: whatsappId } : {}),
-        ...(waName ? { wa_name: waName } : {}),
-      })
-      .eq("id", existingByWispro.id)
-      .select()
-      .single<Client>();
-
-    throwDbError(error, "No se pudo actualizar el cliente de Wispro");
-    client = ensureClient(data, "No se pudo actualizar el cliente de Wispro");
+    anchor = currentClient;
   } else {
-    const phone = resolveClientPhone(customer.phone_mobile, conversationPhone);
-    let clientsCount = existingClientsCount;
+    anchor = await findClientByWhatsappOrPhone(
+      supabase,
+      whatsappId,
+      conversationPhone,
+    );
+  }
 
-    if (clientsCount == null) {
-      const { count, error: countError } = await supabase
-        .from("clients")
-        .select("*", { count: "exact", head: true });
-
-      throwDbError(countError, "No se pudo preparar la asociación");
-      clientsCount = count ?? 0;
+  if (!anchor) {
+    if (!waIdentity) {
+      throw new Error(
+        "No hay teléfono/WhatsApp en la conversación para vincular el cliente",
+      );
     }
 
-    const color = getColorByIndex(clientsCount);
-    const { data, error } = await supabase
-      .from("clients")
-      .insert({
-        name: customer.name,
-        phone,
-        plan: DEFAULT_PLAN,
-        zone,
-        account: invoicing.accountStatus,
-        envoicing: envoicingPayload,
-        wispro_id: customer.id,
-        color: color.color,
-        bg: color.bg,
-        initials: getInitials(customer.name),
-        ...(whatsappId ? { whatsapp_id: whatsappId } : {}),
-        ...(waName ? { wa_name: waName } : {}),
-      })
-      .select()
-      .single<Client>();
+    const anchorName =
+      displayWaName ||
+      customer.name.trim() ||
+      "Número desconocido";
 
-    throwDbError(error, "No se pudo crear el cliente");
-    client = ensureClient(data, "No se pudo crear el cliente");
+    anchor = await createAnchorClient(supabase, {
+      name: anchorName,
+      phone: waIdentity,
+      whatsappId: waIdentity,
+      waName: displayWaName,
+      existingClientsCount,
+    });
   }
+
+  // 2) Free wispro_id if held by another CRM row (keep WA chat as anchor).
+  if (existingByWispro && existingByWispro.id !== anchor.id) {
+    await clearWisproFieldsFromClient(supabase, existingByWispro.id);
+  }
+
+  // 3) Merge Wispro + ensure WhatsApp identity on the same row.
+  const updatePayload: Record<string, string | null> = {
+    wispro_id: customer.id,
+    name: customer.name,
+    zone,
+    account: invoicing.accountStatus,
+    envoicing: envoicingPayload,
+    initials: getInitials(customer.name),
+  };
+
+  if (waIdentity) {
+    if (!anchor.phone?.trim()) {
+      updatePayload.phone = waIdentity;
+    }
+    if (!anchor.whatsapp_id?.trim()) {
+      updatePayload.whatsapp_id = waIdentity;
+    }
+  } else if (!anchor.phone?.trim() && customer.phone_mobile?.trim()) {
+    updatePayload.phone = customer.phone_mobile.trim();
+  }
+
+  if (displayWaName && !anchor.wa_name?.trim()) {
+    updatePayload.wa_name = displayWaName;
+  }
+
+  const { data: updated, error: updateError } = await supabase
+    .from("clients")
+    .update(updatePayload)
+    .eq("id", anchor.id)
+    .select()
+    .single<Client>();
+
+  throwDbError(updateError, "No se pudo actualizar el cliente");
+  const client = ensureClient(updated, "No se pudo actualizar el cliente");
+
+  if (!client.wispro_id) {
+    throw new Error("La vinculación no persistió el wispro_id del cliente");
+  }
+
+  // 4) Keep conversation on the chat anchor (never switch to a Wispro-only row).
+  const customerPhoneForConversation =
+    conversationPhone?.trim() ||
+    whatsappId?.trim() ||
+    client.whatsapp_id?.trim() ||
+    client.phone?.trim() ||
+    null;
 
   const { error: conversationError } = await supabase
     .from("conversations")
     .update({
       client_id: client.id,
-      ...(conversationPhone?.trim()
-        ? { customer_phone: conversationPhone.trim() }
-        : whatsappId?.trim()
-          ? { customer_phone: whatsappId.trim() }
-          : {}),
+      ...(customerPhoneForConversation
+        ? { customer_phone: customerPhoneForConversation }
+        : {}),
       updated_at: new Date().toISOString(),
     })
     .eq("id", conversationId);
 
-  throwDbError(conversationError, "No se pudo vincular el cliente a la conversación");
+  throwDbError(
+    conversationError,
+    "No se pudo vincular el cliente a la conversación",
+  );
 
   return client;
 };

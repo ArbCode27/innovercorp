@@ -78,9 +78,13 @@ export async function POST(req: NextRequest) {
 
     const { data: conversation, error: conversationError } = await supabase
       .from("conversations")
-      .select("id, client_id")
+      .select("id, client_id, customer_phone")
       .eq("id", conversationId)
-      .maybeSingle<{ id: number; client_id: number | null }>();
+      .maybeSingle<{
+        id: number;
+        client_id: number | null;
+        customer_phone: string | null;
+      }>();
 
     if (conversationError) {
       console.error("Wispro associate conversation lookup:", conversationError);
@@ -102,8 +106,8 @@ export async function POST(req: NextRequest) {
       customer,
       invoicing,
       existingClientId: existingClientId ?? conversation.client_id,
-      conversationPhone,
-      whatsappId,
+      conversationPhone: conversationPhone ?? conversation.customer_phone,
+      whatsappId: whatsappId ?? conversation.customer_phone,
       waName,
     });
 

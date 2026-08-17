@@ -295,6 +295,54 @@ const findOrCreateClient = async (
     return updatedClient;
   }
 
+  // Prefer the active conversation's linked client (may have wispro_id but missing whatsapp_id).
+  const { data: activeByPhone, error: activeByPhoneError } = await supabase
+    .from("conversations")
+    .select("id, client_id")
+    .eq("customer_phone", from)
+    .in("status", ["abierto", "proceso"])
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (activeByPhoneError) {
+    console.warn(`${WEBHOOK_LOG_PREFIX} active_conversation_phone_lookup_failed`, {
+      from: maskPhone(from),
+      error: activeByPhoneError.message,
+    });
+  } else if (activeByPhone?.client_id) {
+    const { data: linkedClient, error: linkedClientError } = await supabase
+      .from("clients")
+      .select("*")
+      .eq("id", activeByPhone.client_id)
+      .maybeSingle();
+
+    if (linkedClientError) throw linkedClientError;
+
+    if (linkedClient) {
+      const { data: patchedClient, error: patchError } = await supabase
+        .from("clients")
+        .update({
+          whatsapp_id: linkedClient.whatsapp_id || from,
+          phone: linkedClient.phone || from,
+          wa_name: linkedClient.wa_name || profileWaName,
+        })
+        .eq("id", linkedClient.id)
+        .select("*")
+        .single();
+
+      if (patchError) throw patchError;
+
+      console.log(`${WEBHOOK_LOG_PREFIX} client_recovered_from_active_conversation`, {
+        clientId: patchedClient.id,
+        conversationId: activeByPhone.id,
+        from: maskPhone(from),
+        hasWispro: Boolean(patchedClient.wispro_id),
+      });
+      return patchedClient;
+    }
+  }
+
   const buildClientRow = (name: string, storedWaName: string | null) => ({
     name,
     phone: from,
