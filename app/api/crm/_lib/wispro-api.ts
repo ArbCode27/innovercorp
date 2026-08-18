@@ -204,6 +204,7 @@ const wisproPost = async (
   path: string,
   body: Record<string, unknown>,
 ): Promise<unknown> => {
+  const requestBodyLog = { ...body };
   const { token, baseUrl } = getWisproConfig();
   const url = `${baseUrl}${path.startsWith("/") ? path : `/${path}`}`;
 
@@ -223,6 +224,7 @@ const wisproPost = async (
   } catch (error) {
     console.error(`${LOG_PREFIX} post_failed`, {
       path,
+      body: requestBodyLog,
       error: error instanceof Error ? error.message : error,
     });
     throw new WisproApiError("No se pudo conectar con Wispro", {
@@ -241,6 +243,7 @@ const wisproPost = async (
     } catch {
       console.error(`${LOG_PREFIX} post_invalid_json`, {
         path,
+        body: requestBodyLog,
         status: response.status,
       });
       throw new WisproApiError("La respuesta de Wispro no es válida", {
@@ -253,6 +256,7 @@ const wisproPost = async (
   if (response.status === 401 || response.status === 403) {
     console.error(`${LOG_PREFIX} post_unauthorized`, {
       path,
+      body: requestBodyLog,
       status: response.status,
     });
     throw new WisproApiError("Wispro rechazó las credenciales de API", {
@@ -272,6 +276,7 @@ const wisproPost = async (
 
     console.error(`${LOG_PREFIX} post_upstream_error`, {
       path,
+      body: requestBodyLog,
       status: response.status,
       message,
     });
@@ -292,6 +297,7 @@ const wisproPost = async (
 
       console.error(`${LOG_PREFIX} post_body_error`, {
         path,
+        body: requestBodyLog,
         status,
         message,
       });
