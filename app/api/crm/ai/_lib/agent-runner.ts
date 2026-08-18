@@ -86,6 +86,7 @@ const createAgentContext = (input: {
   client: AgentClientSnapshot | null;
   runId: string;
   triggerMessageId?: number | null;
+  paymentRequestedByAgentId?: number | null;
   replyMode?: BotReplyMode;
   allowedToolNames?: string[] | null;
 }): AgentRunContext => ({
@@ -97,6 +98,7 @@ const createAgentContext = (input: {
   waName: input.client?.wa_name ?? null,
   runId: input.runId,
   triggerMessageId: input.triggerMessageId ?? null,
+  paymentRequestedByAgentId: input.paymentRequestedByAgentId ?? null,
   replyMode: input.replyMode ?? "full",
   allowedToolNames: input.allowedToolNames ?? null,
   lastLookupByWisproId: new Map(),
@@ -263,6 +265,7 @@ export const runGeminiAgent = async (input: {
   client: AgentClientSnapshot | null;
   messages: AgentHistoryMessage[];
   triggerMessageId?: number | null;
+  paymentRequestedByAgentId?: number | null;
   businessPrompt: string | null | undefined;
   model: string;
   replyMode?: BotReplyMode;
@@ -334,6 +337,7 @@ export const runGeminiAgent = async (input: {
       client: input.client,
       runId,
       triggerMessageId: input.triggerMessageId,
+      paymentRequestedByAgentId: input.paymentRequestedByAgentId,
       replyMode,
       allowedToolNames,
     });

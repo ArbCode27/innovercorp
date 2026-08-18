@@ -40,6 +40,7 @@ export type AgentRunContext = {
   waName: string | null;
   runId: string;
   triggerMessageId: number | null;
+  paymentRequestedByAgentId?: number | null;
   replyMode?: "full" | "after_hours_payments" | "forced" | "skip";
   allowedToolNames?: string[] | null;
   lastLookupByWisproId: Map<string, WisproSearchResult>;
@@ -796,6 +797,7 @@ const handleSubmitPaymentReceipt = async (
         clientId: ctx.clientId,
         conversationId: ctx.conversationId,
         messageId: receiptMessage?.id ?? null,
+        submittedByAgentId: ctx.paymentRequestedByAgentId ?? null,
         wisproClientId: payload.client_id,
         clientName: payload.name,
         cedula: payload.cedula,
@@ -805,7 +807,7 @@ const handleSubmitPaymentReceipt = async (
         transactionCode: payload.transaction_code,
         comment,
         status: "EN_PROCESO",
-        source: "ai",
+        source: ctx.paymentRequestedByAgentId ? "advisor" : "ai",
         externalApiStatus: result.status,
         externalResponse: result.body,
         receiptMediaUrl:
@@ -814,6 +816,11 @@ const handleSubmitPaymentReceipt = async (
               ? receiptMessage.media_url
               : null
             : null,
+        receiptMetadata: {
+          requested_manually: Boolean(ctx.paymentRequestedByAgentId),
+          requested_by_agent_id: ctx.paymentRequestedByAgentId ?? null,
+          requested_from_message_id: receiptMessage?.id ?? null,
+        },
       });
 
       crmPaymentMetadata = {

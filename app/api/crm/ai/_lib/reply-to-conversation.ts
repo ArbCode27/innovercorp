@@ -111,6 +111,7 @@ export const replyToConversationWithGemini = async (
      * so Gemini can still extract/submit while an advisor owns the chat.
      */
     forceRun?: boolean;
+    paymentRequestedByAgentId?: number | null;
   },
 ): Promise<AiReplyResult> => {
   const baseContext = {
@@ -260,6 +261,7 @@ export const replyToConversationWithGemini = async (
         client,
         messages: chronological,
         triggerMessageId: input.triggerMessageId,
+        paymentRequestedByAgentId: input.paymentRequestedByAgentId ?? null,
         businessPrompt: settings.ai_system_prompt,
         model: settings.gemini_model,
         replyMode: replyPolicy.mode,
@@ -384,7 +386,7 @@ export const replyToConversationWithGemini = async (
       const tryHandoffFallback = async (errorMessage: string) => {
         // Business handoff already decided — keep hard path so the client is covered.
         const fallback = await sendGuaranteedClientReply(supabase, {
-          conversationId: conversation.id,
+          conversationId: freshConversation.id,
           triggerMessageId: input.triggerMessageId,
           customerPhone: freshConversation.customer_phone,
           whatsappId: client?.whatsapp_id,

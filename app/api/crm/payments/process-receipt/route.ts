@@ -220,6 +220,7 @@ export async function POST(req: NextRequest) {
           conversationId,
           triggerMessageId: message.id,
           forceRun: true,
+          paymentRequestedByAgentId: agentId,
         });
 
         console.log("[PROCESS_RECEIPT] gemini_finished", {
