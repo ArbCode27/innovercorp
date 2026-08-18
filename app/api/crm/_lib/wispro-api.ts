@@ -281,6 +281,27 @@ const wisproPost = async (
     });
   }
 
+  if (payload && typeof payload === "object") {
+    const status = Number((payload as { status?: unknown }).status);
+    if (Number.isFinite(status) && status >= 400) {
+      const message =
+        "message" in payload &&
+        typeof (payload as { message?: unknown }).message === "string"
+          ? String((payload as { message: string }).message)
+          : "Wispro no pudo completar la operación";
+
+      console.error(`${LOG_PREFIX} post_body_error`, {
+        path,
+        status,
+        message,
+      });
+      throw new WisproApiError(message, {
+        status,
+        code: status === 401 || status === 403 ? "unauthorized" : "upstream",
+      });
+    }
+  }
+
   return payload;
 };
 
@@ -300,6 +321,25 @@ export type WisproPaymentPromise = {
   contract_id: string;
   created_at: string | null;
   updated_at: string | null;
+};
+
+export type WisproInvoicingPayment = {
+  id: string;
+  client_id: string;
+  amount: number;
+  payment_date: string;
+  state: string | null;
+  transaction_code: string | null;
+  comment: string | null;
+  raw: unknown;
+};
+
+export type CreateWisproInvoicingPaymentInput = {
+  clientId: string;
+  amount: number;
+  paymentDate: string;
+  transactionCode?: string | null;
+  comment?: string | null;
 };
 
 export type CreatePaymentPromiseResult =
@@ -564,6 +604,72 @@ export const createPaymentPromise = async (
     contract_id: String(row?.contract_id || contractId),
     created_at: row?.created_at ? String(row.created_at) : null,
     updated_at: row?.updated_at ? String(row.updated_at) : null,
+  };
+};
+
+const toWisproPaymentDate = (value: string) => {
+  const dateOnly = value.slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateOnly)) {
+    return `${dateOnly}T12:00:00-04:00`;
+  }
+  return new Date().toISOString();
+};
+
+/**
+ * POST /invoicing/payments.
+ * Without invoice_ids, Wispro credits the amount to the client's current account.
+ */
+export const createWisproInvoicingPayment = async (
+  input: CreateWisproInvoicingPaymentInput,
+): Promise<WisproInvoicingPayment> => {
+  const clientId = input.clientId.trim();
+  if (!clientId) {
+    throw new WisproApiError("El cliente Wispro es requerido", {
+      status: 400,
+      code: "invalid_response",
+    });
+  }
+
+  if (!Number.isFinite(input.amount) || input.amount <= 0) {
+    throw new WisproApiError("El monto del pago no es válido", {
+      status: 400,
+      code: "invalid_response",
+    });
+  }
+
+  const payload = await wisproPost("/invoicing/payments", {
+    client_id: clientId,
+    amount: roundMoney(input.amount),
+    payment_date: toWisproPaymentDate(input.paymentDate),
+    transaction_code: input.transactionCode?.trim() || undefined,
+    comment: input.comment?.trim() || undefined,
+  });
+
+  const records = extractDataRecords(payload);
+  const row =
+    records[0] && typeof records[0] === "object"
+      ? (records[0] as Record<string, unknown>)
+      : null;
+
+  const id = String(row?.id || "").trim();
+  if (!id) {
+    throw new WisproApiError("Wispro no devolvió el pago creado", {
+      status: 502,
+      code: "invalid_response",
+    });
+  }
+
+  return {
+    id,
+    client_id: String(row?.client_id || clientId),
+    amount: parseAmount(row?.amount ?? input.amount),
+    payment_date: String(row?.payment_date || input.paymentDate),
+    state: row?.state ? String(row.state) : null,
+    transaction_code: row?.transaction_code
+      ? String(row.transaction_code)
+      : input.transactionCode?.trim() || null,
+    comment: row?.comment ? String(row.comment) : input.comment?.trim() || null,
+    raw: payload,
   };
 };
 

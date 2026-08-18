@@ -110,23 +110,18 @@ export const PaymentsView = () => {
     setBank("all");
   };
 
-  const handleStatusChange = async (
+  const handlePaymentAction = async (
     paymentId: string,
-    nextStatus: CrmPaymentStatus,
+    action: "approve" | "reject",
   ) => {
-    const previous = payments;
     setUpdatingId(paymentId);
-    setPayments((current) =>
-      current.map((payment) =>
-        payment.id === paymentId ? { ...payment, status: nextStatus } : payment,
-      ),
-    );
+    setError(null);
 
     try {
       const response = await fetch("/api/crm/payments", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: paymentId, status: nextStatus }),
+        body: JSON.stringify({ id: paymentId, action }),
       });
       const payload = (await response.json()) as {
         ok?: boolean;
@@ -135,6 +130,13 @@ export const PaymentsView = () => {
       };
 
       if (!response.ok || !payload.ok || !payload.payment) {
+        if (payload.payment) {
+          setPayments((current) =>
+            current.map((payment) =>
+              payment.id === paymentId ? payload.payment! : payment,
+            ),
+          );
+        }
         throw new Error(payload.error || "No se pudo actualizar el estado");
       }
 
@@ -145,7 +147,6 @@ export const PaymentsView = () => {
       );
       await loadPayments("refresh");
     } catch (updateError) {
-      setPayments(previous);
       setError(
         updateError instanceof Error
           ? updateError.message
@@ -154,6 +155,14 @@ export const PaymentsView = () => {
     } finally {
       setUpdatingId(null);
     }
+  };
+
+  const handleApprove = (paymentId: string) => {
+    void handlePaymentAction(paymentId, "approve");
+  };
+
+  const handleReject = (paymentId: string) => {
+    void handlePaymentAction(paymentId, "reject");
   };
 
   return (
@@ -217,7 +226,8 @@ export const PaymentsView = () => {
             <PaymentsTable
               payments={payments}
               updatingId={updatingId}
-              onStatusChange={handleStatusChange}
+              onApprove={handleApprove}
+              onReject={handleReject}
             />
           </>
         )}

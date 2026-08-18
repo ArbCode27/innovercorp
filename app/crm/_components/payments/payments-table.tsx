@@ -8,41 +8,30 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
 import {
   formatPaymentAmount,
   formatPaymentDate,
   formatPaymentDateTime,
   type CrmPayment,
-  type CrmPaymentStatus,
 } from "../../_lib/payments";
 import { StatusBadge } from "../shared/status-badge";
 import { EmptyState } from "../shared/empty-state";
-import { Wallet } from "lucide-react";
+import { CheckCircle2, Wallet, XCircle } from "lucide-react";
+import { CrmButton } from "../shared/crm-button";
 
 interface PaymentsTableProps {
   payments: CrmPayment[];
   updatingId: string | null;
-  onStatusChange: (paymentId: string, status: CrmPaymentStatus) => void;
+  onApprove: (paymentId: string) => void;
+  onReject: (paymentId: string) => void;
 }
-
-const REVIEW_STATUSES: Array<{ value: CrmPaymentStatus; label: string }> = [
-  { value: "EN_PROCESO", label: "En proceso" },
-  { value: "APROBADO", label: "Aprobado" },
-  { value: "RECHAZADO", label: "Rechazado" },
-];
 
 export const PaymentsTable = ({
   payments,
   updatingId,
-  onStatusChange,
+  onApprove,
+  onReject,
 }: PaymentsTableProps) => {
   if (!payments.length) {
     return (
@@ -78,9 +67,7 @@ export const PaymentsTable = ({
             {payments.map((payment) => {
               const isUpdating = updatingId === payment.id;
               const canReview =
-                payment.status === "EN_PROCESO" ||
-                payment.status === "APROBADO" ||
-                payment.status === "RECHAZADO";
+                payment.status === "EN_PROCESO" || payment.status === "ERROR";
 
               return (
                 <TableRow
@@ -121,27 +108,32 @@ export const PaymentsTable = ({
                   </TableCell>
                   <TableCell>
                     {canReview ? (
-                      <Select
-                        value={payment.status}
-                        disabled={isUpdating}
-                        onValueChange={(value) =>
-                          onStatusChange(payment.id, value as CrmPaymentStatus)
-                        }>
-                        <SelectTrigger
-                          className={`h-8 w-[140px] ${CRM_SURFACES.border} ${CRM_SURFACES.input}`}
-                          aria-label={`Cambiar estado del pago de ${payment.client_name}`}>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {REVIEW_STATUSES.map((item) => (
-                            <SelectItem key={item.value} value={item.value}>
-                              {item.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <CrmButton
+                          type="button"
+                          size="sm"
+                          variant="success"
+                          disabled={isUpdating}
+                          onClick={() => onApprove(payment.id)}
+                          aria-label={`Aprobar pago de ${payment.client_name}`}>
+                          <CheckCircle2 className="size-4" aria-hidden="true" />
+                          Aprobar
+                        </CrmButton>
+                        <CrmButton
+                          type="button"
+                          size="sm"
+                          variant="danger"
+                          disabled={isUpdating}
+                          onClick={() => onReject(payment.id)}
+                          aria-label={`Rechazar pago de ${payment.client_name}`}>
+                          <XCircle className="size-4" aria-hidden="true" />
+                          Rechazar
+                        </CrmButton>
+                      </div>
                     ) : (
-                      <span className={`text-xs ${CRM_SURFACES.textMuted}`}>—</span>
+                      <span className={`text-xs ${CRM_SURFACES.textMuted}`}>
+                        Sin acciones
+                      </span>
                     )}
                   </TableCell>
                 </TableRow>

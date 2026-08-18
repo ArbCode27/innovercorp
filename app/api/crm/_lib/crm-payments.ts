@@ -373,3 +373,108 @@ export const updateCrmPaymentStatus = async (
 
   return data;
 };
+
+export const getCrmPaymentById = async (
+  supabase: SupabaseClient,
+  id: string,
+) => {
+  const { data, error } = await supabase
+    .from("crm_payments")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle<CrmPayment>();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data;
+};
+
+export const approveCrmPayment = async (
+  supabase: SupabaseClient,
+  input: {
+    payment: CrmPayment;
+    wisproPayment: {
+      id: string;
+      state: string | null;
+      payment_date: string;
+      amount: number;
+      transaction_code: string | null;
+      raw: unknown;
+    };
+  },
+) => {
+  const { data, error } = await supabase
+    .from("crm_payments")
+    .update({
+      status: "APROBADO",
+      error_message: null,
+      receipt_metadata: {
+        ...(input.payment.receipt_metadata || {}),
+        wispro_payment: {
+          id: input.wisproPayment.id,
+          state: input.wisproPayment.state,
+          amount: input.wisproPayment.amount,
+          payment_date: input.wisproPayment.payment_date,
+          transaction_code: input.wisproPayment.transaction_code,
+          response: input.wisproPayment.raw,
+          registered_at: new Date().toISOString(),
+        },
+      },
+    })
+    .eq("id", input.payment.id)
+    .select("*")
+    .maybeSingle<CrmPayment>();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data;
+};
+
+export const rejectCrmPayment = async (
+  supabase: SupabaseClient,
+  paymentId: string,
+) => {
+  const { data, error } = await supabase
+    .from("crm_payments")
+    .update({
+      status: "RECHAZADO",
+      error_message: null,
+    })
+    .eq("id", paymentId)
+    .select("*")
+    .maybeSingle<CrmPayment>();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data;
+};
+
+export const markCrmPaymentApprovalError = async (
+  supabase: SupabaseClient,
+  input: {
+    paymentId: string;
+    message: string;
+  },
+) => {
+  const { data, error } = await supabase
+    .from("crm_payments")
+    .update({
+      status: "ERROR",
+      error_message: input.message,
+    })
+    .eq("id", input.paymentId)
+    .select("*")
+    .maybeSingle<CrmPayment>();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data;
+};

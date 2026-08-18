@@ -3,10 +3,13 @@ import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import {
   CRM_PAYMENT_STATUSES,
-  isReviewablePaymentStatus,
+  approveCrmPayment,
+  getCrmPaymentById,
   listCrmPayments,
-  updateCrmPaymentStatus,
+  markCrmPaymentApprovalError,
+  rejectCrmPayment,
 } from "@/app/api/crm/_lib/crm-payments";
+import { createWisproInvoicingPayment } from "@/app/api/crm/_lib/wispro-api";
 
 const getServerEnv = (key: string) => {
   const value = process.env[key];
@@ -51,7 +54,7 @@ const listQuerySchema = z.object({
 
 const patchSchema = z.object({
   id: z.string().uuid(),
-  status: z.enum(CRM_PAYMENT_STATUSES),
+  action: z.enum(["approve", "reject"]),
 });
 
 export async function GET(req: NextRequest) {
@@ -105,27 +108,80 @@ export async function PATCH(req: NextRequest) {
       );
     }
 
-    if (!isReviewablePaymentStatus(parsed.data.status)) {
-      return NextResponse.json(
-        { error: "Solo se puede marcar En proceso, Aprobado o Rechazado" },
-        { status: 400 },
-      );
-    }
-
     const supabase = getServiceClient();
-    const payment = await updateCrmPaymentStatus(supabase, {
-      id: parsed.data.id,
-      status: parsed.data.status,
-    });
+    const currentPayment = await getCrmPaymentById(supabase, parsed.data.id);
 
-    if (!payment) {
+    if (!currentPayment) {
       return NextResponse.json(
         { error: "Pago no encontrado" },
         { status: 404 },
       );
     }
 
-    return NextResponse.json({ ok: true, payment });
+    const canReview =
+      currentPayment.status === "EN_PROCESO" || currentPayment.status === "ERROR";
+    if (!canReview) {
+      return NextResponse.json(
+        { error: "Este pago ya fue procesado" },
+        { status: 409 },
+      );
+    }
+
+    if (parsed.data.action === "reject") {
+      const payment = await rejectCrmPayment(supabase, currentPayment.id);
+      return NextResponse.json({ ok: true, payment });
+    }
+
+    if (!currentPayment.wispro_client_id) {
+      return NextResponse.json(
+        { error: "El pago no tiene cliente Wispro vinculado" },
+        { status: 400 },
+      );
+    }
+
+    try {
+      const wisproPayment = await createWisproInvoicingPayment({
+        clientId: currentPayment.wispro_client_id,
+        amount: Number(currentPayment.amount),
+        paymentDate: currentPayment.payment_date,
+        transactionCode: currentPayment.transaction_code,
+        comment: [
+          "Pago aprobado desde CRM",
+          `Banco: ${currentPayment.bank}`,
+          `Referencia: ${currentPayment.transaction_code}`,
+          currentPayment.comment ? `Comentario: ${currentPayment.comment}` : null,
+        ]
+          .filter(Boolean)
+          .join(" | "),
+      });
+
+      const payment = await approveCrmPayment(supabase, {
+        payment: currentPayment,
+        wisproPayment,
+      });
+
+      return NextResponse.json({ ok: true, payment, wisproPayment });
+    } catch (approvalError) {
+      const message =
+        approvalError instanceof Error
+          ? approvalError.message
+          : "No se pudo registrar el pago en Wispro";
+
+      const payment = await markCrmPaymentApprovalError(supabase, {
+        paymentId: currentPayment.id,
+        message,
+      });
+
+      return NextResponse.json(
+        {
+          ok: false,
+          error: message,
+          payment,
+        },
+        { status: 502 },
+      );
+    }
+
   } catch (error) {
     if (error instanceof Error && error.message.startsWith("Missing environment")) {
       return NextResponse.json(
