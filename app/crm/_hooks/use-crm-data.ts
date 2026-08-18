@@ -18,6 +18,7 @@ import {
 import { wisproService } from "../_lib/wispro-service";
 import { isAdminRole } from "../_lib/agent-role-utils";
 import { parseWisproCustomerFromEnvoicing } from "../_lib/wispro-webhook";
+import { getManualPaymentBlockReason } from "../_lib/client-profile-utils";
 import {
   didClientGainWisproLink,
   syncWisproSnapshotFromClient,
@@ -711,6 +712,11 @@ export const useCrmData = (agent: Agent | null) => {
 
     if (message.type !== "in" || message.media_type !== "image") {
       throw new Error("Solo se pueden procesar imágenes enviadas por clientes");
+    }
+
+    const blockReason = getManualPaymentBlockReason(selectedClient);
+    if (blockReason) {
+      throw new Error(blockReason);
     }
 
     await processPaymentReceiptRequest({

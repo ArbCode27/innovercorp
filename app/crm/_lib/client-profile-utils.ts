@@ -28,16 +28,22 @@ export const parseClientEnvoicing = (
       cedula?: string;
       serviceSuspended?: boolean;
       contractState?: string | null;
+      wisproCustomer?: { national_identification_number?: string };
     };
 
     if (typeof parsed.debt !== "number") return null;
+
+    const nestedCedula = parsed.wisproCustomer?.national_identification_number?.trim() || "";
 
     return {
       debt: parsed.debt,
       hasDebt: Boolean(parsed.hasDebt),
       calculatedAt:
         typeof parsed.calculatedAt === "string" ? parsed.calculatedAt : undefined,
-      cedula: typeof parsed.cedula === "string" ? parsed.cedula : undefined,
+      cedula:
+        (typeof parsed.cedula === "string" ? parsed.cedula.trim() : "") ||
+        nestedCedula ||
+        undefined,
       serviceSuspended:
         typeof parsed.serviceSuspended === "boolean"
           ? parsed.serviceSuspended
@@ -48,6 +54,73 @@ export const parseClientEnvoicing = (
   } catch {
     return null;
   }
+};
+
+const digitsOnly = (value: unknown) => String(value || "").replace(/\D/g, "") || null;
+
+export type LinkedClientIdentity = {
+  linked: boolean;
+  wisproId: string | null;
+  cedula: string | null;
+  name: string | null;
+};
+
+const readLinkedSnapshot = (envoicing: string | null | undefined) => {
+  if (!envoicing?.trim()) {
+    return { cedula: null as string | null, name: null as string | null };
+  }
+
+  try {
+    const parsed = JSON.parse(envoicing) as {
+      cedula?: unknown;
+      wisproCustomer?: {
+        name?: unknown;
+        national_identification_number?: unknown;
+      } | null;
+    };
+    const nested = parsed.wisproCustomer;
+    const cedula =
+      digitsOnly(nested?.national_identification_number) || digitsOnly(parsed.cedula);
+    const name =
+      typeof nested?.name === "string" ? nested.name.trim() || null : null;
+    return { cedula, name };
+  } catch {
+    return { cedula: null, name: null };
+  }
+};
+
+export const resolveLinkedClientIdentity = (
+  client: {
+    wispro_id?: string | null;
+    name?: string | null;
+    envoicing?: string | null;
+  } | null | undefined,
+): LinkedClientIdentity => {
+  const wisproId = String(client?.wispro_id || "").trim() || null;
+  if (!wisproId) {
+    return { linked: false, wisproId: null, cedula: null, name: null };
+  }
+
+  const snapshot = readLinkedSnapshot(client?.envoicing);
+  return {
+    linked: true,
+    wisproId,
+    cedula: snapshot.cedula,
+    name: snapshot.name || client?.name?.trim() || null,
+  };
+};
+
+export const getManualPaymentBlockReason = (
+  client: Parameters<typeof resolveLinkedClientIdentity>[0],
+) => {
+  const identity = resolveLinkedClientIdentity(client);
+  if (!identity.linked) {
+    return "Vincula el cliente a Wispro antes de registrar el pago";
+  }
+  if (!identity.cedula) {
+    return "El cliente vinculado no tiene cédula en la base de datos";
+  }
+  return null;
 };
 
 export const formatClientDebt = (debt: number) =>

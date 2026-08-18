@@ -48,6 +48,9 @@ export type AgentRunContext = {
   allowedToolNames?: string[] | null;
   lastLookupByWisproId: Map<string, WisproSearchResult>;
   lastLookupCedula: string | null;
+  linkedWisproId: string | null;
+  linkedCedula: string | null;
+  linkedClientName: string | null;
   escalated: boolean;
   escalateReason: string | null;
   escalateMessage: string | null;
@@ -212,12 +215,22 @@ const persistReceiptToCrm = async (
   const messageId = input.receiptMessage?.id ?? ctx.triggerMessageId;
   if (!messageId) return { ok: false, payment: null, duplicate: false };
 
+  const cedula = input.cedula || ctx.linkedCedula;
+  const wisproClientId = input.wisproClientId || ctx.linkedWisproId;
+  const clientName = input.clientName || ctx.linkedClientName || ctx.waName;
+
+  if (!cedula) {
+    return { ok: false, payment: null, duplicate: false };
+  }
+
   await intakeCrmReceipt(ctx.supabase, {
     clientId: ctx.clientId,
     conversationId: ctx.conversationId,
     messageId,
     submittedByAgentId: ctx.paymentRequestedByAgentId ?? null,
-    clientName: input.clientName || ctx.waName,
+    clientName,
+    cedula,
+    wisproClientId,
     phoneId: input.phoneId || ctx.whatsappId || ctx.customerPhone,
     receiptMediaUrl:
       typeof input.receiptMessage?.media_url === "string"
@@ -236,9 +249,9 @@ const persistReceiptToCrm = async (
     conversationId: ctx.conversationId,
     messageId,
     submittedByAgentId: ctx.paymentRequestedByAgentId ?? null,
-    wisproClientId: input.wisproClientId,
-    clientName: input.clientName || ctx.waName,
-    cedula: input.cedula,
+    wisproClientId,
+    clientName,
+    cedula,
     phoneId: input.phoneId || ctx.whatsappId || ctx.customerPhone,
     amount: input.amount,
     bank: input.bank,
@@ -801,7 +814,8 @@ const handleSubmitPaymentReceipt = async (
   const cedula =
     parsed.data.cedula ||
     match.customer.national_identification_number ||
-    ctx.lastLookupCedula;
+    ctx.lastLookupCedula ||
+    ctx.linkedCedula;
 
   if (!cedula) {
     return {

@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { replyToConversationWithGemini } from "@/app/api/crm/ai/_lib/reply-to-conversation";
 import { intakeCrmReceipt } from "@/app/api/crm/_lib/crm-payments";
+import { resolveLinkedClientIdentity } from "@/app/crm/_lib/client-profile-utils";
 
 const payloadSchema = z.object({
   messageId: z.coerce.number().int().positive(),
@@ -177,19 +178,46 @@ export async function POST(req: NextRequest) {
 
     let clientName: string | null = null;
     let phoneId: string | null = null;
+    let linkedIdentity: ReturnType<typeof resolveLinkedClientIdentity> = {
+      linked: false,
+      wisproId: null,
+      cedula: null,
+      name: null,
+    };
+
     if (conversation.client_id) {
       const { data: client } = await supabase
         .from("clients")
-        .select("id, name, phone, whatsapp_id")
+        .select("id, name, phone, whatsapp_id, wispro_id, envoicing")
         .eq("id", conversation.client_id)
         .maybeSingle<{
           id: number;
           name: string | null;
           phone: string | null;
           whatsapp_id: string | null;
+          wispro_id: string | null;
+          envoicing: string | null;
         }>();
-      clientName = client?.name?.trim() || null;
+      linkedIdentity = resolveLinkedClientIdentity(client);
+      clientName = linkedIdentity.name || client?.name?.trim() || null;
       phoneId = client?.whatsapp_id?.trim() || client?.phone?.trim() || null;
+    }
+
+    if (!linkedIdentity.linked || !linkedIdentity.wisproId) {
+      return NextResponse.json(
+        { error: "Vincula el cliente a Wispro antes de registrar el pago" },
+        { status: 409 },
+      );
+    }
+
+    if (!linkedIdentity.cedula) {
+      return NextResponse.json(
+        {
+          error:
+            "El cliente vinculado no tiene cédula en la base de datos. Vuelve a asociarlo a Wispro.",
+        },
+        { status: 409 },
+      );
     }
 
     const intake = await intakeCrmReceipt(supabase, {
@@ -198,6 +226,8 @@ export async function POST(req: NextRequest) {
       messageId: message.id,
       submittedByAgentId: agentId,
       clientName,
+      cedula: linkedIdentity.cedula,
+      wisproClientId: linkedIdentity.wisproId,
       phoneId,
       receiptMediaUrl: fileUrl,
       source: "advisor",
@@ -206,6 +236,7 @@ export async function POST(req: NextRequest) {
         requested_by_agent_id: agentId,
         requested_from_message_id: message.id,
         intake_at: new Date().toISOString(),
+        linked_wispro_id: linkedIdentity.wisproId,
       },
     });
 

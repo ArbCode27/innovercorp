@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { CRM_DIALOG, CRM_SURFACES } from "../../_lib/crm-theme";
+import { getManualPaymentBlockReason } from "../../_lib/client-profile-utils";
 import type { Agent, Client, Conversation, Label, Message, QuickReply, Ticket, WisproCustomer, WisproSearchResult } from "../../_lib/types";
 import { AssignAgentDialog } from "../agents/assign-agent-dialog";
 import { LabelPickerDialog } from "../labels/label-picker-dialog";
@@ -122,6 +123,7 @@ export const ConversationPanel = ({
   const clientDisplayName = client?.name || "Número desconocido";
   const isWisproLinked = Boolean(client?.wispro_id);
   const wisproDialogMode = isWisproLinked ? "relink" : "link";
+  const manualPaymentBlockReason = getManualPaymentBlockReason(client);
 
   if (!conversation) {
     return (
@@ -248,6 +250,8 @@ export const ConversationPanel = ({
           isLoading={isMessagesLoading}
           onProcessPaymentReceipt={onProcessPaymentReceipt}
           onResendMessage={onResendMessage}
+          canRegisterManualPayment={!manualPaymentBlockReason}
+          manualPaymentBlockReason={manualPaymentBlockReason}
         />
         <MessageComposer
           disabled={isSendingMessage}

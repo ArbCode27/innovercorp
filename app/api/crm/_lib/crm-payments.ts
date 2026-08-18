@@ -208,6 +208,8 @@ export type IntakeCrmReceiptInput = {
   messageId: number;
   submittedByAgentId?: number | null;
   clientName?: string | null;
+  cedula: string;
+  wisproClientId?: string | null;
   phoneId?: string | null;
   receiptMediaUrl?: string | null;
   source?: CrmPaymentSource;
@@ -219,6 +221,14 @@ export const intakeCrmReceipt = async (
   input: IntakeCrmReceiptInput,
 ): Promise<{ ok: boolean; payment: CrmPayment | null; created: boolean }> => {
   try {
+    const cedula = digitsOnly(input.cedula);
+    if (!cedula) {
+      console.warn(`${LOG_PREFIX} intake_missing_cedula`, {
+        messageId: input.messageId,
+      });
+      return { ok: false, payment: null, created: false };
+    }
+
     const existing = await getCrmPaymentByMessageId(supabase, input.messageId);
     if (existing) {
       return { ok: true, payment: existing, created: false };
@@ -229,7 +239,9 @@ export const intakeCrmReceipt = async (
       conversation_id: input.conversationId ?? null,
       message_id: input.messageId,
       submitted_by_agent_id: input.submittedByAgentId ?? null,
+      wispro_client_id: trimOrNull(input.wisproClientId),
       client_name: trimOrNull(input.clientName),
+      cedula,
       phone_id: trimOrNull(input.phoneId),
       payment_date: todayInCaracas(),
       status: "RECIBIDO" as CrmPaymentStatus,

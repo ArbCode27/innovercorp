@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { DEFAULT_AI_SYSTEM_PROMPT } from "@/app/crm/_lib/ai-default-prompt";
-import { parseClientEnvoicing } from "@/app/crm/_lib/client-profile-utils";
+import { parseClientEnvoicing, resolveLinkedClientIdentity } from "@/app/crm/_lib/client-profile-utils";
 import {
   AFTER_HOURS_PAYMENTS_PROMPT,
   type BotReplyMode,
@@ -89,24 +89,30 @@ const createAgentContext = (input: {
   paymentRequestedByAgentId?: number | null;
   replyMode?: BotReplyMode;
   allowedToolNames?: string[] | null;
-}): AgentRunContext => ({
-  supabase: input.supabase,
-  conversationId: input.conversationId,
-  clientId: input.client?.id ?? null,
-  customerPhone: input.customerPhone,
-  whatsappId: input.client?.whatsapp_id ?? null,
-  waName: input.client?.wa_name ?? null,
-  runId: input.runId,
-  triggerMessageId: input.triggerMessageId ?? null,
-  paymentRequestedByAgentId: input.paymentRequestedByAgentId ?? null,
-  replyMode: input.replyMode ?? "full",
-  allowedToolNames: input.allowedToolNames ?? null,
-  lastLookupByWisproId: new Map(),
-  lastLookupCedula: null,
-  escalated: false,
-  escalateReason: null,
-  escalateMessage: null,
-});
+}): AgentRunContext => {
+  const identity = resolveLinkedClientIdentity(input.client);
+  return {
+    supabase: input.supabase,
+    conversationId: input.conversationId,
+    clientId: input.client?.id ?? null,
+    customerPhone: input.customerPhone,
+    whatsappId: input.client?.whatsapp_id ?? null,
+    waName: input.client?.wa_name ?? null,
+    runId: input.runId,
+    triggerMessageId: input.triggerMessageId ?? null,
+    paymentRequestedByAgentId: input.paymentRequestedByAgentId ?? null,
+    replyMode: input.replyMode ?? "full",
+    allowedToolNames: input.allowedToolNames ?? null,
+    lastLookupByWisproId: new Map(),
+    lastLookupCedula: null,
+    linkedWisproId: identity.wisproId,
+    linkedCedula: identity.cedula,
+    linkedClientName: identity.name || input.client?.name || input.client?.wa_name || null,
+    escalated: false,
+    escalateReason: null,
+    escalateMessage: null,
+  };
+};
 
 const runAgentLoop = async (input: {
   systemPrompt: string;

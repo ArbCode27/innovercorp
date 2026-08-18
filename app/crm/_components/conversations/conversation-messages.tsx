@@ -14,6 +14,8 @@ interface ConversationMessagesProps {
   isLoading: boolean;
   onProcessPaymentReceipt: (messageId: number) => Promise<void>;
   onResendMessage: (messageId: number) => Promise<void>;
+  canRegisterManualPayment?: boolean;
+  manualPaymentBlockReason?: string | null;
 }
 
 export const ConversationMessages = ({
@@ -21,6 +23,8 @@ export const ConversationMessages = ({
   isLoading,
   onProcessPaymentReceipt,
   onResendMessage,
+  canRegisterManualPayment = true,
+  manualPaymentBlockReason = null,
 }: ConversationMessagesProps) => {
   const endRef = useRef<HTMLDivElement | null>(null);
   const messageGroups = useMemo(() => groupMessagesByDay(messages), [messages]);
@@ -58,6 +62,8 @@ export const ConversationMessages = ({
               message={message}
               onProcessPaymentReceipt={onProcessPaymentReceipt}
               onResendMessage={onResendMessage}
+              canRegisterManualPayment={canRegisterManualPayment}
+              manualPaymentBlockReason={manualPaymentBlockReason}
             />
           ))}
         </section>

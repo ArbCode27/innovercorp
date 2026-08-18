@@ -19,6 +19,8 @@ interface MessageBubbleProps {
   message: Message;
   onProcessPaymentReceipt?: (messageId: number) => Promise<void>;
   onResendMessage?: (messageId: number) => Promise<void>;
+  canRegisterManualPayment?: boolean;
+  manualPaymentBlockReason?: string | null;
 }
 
 const statusLabel: Record<string, string> = {
@@ -39,6 +41,8 @@ export const MessageBubble = ({
   message,
   onProcessPaymentReceipt,
   onResendMessage,
+  canRegisterManualPayment = true,
+  manualPaymentBlockReason = null,
 }: MessageBubbleProps) => {
   const [isProcessingPaymentReceipt, setIsProcessingPaymentReceipt] = useState(false);
   const [isResendingMessage, setIsResendingMessage] = useState(false);
@@ -76,6 +80,13 @@ export const MessageBubble = ({
 
   const handleProcessPaymentReceipt = async () => {
     if (!onProcessPaymentReceipt) return;
+    if (!canRegisterManualPayment) {
+      toast.error(
+        manualPaymentBlockReason ||
+          "Vincula el cliente a Wispro antes de registrar el pago",
+      );
+      return;
+    }
 
     setIsProcessingPaymentReceipt(true);
     try {
@@ -170,9 +181,23 @@ export const MessageBubble = ({
           type="button"
           size="sm"
           variant="secondary"
-          disabled={isProcessingPaymentReceipt || paymentReceiptRequested}
+          disabled={
+            isProcessingPaymentReceipt ||
+            paymentReceiptRequested ||
+            !canRegisterManualPayment
+          }
+          title={
+            paymentReceiptRequested
+              ? "Este comprobante ya fue enviado"
+              : manualPaymentBlockReason || "Registrar pago del comprobante"
+          }
           onClick={handleProcessPaymentReceipt}
-          className="mt-1 h-7 px-2.5 text-[11px]">
+          className="mt-1 h-7 px-2.5 text-[11px]"
+          aria-label={
+            paymentReceiptRequested
+              ? "Comprobante ya enviado"
+              : manualPaymentBlockReason || "Registrar pago"
+          }>
           <HandCoins className="size-3" aria-hidden="true" />
           {paymentReceiptRequested
             ? "Comprobante enviado"
