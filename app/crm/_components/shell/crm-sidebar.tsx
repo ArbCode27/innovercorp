@@ -12,6 +12,7 @@ import {
   Tags,
   Ticket,
   Users,
+  Wallet,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -44,6 +45,7 @@ const icons = {
   history: History,
   "quick-replies": MessageSquareQuote,
   clients: Users,
+  payments: Wallet,
   tickets: Ticket,
   labels: Tags,
   agents: Bot,

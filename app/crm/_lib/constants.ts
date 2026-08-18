@@ -11,6 +11,7 @@ export const CRM_NAV_ITEMS: Array<{
   { id: "history", label: "Historial" },
   { id: "quick-replies", label: "Respuestas rápidas" },
   { id: "clients", label: "Clientes" },
+  { id: "payments", label: "Pagos" },
   { id: "tickets", label: "Tickets" },
   { id: "labels", label: "Etiquetas" },
   { id: "agents", label: "Agentes" },
@@ -82,4 +83,9 @@ export const STATUS_LABELS: Record<string, string> = {
   busy: "Ocupado",
   offline: "Desconectado",
   inactive: "Inactivo",
+  EN_PROCESO: "En proceso",
+  APROBADO: "Aprobado",
+  RECHAZADO: "Rechazado",
+  DUPLICADO: "Duplicado",
+  ERROR: "Error",
 };

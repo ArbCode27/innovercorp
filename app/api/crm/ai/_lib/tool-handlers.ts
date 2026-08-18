@@ -11,6 +11,7 @@ import {
   InnoverPaymentsError,
   submitInnoverPayment,
 } from "@/app/api/crm/_lib/innover-payments";
+import { recordCrmPayment } from "@/app/api/crm/_lib/crm-payments";
 import { ensureConversationLabel } from "@/app/api/crm/_lib/conversation-labels";
 import {
   DolarVzlaError,
@@ -147,15 +148,15 @@ const findReceiptMessage = async (ctx: AgentRunContext) => {
   if (ctx.triggerMessageId) {
     const { data } = await ctx.supabase
       .from("messages")
-      .select("id, metadata, media_type")
-      .eq("id", ctx.triggerMessageId)
+    .select("id, metadata, media_type, media_url")
+    .eq("id", ctx.triggerMessageId)
       .maybeSingle();
     if (data) return data;
   }
 
   const { data: latestImage } = await ctx.supabase
     .from("messages")
-    .select("id, metadata, media_type")
+    .select("id, metadata, media_type, media_url")
     .eq("conversation_id", ctx.conversationId)
     .eq("type", "in")
     .eq("media_type", "image")
@@ -785,6 +786,49 @@ const handleSubmitPaymentReceipt = async (
       };
     }
 
+    let crmPaymentMetadata: Record<string, unknown> = {
+      crm_payment_id: null,
+      crm_payment_duplicate: false,
+    };
+
+    try {
+      const persisted = await recordCrmPayment(ctx.supabase, {
+        clientId: ctx.clientId,
+        conversationId: ctx.conversationId,
+        messageId: receiptMessage?.id ?? null,
+        wisproClientId: payload.client_id,
+        clientName: payload.name,
+        cedula: payload.cedula,
+        phoneId: payload.phone_id,
+        amount: payload.amount,
+        bank: payload.bank,
+        transactionCode: payload.transaction_code,
+        comment,
+        status: "EN_PROCESO",
+        source: "ai",
+        externalApiStatus: result.status,
+        externalResponse: result.body,
+        receiptMediaUrl:
+          receiptMessage && "media_url" in receiptMessage
+            ? typeof receiptMessage.media_url === "string"
+              ? receiptMessage.media_url
+              : null
+            : null,
+      });
+
+      crmPaymentMetadata = {
+        crm_payment_id: persisted.payment?.id ?? null,
+        crm_payment_duplicate: persisted.duplicate,
+      };
+    } catch (persistError) {
+      console.error("[AI_PAYMENT] crm_payment_persist_unexpected", {
+        error:
+          persistError instanceof Error
+            ? persistError.message
+            : String(persistError),
+      });
+    }
+
     if (receiptMessage?.id) {
       const { error: updateError } = await ctx.supabase
         .from("messages")
@@ -799,6 +843,7 @@ const handleSubmitPaymentReceipt = async (
             payment_comment: comment,
             pending_receipt: null,
             ...promiseMetadata,
+            ...crmPaymentMetadata,
           },
         })
         .eq("id", receiptMessage.id);

@@ -15,6 +15,7 @@ import { HistoryView } from "../history/history-view";
 import { LabelsView } from "../labels/labels-view";
 import { QuickRepliesView } from "../quick-replies/quick-replies-view";
 import { SettingsView } from "../settings/settings-view";
+import { PaymentsView } from "../payments/payments-view";
 import { TicketsView } from "../tickets/tickets-view";
 import { CrmMobileNav, CrmSidebar } from "./crm-sidebar";
 
@@ -164,6 +165,7 @@ export const CrmShell = () => {
                 onCreateClient={crm.createClient}
               />
             ) : null}
+            {activeView === "payments" ? <PaymentsView /> : null}
             {activeView === "quick-replies" ? (
               <QuickRepliesView
                 currentAgent={auth.agent}

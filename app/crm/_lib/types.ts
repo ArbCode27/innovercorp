@@ -34,6 +34,7 @@ export type CrmView =
   | "history"
   | "quick-replies"
   | "clients"
+  | "payments"
   | "tickets"
   | "labels"
   | "agents"
