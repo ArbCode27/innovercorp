@@ -16,6 +16,33 @@ import { PaymentsTable } from "./payments-table";
 
 const PAGE_SIZE = 50;
 const SEARCH_DEBOUNCE_MS = 300;
+type PaymentPeriod = "today" | "week" | "month";
+
+const toCaracasIsoDate = (date: Date) =>
+  new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Caracas",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+
+const resolvePeriodRange = (value: PaymentPeriod) => {
+  const now = new Date();
+  const to = toCaracasIsoDate(now);
+
+  if (value === "today") {
+    return { from: to, to };
+  }
+
+  if (value === "week") {
+    const fromDate = new Date(now);
+    fromDate.setDate(now.getDate() - 6);
+    return { from: toCaracasIsoDate(fromDate), to };
+  }
+
+  const fromDate = new Date(now.getFullYear(), now.getMonth(), 1);
+  return { from: toCaracasIsoDate(fromDate), to };
+};
 
 const EMPTY_COUNTS: CrmPaymentStatusCounts = {
   RECIBIDO: 0,
@@ -29,8 +56,7 @@ const EMPTY_COUNTS: CrmPaymentStatusCounts = {
 export const PaymentsView = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
+  const [period, setPeriod] = useState<PaymentPeriod>("today");
   const [status, setStatus] = useState<CrmPaymentStatus | "all">("all");
   const [bank, setBank] = useState("all");
   const [payments, setPayments] = useState<CrmPayment[]>([]);
@@ -57,9 +83,10 @@ export const PaymentsView = () => {
 
       try {
         const params = new URLSearchParams();
+        const range = resolvePeriodRange(period);
         if (debouncedSearch) params.set("q", debouncedSearch);
-        if (fromDate) params.set("from", fromDate);
-        if (toDate) params.set("to", toDate);
+        if (range.from) params.set("from", range.from);
+        if (range.to) params.set("to", range.to);
         if (status !== "all") params.set("status", status);
         if (bank !== "all") params.set("bank", bank);
         params.set("limit", String(PAGE_SIZE));
@@ -95,7 +122,7 @@ export const PaymentsView = () => {
         setIsRefreshing(false);
       }
     },
-    [bank, debouncedSearch, fromDate, status, toDate],
+    [bank, debouncedSearch, period, status],
   );
 
   useEffect(() => {
@@ -105,8 +132,7 @@ export const PaymentsView = () => {
   const handleClearFilters = () => {
     setSearchTerm("");
     setDebouncedSearch("");
-    setFromDate("");
-    setToDate("");
+    setPeriod("today");
     setStatus("all");
     setBank("all");
   };
@@ -196,14 +222,12 @@ export const PaymentsView = () => {
         <PaymentsStats total={total} counts={counts} />
         <PaymentsFilters
           searchTerm={searchTerm}
-          fromDate={fromDate}
-          toDate={toDate}
+          period={period}
           status={status}
           bank={bank}
           banks={banks}
           onSearchChange={setSearchTerm}
-          onFromDateChange={setFromDate}
-          onToDateChange={setToDate}
+          onPeriodChange={setPeriod}
           onStatusChange={setStatus}
           onBankChange={setBank}
           onClearFilters={handleClearFilters}

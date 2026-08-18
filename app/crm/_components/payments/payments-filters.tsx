@@ -9,7 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { CRM_SURFACES } from "../../_lib/crm-theme";
+import { CRM_MENU, CRM_MENU_ITEM, CRM_SURFACES } from "../../_lib/crm-theme";
 import {
   CRM_KNOWN_PAYMENT_BANKS,
   CRM_PAYMENT_STATUSES,
@@ -20,32 +20,33 @@ import { CrmButton } from "../shared/crm-button";
 
 interface PaymentsFiltersProps {
   searchTerm: string;
-  fromDate: string;
-  toDate: string;
+  period: "today" | "week" | "month";
   status: CrmPaymentStatus | "all";
   bank: string;
   banks: string[];
   onSearchChange: (value: string) => void;
-  onFromDateChange: (value: string) => void;
-  onToDateChange: (value: string) => void;
+  onPeriodChange: (value: "today" | "week" | "month") => void;
   onStatusChange: (value: CrmPaymentStatus | "all") => void;
   onBankChange: (value: string) => void;
   onClearFilters: () => void;
 }
 
+const PERIOD_LABELS: Record<"today" | "week" | "month", string> = {
+  today: "Pagos de hoy",
+  week: "Última semana",
+  month: "Este mes",
+};
+
 const selectClass = `w-full ${CRM_SURFACES.border} ${CRM_SURFACES.input} ${CRM_SURFACES.textPrimary}`;
-const dateClass = `h-9 ${CRM_SURFACES.border} ${CRM_SURFACES.input} ${CRM_SURFACES.textPrimary}`;
 
 export const PaymentsFilters = ({
   searchTerm,
-  fromDate,
-  toDate,
+  period,
   status,
   bank,
   banks,
   onSearchChange,
-  onFromDateChange,
-  onToDateChange,
+  onPeriodChange,
   onStatusChange,
   onBankChange,
   onClearFilters,
@@ -54,7 +55,7 @@ export const PaymentsFilters = ({
     new Set([...CRM_KNOWN_PAYMENT_BANKS, ...banks]),
   );
   const hasActiveFilters = Boolean(
-    searchTerm || fromDate || toDate || status !== "all" || bank !== "all",
+    searchTerm || period !== "today" || status !== "all" || bank !== "all",
   );
 
   const handleStatusChange = (value: string) => {
@@ -67,10 +68,16 @@ export const PaymentsFilters = ({
     }
   };
 
+  const handlePeriodChange = (value: string) => {
+    if (value === "today" || value === "week" || value === "month") {
+      onPeriodChange(value);
+    }
+  };
+
   return (
     <div
       className={`rounded-xl border p-4 ${CRM_SURFACES.border} ${CRM_SURFACES.elevated}`}>
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
         <div className="xl:col-span-2">
           <label htmlFor="crm-payments-search" className="sr-only">
             Buscar por cédula o nombre
@@ -90,41 +97,29 @@ export const PaymentsFilters = ({
           </div>
         </div>
 
-        <div>
-          <label htmlFor="crm-payments-from" className="sr-only">
-            Fecha desde
-          </label>
-          <Input
-            id="crm-payments-from"
-            type="date"
-            value={fromDate}
-            onChange={(event) => onFromDateChange(event.target.value)}
-            className={dateClass}
-          />
-        </div>
-
-        <div>
-          <label htmlFor="crm-payments-to" className="sr-only">
-            Fecha hasta
-          </label>
-          <Input
-            id="crm-payments-to"
-            type="date"
-            value={toDate}
-            min={fromDate || undefined}
-            onChange={(event) => onToDateChange(event.target.value)}
-            className={dateClass}
-          />
-        </div>
+        <Select value={period} onValueChange={handlePeriodChange}>
+          <SelectTrigger className={selectClass} aria-label="Filtrar por período">
+            <SelectValue placeholder="Período" />
+          </SelectTrigger>
+          <SelectContent className={CRM_MENU}>
+            {Object.entries(PERIOD_LABELS).map(([key, label]) => (
+              <SelectItem key={key} value={key} className={CRM_MENU_ITEM}>
+                {label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
         <Select value={status} onValueChange={handleStatusChange}>
           <SelectTrigger className={selectClass} aria-label="Filtrar por estado">
             <SelectValue placeholder="Estado" />
           </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos los estados</SelectItem>
+          <SelectContent className={CRM_MENU}>
+            <SelectItem value="all" className={CRM_MENU_ITEM}>
+              Todos los estados
+            </SelectItem>
             {CRM_PAYMENT_STATUSES.map((item) => (
-              <SelectItem key={item} value={item}>
+              <SelectItem key={item} value={item} className={CRM_MENU_ITEM}>
                 {CRM_PAYMENT_STATUS_LABELS[item]}
               </SelectItem>
             ))}
@@ -135,10 +130,12 @@ export const PaymentsFilters = ({
           <SelectTrigger className={selectClass} aria-label="Filtrar por banco">
             <SelectValue placeholder="Banco" />
           </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos los bancos</SelectItem>
+          <SelectContent className={CRM_MENU}>
+            <SelectItem value="all" className={CRM_MENU_ITEM}>
+              Todos los bancos
+            </SelectItem>
             {bankOptions.map((item) => (
-              <SelectItem key={item} value={item}>
+              <SelectItem key={item} value={item} className={CRM_MENU_ITEM}>
                 {item}
               </SelectItem>
             ))}
