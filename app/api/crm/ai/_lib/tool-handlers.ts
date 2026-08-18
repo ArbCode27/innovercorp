@@ -73,6 +73,32 @@ type PendingReceipt = {
   comment?: string | null;
 };
 
+const parseBolivaresAmount = (value: string | number | null | undefined) => {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "number") {
+    if (!Number.isFinite(value) || value <= 0) return null;
+    return Math.round((value + Number.EPSILON) * 100) / 100;
+  }
+
+  let raw = value.trim();
+  if (!raw) return null;
+
+  if (raw.includes(",") && raw.includes(".")) {
+    raw = raw.replace(/\./g, "").replace(",", ".");
+  } else if (raw.includes(",")) {
+    raw = raw.replace(",", ".");
+  }
+
+  raw = raw.replace(/[^\d.]/g, "");
+  const parsed = Number.parseFloat(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+
+  return Math.round((parsed + Number.EPSILON) * 100) / 100;
+};
+
+const convertBsToUsd = (amountBs: number, rate: number) =>
+  Math.round(((amountBs / rate) + Number.EPSILON) * 100) / 100;
+
 const normalizePhone = (value: string | null | undefined) =>
   String(value || "").replace(/\D/g, "");
 
@@ -705,7 +731,6 @@ const handleSubmitPaymentReceipt = async (
   const persistPartial = () =>
     persistReceiptToCrm(ctx, {
       receiptMessage,
-      amount,
       bank,
       transactionCode,
       comment,
@@ -759,14 +784,71 @@ const handleSubmitPaymentReceipt = async (
     }
   }
 
+  const amountBs = parseBolivaresAmount(amount);
+  if (!amountBs) {
+    return {
+      name: SUBMIT_PAYMENT_RECEIPT_TOOL,
+      ok: false,
+      response: {
+        ok: false,
+        error: "Monto inválido en bolívares",
+        hint: "Verifica que el monto del comprobante sea legible y reintenta.",
+      },
+    };
+  }
+
+  let bcvRate: number;
+  let bcvAsOf: string;
+  try {
+    const rate = await getBcvRate();
+    bcvRate = rate.rate;
+    bcvAsOf = rate.asOf;
+  } catch (error) {
+    const message =
+      error instanceof DolarVzlaError
+        ? error.message
+        : error instanceof Error
+          ? error.message
+          : "No se pudo obtener la tasa BCV del día";
+
+    return {
+      name: SUBMIT_PAYMENT_RECEIPT_TOOL,
+      ok: false,
+      response: {
+        ok: false,
+        error: message,
+        hint: "No se pudo convertir el monto de Bs a USD. Reintenta en unos segundos.",
+      },
+    };
+  }
+
+  const amountUsd = convertBsToUsd(amountBs, bcvRate);
+  if (!Number.isFinite(amountUsd) || amountUsd <= 0) {
+    return {
+      name: SUBMIT_PAYMENT_RECEIPT_TOOL,
+      ok: false,
+      response: {
+        ok: false,
+        error: "No se pudo convertir el monto de Bs a USD",
+        hint: "Verifica el monto y la tasa BCV del día.",
+      },
+    };
+  }
+
   await persistReceiptToCrm(ctx, {
     receiptMessage,
-    amount,
+    amount: amountUsd,
     bank,
     transactionCode,
     comment,
     status: "RECIBIDO",
-    extraMetadata: { pending_receipt: true },
+    extraMetadata: {
+      pending_receipt: true,
+      amount_bs: amountBs,
+      amount_usd: amountUsd,
+      bcv_rate: bcvRate,
+      bcv_as_of: bcvAsOf,
+    },
   });
 
   const matchResult = resolvePaymentMatch(ctx, parsed.data.wispro_id);
@@ -832,7 +914,7 @@ const handleSubmitPaymentReceipt = async (
 
   const payload = {
     client_id: match.customer.id,
-    amount,
+    amount: String(amountUsd),
     transaction_code: transactionCode,
     bank,
     name: match.customer.name,
@@ -854,6 +936,10 @@ const handleSubmitPaymentReceipt = async (
     extraMetadata: {
       extracted_at: new Date().toISOString(),
       extraction_incomplete: false,
+      amount_bs: amountBs,
+      amount_usd: amountUsd,
+      bcv_rate: bcvRate,
+      bcv_as_of: bcvAsOf,
     },
   });
 
@@ -897,6 +983,10 @@ const handleSubmitPaymentReceipt = async (
       errorMessage: innoverError,
       receiptMetadata: {
         innover_soft_fail: Boolean(innoverError),
+        amount_bs: amountBs,
+        amount_usd: amountUsd,
+        bcv_rate: bcvRate,
+        bcv_as_of: bcvAsOf,
       },
     });
   }
@@ -964,6 +1054,10 @@ const handleSubmitPaymentReceipt = async (
           payment_api_status: innoverStatus,
           payment_submit_error: innoverError,
           payment_comment: comment,
+          payment_amount_bs: amountBs,
+          payment_amount_usd: amountUsd,
+          payment_bcv_rate: bcvRate,
+          payment_bcv_as_of: bcvAsOf,
           pending_receipt: null,
           crm_payment_id: persisted.payment?.id ?? null,
           crm_payment_duplicate: persisted.duplicate,
