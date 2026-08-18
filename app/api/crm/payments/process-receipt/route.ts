@@ -2,6 +2,7 @@ import { NextRequest, NextResponse, after } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { replyToConversationWithGemini } from "@/app/api/crm/ai/_lib/reply-to-conversation";
+import { intakeCrmReceipt } from "@/app/api/crm/_lib/crm-payments";
 
 const payloadSchema = z.object({
   messageId: z.coerce.number().int().positive(),
@@ -174,6 +175,47 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    let clientName: string | null = null;
+    let phoneId: string | null = null;
+    if (conversation.client_id) {
+      const { data: client } = await supabase
+        .from("clients")
+        .select("id, name, phone, whatsapp_id")
+        .eq("id", conversation.client_id)
+        .maybeSingle<{
+          id: number;
+          name: string | null;
+          phone: string | null;
+          whatsapp_id: string | null;
+        }>();
+      clientName = client?.name?.trim() || null;
+      phoneId = client?.whatsapp_id?.trim() || client?.phone?.trim() || null;
+    }
+
+    const intake = await intakeCrmReceipt(supabase, {
+      clientId: conversation.client_id,
+      conversationId,
+      messageId: message.id,
+      submittedByAgentId: agentId,
+      clientName,
+      phoneId,
+      receiptMediaUrl: fileUrl,
+      source: "advisor",
+      receiptMetadata: {
+        requested_manually: true,
+        requested_by_agent_id: agentId,
+        requested_from_message_id: message.id,
+        intake_at: new Date().toISOString(),
+      },
+    });
+
+    if (!intake.ok) {
+      return NextResponse.json(
+        { error: "No se pudo registrar el comprobante en la bandeja de pagos" },
+        { status: 500 },
+      );
+    }
+
     const metadata = (message.metadata || {}) as Record<string, unknown>;
     const alreadyRequested = readMetadataFlag(
       metadata,
@@ -181,10 +223,23 @@ export async function POST(req: NextRequest) {
     );
 
     if (alreadyRequested) {
+      if (intake.payment?.id && metadata.crm_payment_id !== intake.payment.id) {
+        await supabase
+          .from("messages")
+          .update({
+            metadata: {
+              ...metadata,
+              crm_payment_id: intake.payment.id,
+            },
+          })
+          .eq("id", message.id);
+      }
+
       return NextResponse.json({
         success: true,
         alreadyProcessed: true,
         messageId: message.id,
+        paymentId: intake.payment?.id ?? null,
         engine: "gemini",
       });
     }
@@ -195,6 +250,7 @@ export async function POST(req: NextRequest) {
       payment_receipt_requested_at: new Date().toISOString(),
       payment_receipt_requested_by: agentId,
       payment_receipt_engine: "gemini",
+      crm_payment_id: intake.payment?.id ?? null,
     };
 
     const { error: updateMessageError } = await supabase
@@ -243,6 +299,7 @@ export async function POST(req: NextRequest) {
       success: true,
       alreadyProcessed: false,
       messageId: message.id,
+      paymentId: intake.payment?.id ?? null,
       engine: "gemini",
       scheduled: true,
     });

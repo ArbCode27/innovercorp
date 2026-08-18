@@ -5,6 +5,7 @@ import {
   CRM_PAYMENT_STATUSES,
   approveCrmPayment,
   getCrmPaymentById,
+  isCrmPaymentReadyForApproval,
   listCrmPayments,
   markCrmPaymentApprovalError,
   rejectCrmPayment,
@@ -119,7 +120,9 @@ export async function PATCH(req: NextRequest) {
     }
 
     const canReview =
-      currentPayment.status === "EN_PROCESO" || currentPayment.status === "ERROR";
+      currentPayment.status === "RECIBIDO" ||
+      currentPayment.status === "EN_PROCESO" ||
+      currentPayment.status === "ERROR";
     if (!canReview) {
       return NextResponse.json(
         { error: "Este pago ya fue procesado" },
@@ -130,6 +133,23 @@ export async function PATCH(req: NextRequest) {
     if (parsed.data.action === "reject") {
       const payment = await rejectCrmPayment(supabase, currentPayment.id);
       return NextResponse.json({ ok: true, payment });
+    }
+
+    if (currentPayment.status === "RECIBIDO") {
+      return NextResponse.json(
+        { error: "El comprobante aún no tiene todos los datos para aprobarlo" },
+        { status: 400 },
+      );
+    }
+
+    if (!isCrmPaymentReadyForApproval(currentPayment)) {
+      return NextResponse.json(
+        {
+          error:
+            "Faltan cédula, monto, banco, referencia o cliente Wispro para aprobar",
+        },
+        { status: 400 },
+      );
     }
 
     if (!currentPayment.wispro_client_id) {

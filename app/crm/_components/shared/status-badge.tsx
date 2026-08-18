@@ -19,6 +19,7 @@ const statusTones: Record<string, CrmBadgeTone> = {
   inactive: "red",
   bot: "violet",
   human: "rose",
+  RECIBIDO: "blue",
   EN_PROCESO: "amber",
   APROBADO: "emerald",
   RECHAZADO: "red",

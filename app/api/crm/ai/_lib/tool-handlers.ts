@@ -11,7 +11,10 @@ import {
   InnoverPaymentsError,
   submitInnoverPayment,
 } from "@/app/api/crm/_lib/innover-payments";
-import { recordCrmPayment } from "@/app/api/crm/_lib/crm-payments";
+import {
+  applyCrmPaymentExtraction,
+  intakeCrmReceipt,
+} from "@/app/api/crm/_lib/crm-payments";
 import { ensureConversationLabel } from "@/app/api/crm/_lib/conversation-labels";
 import {
   DolarVzlaError,
@@ -185,6 +188,70 @@ const readPendingReceipt = (
     comment:
       typeof record.comment === "string" ? record.comment : null,
   };
+};
+
+const persistReceiptToCrm = async (
+  ctx: AgentRunContext,
+  input: {
+    receiptMessage?: {
+      id?: number | null;
+      media_url?: string | null;
+    } | null;
+    clientName?: string | null;
+    cedula?: string | null;
+    amount?: string | number | null;
+    bank?: string | null;
+    transactionCode?: string | null;
+    comment?: string | null;
+    wisproClientId?: string | null;
+    phoneId?: string | null;
+    status?: "RECIBIDO" | "EN_PROCESO";
+    extraMetadata?: Record<string, unknown>;
+  },
+) => {
+  const messageId = input.receiptMessage?.id ?? ctx.triggerMessageId;
+  if (!messageId) return { ok: false, payment: null, duplicate: false };
+
+  await intakeCrmReceipt(ctx.supabase, {
+    clientId: ctx.clientId,
+    conversationId: ctx.conversationId,
+    messageId,
+    submittedByAgentId: ctx.paymentRequestedByAgentId ?? null,
+    clientName: input.clientName || ctx.waName,
+    phoneId: input.phoneId || ctx.whatsappId || ctx.customerPhone,
+    receiptMediaUrl:
+      typeof input.receiptMessage?.media_url === "string"
+        ? input.receiptMessage.media_url
+        : null,
+    source: ctx.paymentRequestedByAgentId ? "advisor" : "ai",
+    receiptMetadata: {
+      requested_manually: Boolean(ctx.paymentRequestedByAgentId),
+      requested_by_agent_id: ctx.paymentRequestedByAgentId ?? null,
+      requested_from_message_id: messageId,
+    },
+  });
+
+  return applyCrmPaymentExtraction(ctx.supabase, {
+    clientId: ctx.clientId,
+    conversationId: ctx.conversationId,
+    messageId,
+    submittedByAgentId: ctx.paymentRequestedByAgentId ?? null,
+    wisproClientId: input.wisproClientId,
+    clientName: input.clientName || ctx.waName,
+    cedula: input.cedula,
+    phoneId: input.phoneId || ctx.whatsappId || ctx.customerPhone,
+    amount: input.amount,
+    bank: input.bank,
+    transactionCode: input.transactionCode,
+    comment: input.comment,
+    status: input.status,
+    source: ctx.paymentRequestedByAgentId ? "advisor" : "ai",
+    receiptMediaUrl:
+      typeof input.receiptMessage?.media_url === "string"
+        ? input.receiptMessage.media_url
+        : null,
+    receiptMetadata: input.extraMetadata,
+  });
 };
 
 const markHandoff = (
@@ -598,6 +665,45 @@ const handleSubmitPaymentReceipt = async (
   const bank = (parsed.data.bank || pending?.bank || "").trim() || null;
   const comment = parsed.data.comment ?? pending?.comment ?? null;
 
+  if (existingMetadata.payment_submitted === true) {
+    const message =
+      "Tu comprobante ya fue registrado. Un asesor lo verificará en breve.";
+    const label = await applyPaymentVerificationLabel(ctx);
+    markHandoff(ctx, "payment_already_submitted", message);
+    return {
+      name: SUBMIT_PAYMENT_RECEIPT_TOOL,
+      ok: true,
+      response: {
+        ok: true,
+        alreadyProcessed: true,
+        message_id: receiptMessage?.id ?? null,
+        should_handoff: true,
+        label_applied: label.applied,
+        label_id: label.labelId,
+        hint: message,
+      },
+      stopAgent: true,
+      shouldHandoff: true,
+      handoffMessage: message,
+      handoffReason: "payment_already_submitted",
+    };
+  }
+
+  const persistPartial = () =>
+    persistReceiptToCrm(ctx, {
+      receiptMessage,
+      amount,
+      bank,
+      transactionCode,
+      comment,
+      status: "RECIBIDO",
+      extraMetadata: { extraction_incomplete: true },
+    });
+
+  if (receiptMessage?.id && (!amount || !transactionCode || !bank)) {
+    await persistPartial();
+  }
+
   if (!amount || !transactionCode || !bank) {
     return {
       name: SUBMIT_PAYMENT_RECEIPT_TOOL,
@@ -606,6 +712,7 @@ const handleSubmitPaymentReceipt = async (
         ok: false,
         error: "Faltan amount, transaction_code o bank",
         hint: "Extrae los datos del comprobante o pídelos. No hagas handoff.",
+        crm_payment_saved: Boolean(receiptMessage?.id),
       },
     };
   }
@@ -638,6 +745,16 @@ const handleSubmitPaymentReceipt = async (
       existingMetadata.pending_receipt = nextPending;
     }
   }
+
+  await persistReceiptToCrm(ctx, {
+    receiptMessage,
+    amount,
+    bank,
+    transactionCode,
+    comment,
+    status: "RECIBIDO",
+    extraMetadata: { pending_receipt: true },
+  });
 
   const matchResult = resolvePaymentMatch(ctx, parsed.data.wispro_id);
   if (!matchResult.ok) {
@@ -699,30 +816,6 @@ const handleSubmitPaymentReceipt = async (
     };
   }
 
-  if (existingMetadata.payment_submitted === true) {
-    const message =
-      "Tu comprobante ya fue registrado. Un asesor lo verificará en breve.";
-    const label = await applyPaymentVerificationLabel(ctx);
-    markHandoff(ctx, "payment_already_submitted", message);
-    return {
-      name: SUBMIT_PAYMENT_RECEIPT_TOOL,
-      ok: true,
-      response: {
-        ok: true,
-        alreadyProcessed: true,
-        message_id: receiptMessage?.id ?? null,
-        should_handoff: true,
-        label_applied: label.applied,
-        label_id: label.labelId,
-        hint: message,
-      },
-      stopAgent: true,
-      shouldHandoff: true,
-      handoffMessage: message,
-      handoffReason: "payment_already_submitted",
-    };
-  }
-
   const payload = {
     client_id: match.customer.id,
     amount,
@@ -733,215 +826,177 @@ const handleSubmitPaymentReceipt = async (
     phone_id: phoneId,
   };
 
+  const persisted = await persistReceiptToCrm(ctx, {
+    receiptMessage,
+    clientName: payload.name,
+    cedula: payload.cedula,
+    amount: payload.amount,
+    bank: payload.bank,
+    transactionCode: payload.transaction_code,
+    comment,
+    wisproClientId: payload.client_id,
+    phoneId: payload.phone_id,
+    status: "EN_PROCESO",
+    extraMetadata: {
+      extracted_at: new Date().toISOString(),
+      extraction_incomplete: false,
+    },
+  });
+
+  let innoverStatus: number | null = null;
+  let innoverBody: unknown = null;
+  let innoverError: string | null = null;
+
   try {
     const result = await submitInnoverPayment(payload);
-
-    // Silent Wispro payment promise. Never changes the client-facing message.
-    // Failure must not undo or block the successful payment registration.
-    let promiseMetadata: Record<string, unknown> = {
-      payment_promise_created: false,
-      payment_promise_source: "auto_submit",
-    };
-    let promiseCreated = false;
-
-    try {
-      const promiseResult = await createPaymentPromiseForClient({
-        wisproClientId: payload.client_id,
-        cedula: payload.cedula,
-        hours: DEFAULT_PAYMENT_PROMISE_HOURS,
-      });
-
-      promiseCreated = promiseResult.ok;
-      promiseMetadata = promiseResult.ok
-        ? {
-            payment_promise_created: true,
-            payment_promise_id: promiseResult.promise.id,
-            payment_promise_contract_id: promiseResult.contract.id,
-            payment_promise_valid_until: promiseResult.validUntil,
-            payment_promise_source: "auto_submit",
-            payment_promise_error: null,
-          }
-        : {
-            payment_promise_created: false,
-            payment_promise_id: null,
-            payment_promise_contract_id: null,
-            payment_promise_valid_until: null,
-            payment_promise_source: "auto_submit",
-            payment_promise_error: promiseResult.error,
-            payment_promise_skip_reason: promiseResult.reason,
-          };
-    } catch (promiseError) {
-      console.warn("[AI_PAYMENT] promise_unexpected_error", {
-        error:
-          promiseError instanceof Error
-            ? promiseError.message
-            : String(promiseError),
-      });
-      promiseMetadata = {
-        payment_promise_created: false,
-        payment_promise_source: "auto_submit",
-        payment_promise_error:
-          promiseError instanceof Error
-            ? promiseError.message
-            : "Error inesperado al crear promesa",
-      };
-    }
-
-    let crmPaymentMetadata: Record<string, unknown> = {
-      crm_payment_id: null,
-      crm_payment_duplicate: false,
-    };
-
-    try {
-      const persisted = await recordCrmPayment(ctx.supabase, {
-        clientId: ctx.clientId,
-        conversationId: ctx.conversationId,
-        messageId: receiptMessage?.id ?? null,
-        submittedByAgentId: ctx.paymentRequestedByAgentId ?? null,
-        wisproClientId: payload.client_id,
-        clientName: payload.name,
-        cedula: payload.cedula,
-        phoneId: payload.phone_id,
-        amount: payload.amount,
-        bank: payload.bank,
-        transactionCode: payload.transaction_code,
-        comment,
-        status: "EN_PROCESO",
-        source: ctx.paymentRequestedByAgentId ? "advisor" : "ai",
-        externalApiStatus: result.status,
-        externalResponse: result.body,
-        receiptMediaUrl:
-          receiptMessage && "media_url" in receiptMessage
-            ? typeof receiptMessage.media_url === "string"
-              ? receiptMessage.media_url
-              : null
-            : null,
-        receiptMetadata: {
-          requested_manually: Boolean(ctx.paymentRequestedByAgentId),
-          requested_by_agent_id: ctx.paymentRequestedByAgentId ?? null,
-          requested_from_message_id: receiptMessage?.id ?? null,
-        },
-      });
-
-      crmPaymentMetadata = {
-        crm_payment_id: persisted.payment?.id ?? null,
-        crm_payment_duplicate: persisted.duplicate,
-      };
-    } catch (persistError) {
-      console.error("[AI_PAYMENT] crm_payment_persist_unexpected", {
-        error:
-          persistError instanceof Error
-            ? persistError.message
-            : String(persistError),
-      });
-    }
-
-    if (receiptMessage?.id) {
-      const { error: updateError } = await ctx.supabase
-        .from("messages")
-        .update({
-          metadata: {
-            ...existingMetadata,
-            payment_submitted: true,
-            payment_submitted_at: new Date().toISOString(),
-            payment_submitted_run_id: ctx.runId,
-            payment_submitted_payload: payload,
-            payment_api_status: result.status,
-            payment_comment: comment,
-            pending_receipt: null,
-            ...promiseMetadata,
-            ...crmPaymentMetadata,
-          },
-        })
-        .eq("id", receiptMessage.id);
-
-      if (updateError) {
-        console.warn("[AI_PAYMENT] metadata_update_failed", {
-          messageId: receiptMessage.id,
-          error: updateError.message,
-        });
-      }
-    }
-
-    const message =
-      "Registramos tu comprobante de pago. Un asesor lo verificará en breve.";
-    const label = await applyPaymentVerificationLabel(ctx);
-    markHandoff(ctx, "payment_submitted", message);
-
-    return {
-      name: SUBMIT_PAYMENT_RECEIPT_TOOL,
-      ok: true,
-      response: {
-        ok: true,
-        alreadyProcessed: false,
-        submitted: true,
-        should_handoff: true,
-        message_id: receiptMessage?.id ?? null,
-        client_id: payload.client_id,
-        amount: payload.amount,
-        transaction_code: payload.transaction_code,
-        bank: payload.bank,
-        name: payload.name,
-        cedula: payload.cedula,
-        label_applied: label.applied,
-        label_id: label.labelId,
-        // Internal only — do not tell the WhatsApp client about promises.
-        payment_promise_created: promiseCreated,
-        hint: message,
-      },
-      stopAgent: true,
-      shouldHandoff: true,
-      handoffMessage: message,
-      handoffReason: "payment_submitted",
-    };
+    innoverStatus = result.status;
+    innoverBody = result.body;
   } catch (error) {
-    const apiMessage =
+    innoverError =
       error instanceof InnoverPaymentsError
         ? error.message
         : error instanceof Error
           ? error.message
-          : "No se pudo registrar el pago";
+          : "No se pudo registrar el pago en Innover";
+    console.warn("[AI_PAYMENT] innover_soft_fail", {
+      messageId: receiptMessage?.id ?? null,
+      error: innoverError,
+    });
+  }
 
-    if (receiptMessage?.id) {
-      await ctx.supabase
-        .from("messages")
-        .update({
-          metadata: {
-            ...existingMetadata,
-            payment_submit_failed: true,
-            payment_submit_failed_at: new Date().toISOString(),
-            payment_submit_error: apiMessage,
-            payment_api_status:
-              error instanceof InnoverPaymentsError ? error.status : null,
-          },
-        })
-        .eq("id", receiptMessage.id);
-    }
-
-    const message =
-      "No pudimos registrar tu pago automáticamente. Un asesor te atenderá en breve.";
-    const label = await applyPaymentVerificationLabel(ctx);
-    markHandoff(ctx, "payment_api_error", message);
-
-    return {
-      name: SUBMIT_PAYMENT_RECEIPT_TOOL,
-      ok: false,
-      response: {
-        ok: false,
-        error: apiMessage,
-        should_handoff: true,
-        api_status:
-          error instanceof InnoverPaymentsError ? error.status : null,
-        label_applied: label.applied,
-        label_id: label.labelId,
-        hint: message,
+  if (persisted.payment?.id) {
+    await applyCrmPaymentExtraction(ctx.supabase, {
+      messageId: receiptMessage?.id ?? ctx.triggerMessageId,
+      clientId: ctx.clientId,
+      conversationId: ctx.conversationId,
+      wisproClientId: payload.client_id,
+      clientName: payload.name,
+      cedula: payload.cedula,
+      amount: payload.amount,
+      bank: payload.bank,
+      transactionCode: payload.transaction_code,
+      comment,
+      status: "EN_PROCESO",
+      source: ctx.paymentRequestedByAgentId ? "advisor" : "ai",
+      externalApiStatus: innoverStatus,
+      externalResponse: innoverBody,
+      errorMessage: innoverError,
+      receiptMetadata: {
+        innover_soft_fail: Boolean(innoverError),
       },
-      stopAgent: true,
-      shouldHandoff: true,
-      handoffMessage: message,
-      handoffReason: "payment_api_error",
+    });
+  }
+
+  // Silent Wispro payment promise. Never changes the client-facing message.
+  let promiseMetadata: Record<string, unknown> = {
+    payment_promise_created: false,
+    payment_promise_source: "auto_submit",
+  };
+  let promiseCreated = false;
+
+  try {
+    const promiseResult = await createPaymentPromiseForClient({
+      wisproClientId: payload.client_id,
+      cedula: payload.cedula,
+      hours: DEFAULT_PAYMENT_PROMISE_HOURS,
+    });
+
+    promiseCreated = promiseResult.ok;
+    promiseMetadata = promiseResult.ok
+      ? {
+          payment_promise_created: true,
+          payment_promise_id: promiseResult.promise.id,
+          payment_promise_contract_id: promiseResult.contract.id,
+          payment_promise_valid_until: promiseResult.validUntil,
+          payment_promise_source: "auto_submit",
+          payment_promise_error: null,
+        }
+      : {
+          payment_promise_created: false,
+          payment_promise_id: null,
+          payment_promise_contract_id: null,
+          payment_promise_valid_until: null,
+          payment_promise_source: "auto_submit",
+          payment_promise_error: promiseResult.error,
+          payment_promise_skip_reason: promiseResult.reason,
+        };
+  } catch (promiseError) {
+    console.warn("[AI_PAYMENT] promise_unexpected_error", {
+      error:
+        promiseError instanceof Error
+          ? promiseError.message
+          : String(promiseError),
+    });
+    promiseMetadata = {
+      payment_promise_created: false,
+      payment_promise_source: "auto_submit",
+      payment_promise_error:
+        promiseError instanceof Error
+          ? promiseError.message
+          : "Error inesperado al crear promesa",
     };
   }
+
+  if (receiptMessage?.id) {
+    const { error: updateError } = await ctx.supabase
+      .from("messages")
+      .update({
+        metadata: {
+          ...existingMetadata,
+          payment_submitted: true,
+          payment_submitted_at: new Date().toISOString(),
+          payment_submitted_run_id: ctx.runId,
+          payment_submitted_payload: payload,
+          payment_api_status: innoverStatus,
+          payment_submit_error: innoverError,
+          payment_comment: comment,
+          pending_receipt: null,
+          crm_payment_id: persisted.payment?.id ?? null,
+          crm_payment_duplicate: persisted.duplicate,
+          ...promiseMetadata,
+        },
+      })
+      .eq("id", receiptMessage.id);
+
+    if (updateError) {
+      console.warn("[AI_PAYMENT] metadata_update_failed", {
+        messageId: receiptMessage.id,
+        error: updateError.message,
+      });
+    }
+  }
+
+  const message =
+    "Registramos tu comprobante de pago. Un asesor lo verificará en breve.";
+  const label = await applyPaymentVerificationLabel(ctx);
+  markHandoff(ctx, "payment_submitted", message);
+
+  return {
+    name: SUBMIT_PAYMENT_RECEIPT_TOOL,
+    ok: true,
+    response: {
+      ok: true,
+      alreadyProcessed: false,
+      submitted: true,
+      should_handoff: true,
+      message_id: receiptMessage?.id ?? null,
+      crm_payment_id: persisted.payment?.id ?? null,
+      client_id: payload.client_id,
+      amount: payload.amount,
+      transaction_code: payload.transaction_code,
+      bank: payload.bank,
+      name: payload.name,
+      cedula: payload.cedula,
+      label_applied: label.applied,
+      label_id: label.labelId,
+      payment_promise_created: promiseCreated,
+      hint: message,
+    },
+    stopAgent: true,
+    shouldHandoff: true,
+    handoffMessage: message,
+    handoffReason: "payment_submitted",
+  };
 };
 
 const handleEscalate = async (

@@ -10,9 +10,13 @@ import {
 } from "@/components/ui/table";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
 import {
+  canRejectPayment,
   formatPaymentAmount,
   formatPaymentDate,
   formatPaymentDateTime,
+  formatPaymentField,
+  isPaymentReadyForApproval,
+  PAYMENT_PENDING_LABEL,
   type CrmPayment,
 } from "../../_lib/payments";
 import { StatusBadge } from "../shared/status-badge";
@@ -27,6 +31,23 @@ interface PaymentsTableProps {
   onReject: (paymentId: string) => void;
 }
 
+const PaymentValue = ({
+  value,
+  className,
+}: {
+  value: string;
+  className?: string;
+}) => (
+  <span
+    className={
+      value === PAYMENT_PENDING_LABEL
+        ? `${CRM_SURFACES.textMuted} italic`
+        : className
+    }>
+    {value}
+  </span>
+);
+
 export const PaymentsTable = ({
   payments,
   updatingId,
@@ -39,8 +60,8 @@ export const PaymentsTable = ({
         className={`overflow-hidden rounded-xl border ${CRM_SURFACES.border} ${CRM_SURFACES.elevated}`}>
         <EmptyState
           icon={Wallet}
-          title="Sin pagos registrados"
-          description="Cuando Nova registre un comprobante, aparecerá aquí."
+          title="Sin comprobantes"
+          description="Cuando un asesor o Nova registre un comprobante, aparecerá aquí aunque falten datos."
         />
       </div>
     );
@@ -66,8 +87,12 @@ export const PaymentsTable = ({
           <TableBody>
             {payments.map((payment) => {
               const isUpdating = updatingId === payment.id;
-              const canReview =
-                payment.status === "EN_PROCESO" || payment.status === "ERROR";
+              const clientName = formatPaymentField(payment.client_name);
+              const canReject = canRejectPayment(payment);
+              const canApprove = isPaymentReadyForApproval(payment);
+              const approveHint = canApprove
+                ? `Aprobar pago de ${clientName}`
+                : "Faltan datos para aprobar este comprobante";
 
               return (
                 <TableRow
@@ -83,7 +108,7 @@ export const PaymentsTable = ({
                   </TableCell>
                   <TableCell>
                     <div className={`font-medium ${CRM_SURFACES.textPrimary}`}>
-                      {payment.client_name}
+                      <PaymentValue value={clientName} />
                     </div>
                     {payment.comment ? (
                       <div className={`max-w-48 truncate text-[11px] ${CRM_SURFACES.textMuted}`}>
@@ -92,30 +117,33 @@ export const PaymentsTable = ({
                     ) : null}
                   </TableCell>
                   <TableCell className={`font-mono ${CRM_SURFACES.textSecondary}`}>
-                    {payment.cedula}
+                    <PaymentValue value={formatPaymentField(payment.cedula)} />
                   </TableCell>
                   <TableCell className={`font-medium ${CRM_SURFACES.textPrimary}`}>
-                    {formatPaymentAmount(Number(payment.amount))}
+                    <PaymentValue value={formatPaymentAmount(payment.amount)} />
                   </TableCell>
                   <TableCell className={CRM_SURFACES.textSecondary}>
-                    {payment.bank}
+                    <PaymentValue value={formatPaymentField(payment.bank)} />
                   </TableCell>
                   <TableCell className={`font-mono ${CRM_SURFACES.textMuted}`}>
-                    {payment.transaction_code}
+                    <PaymentValue
+                      value={formatPaymentField(payment.transaction_code)}
+                    />
                   </TableCell>
                   <TableCell>
                     <StatusBadge status={payment.status} />
                   </TableCell>
                   <TableCell>
-                    {canReview ? (
+                    {canReject ? (
                       <div className="flex flex-wrap items-center gap-2">
                         <CrmButton
                           type="button"
                           size="sm"
                           variant="success"
-                          disabled={isUpdating}
+                          disabled={isUpdating || !canApprove}
+                          title={approveHint}
                           onClick={() => onApprove(payment.id)}
-                          aria-label={`Aprobar pago de ${payment.client_name}`}>
+                          aria-label={approveHint}>
                           <CheckCircle2 className="size-4" aria-hidden="true" />
                           Aprobar
                         </CrmButton>
@@ -125,7 +153,7 @@ export const PaymentsTable = ({
                           variant="danger"
                           disabled={isUpdating}
                           onClick={() => onReject(payment.id)}
-                          aria-label={`Rechazar pago de ${payment.client_name}`}>
+                          aria-label={`Rechazar pago de ${clientName}`}>
                           <XCircle className="size-4" aria-hidden="true" />
                           Rechazar
                         </CrmButton>

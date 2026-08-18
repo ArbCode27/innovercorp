@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export const CRM_PAYMENT_STATUSES = [
+  "RECIBIDO",
   "EN_PROCESO",
   "APROBADO",
   "RECHAZADO",
@@ -27,13 +28,13 @@ export type CrmPayment = {
   message_id: number | null;
   submitted_by_agent_id: number | null;
   wispro_client_id: string | null;
-  client_name: string;
-  cedula: string;
+  client_name: string | null;
+  cedula: string | null;
   phone_id: string | null;
-  amount: number;
+  amount: number | null;
   amount_raw: string | null;
-  bank: string;
-  transaction_code: string;
+  bank: string | null;
+  transaction_code: string | null;
   payment_date: string;
   comment: string | null;
   status: CrmPaymentStatus;
@@ -54,12 +55,12 @@ export type RecordCrmPaymentInput = {
   messageId?: number | null;
   submittedByAgentId?: number | null;
   wisproClientId?: string | null;
-  clientName: string;
-  cedula: string;
+  clientName?: string | null;
+  cedula?: string | null;
   phoneId?: string | null;
-  amount: string | number;
-  bank: string;
-  transactionCode: string;
+  amount?: string | number | null;
+  bank?: string | null;
+  transactionCode?: string | null;
   paymentDate?: string | null;
   comment?: string | null;
   status?: CrmPaymentStatus;
@@ -74,7 +75,8 @@ export type RecordCrmPaymentInput = {
 
 const LOG_PREFIX = "[CRM_PAYMENTS]";
 
-const parseAmount = (value: string | number): number | null => {
+const parseAmount = (value: string | number | null | undefined): number | null => {
+  if (value === null || value === undefined) return null;
   if (typeof value === "number") {
     return Number.isFinite(value) && value > 0
       ? Math.round((value + Number.EPSILON) * 100) / 100
@@ -141,6 +143,263 @@ const sanitizeSearch = (value: string) =>
 const isCrmPaymentStatus = (value: string): value is CrmPaymentStatus =>
   CRM_PAYMENT_STATUSES.includes(value as CrmPaymentStatus);
 
+const TERMINAL_STATUSES: CrmPaymentStatus[] = ["APROBADO", "RECHAZADO"];
+
+const isTerminalStatus = (status: string | null | undefined) =>
+  TERMINAL_STATUSES.includes(status as CrmPaymentStatus);
+
+const mergeMetadata = (
+  current: Record<string, unknown> | null | undefined,
+  next: Record<string, unknown> | undefined,
+) => ({
+  ...(current || {}),
+  ...(next || {}),
+});
+
+const digitsOnly = (value: string | null | undefined) =>
+  String(value || "").replace(/\D/g, "") || null;
+
+const trimOrNull = (value: string | null | undefined) => {
+  const trimmed = String(value || "").trim();
+  return trimmed || null;
+};
+
+export const isCrmPaymentReadyForApproval = (payment: {
+  status: string;
+  wispro_client_id: string | null;
+  cedula: string | null;
+  bank: string | null;
+  transaction_code: string | null;
+  amount: number | null;
+}) => {
+  if (payment.status !== "EN_PROCESO" && payment.status !== "ERROR") {
+    return false;
+  }
+
+  return Boolean(
+    payment.wispro_client_id?.trim() &&
+      digitsOnly(payment.cedula) &&
+      trimOrNull(payment.bank) &&
+      digitsOnly(payment.transaction_code) &&
+      Number(payment.amount) > 0,
+  );
+};
+
+export const getCrmPaymentByMessageId = async (
+  supabase: SupabaseClient,
+  messageId: number,
+) => {
+  const { data, error } = await supabase
+    .from("crm_payments")
+    .select("*")
+    .eq("message_id", messageId)
+    .maybeSingle<CrmPayment>();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data;
+};
+
+export type IntakeCrmReceiptInput = {
+  clientId?: number | null;
+  conversationId?: number | null;
+  messageId: number;
+  submittedByAgentId?: number | null;
+  clientName?: string | null;
+  phoneId?: string | null;
+  receiptMediaUrl?: string | null;
+  source?: CrmPaymentSource;
+  receiptMetadata?: Record<string, unknown>;
+};
+
+export const intakeCrmReceipt = async (
+  supabase: SupabaseClient,
+  input: IntakeCrmReceiptInput,
+): Promise<{ ok: boolean; payment: CrmPayment | null; created: boolean }> => {
+  try {
+    const existing = await getCrmPaymentByMessageId(supabase, input.messageId);
+    if (existing) {
+      return { ok: true, payment: existing, created: false };
+    }
+
+    const payload = {
+      client_id: input.clientId ?? null,
+      conversation_id: input.conversationId ?? null,
+      message_id: input.messageId,
+      submitted_by_agent_id: input.submittedByAgentId ?? null,
+      client_name: trimOrNull(input.clientName),
+      phone_id: trimOrNull(input.phoneId),
+      payment_date: todayInCaracas(),
+      status: "RECIBIDO" as CrmPaymentStatus,
+      source: input.source || "ai",
+      receipt_media_url: input.receiptMediaUrl || null,
+      receipt_metadata: input.receiptMetadata || {},
+    };
+
+    const { data, error } = await supabase
+      .from("crm_payments")
+      .insert(payload)
+      .select("*")
+      .maybeSingle<CrmPayment>();
+
+    if (!error && data) {
+      console.log(`${LOG_PREFIX} intake_ok`, {
+        id: data.id,
+        messageId: input.messageId,
+        source: payload.source,
+      });
+      return { ok: true, payment: data, created: true };
+    }
+
+    if (error?.code === "23505") {
+      const duplicate = await getCrmPaymentByMessageId(supabase, input.messageId);
+      return { ok: true, payment: duplicate, created: false };
+    }
+
+    console.error(`${LOG_PREFIX} intake_failed`, {
+      message: error?.message,
+      code: error?.code ?? null,
+      messageId: input.messageId,
+    });
+    return { ok: false, payment: null, created: false };
+  } catch (error) {
+    console.error(`${LOG_PREFIX} intake_unexpected`, {
+      error: error instanceof Error ? error.message : String(error),
+      messageId: input.messageId,
+    });
+    return { ok: false, payment: null, created: false };
+  }
+};
+
+export const applyCrmPaymentExtraction = async (
+  supabase: SupabaseClient,
+  input: RecordCrmPaymentInput & { messageId?: number | null },
+): Promise<{ ok: boolean; payment: CrmPayment | null; duplicate: boolean }> => {
+  try {
+    const amount = parseAmount(input.amount);
+    const cedula = digitsOnly(input.cedula);
+    const bank = trimOrNull(input.bank);
+    const transactionCode = digitsOnly(input.transactionCode);
+    const clientName = trimOrNull(input.clientName);
+
+    const existing = input.messageId
+      ? await getCrmPaymentByMessageId(supabase, input.messageId)
+      : null;
+
+    const nextAmount = amount ?? existing?.amount ?? null;
+    const nextCedula = cedula ?? existing?.cedula ?? null;
+    const nextBank = bank ?? existing?.bank ?? null;
+    const nextTransactionCode =
+      transactionCode ?? existing?.transaction_code ?? null;
+    const nextClientName = clientName ?? existing?.client_name ?? null;
+    const nextWisproId =
+      trimOrNull(input.wisproClientId) ?? existing?.wispro_client_id ?? null;
+    const complete = Boolean(
+      nextAmount &&
+        nextCedula &&
+        nextBank &&
+        nextTransactionCode &&
+        nextClientName,
+    );
+
+    let nextStatus: CrmPaymentStatus = input.status
+      ? input.status
+      : complete
+        ? "EN_PROCESO"
+        : "RECIBIDO";
+
+    if (
+      existing &&
+      (existing.status === "EN_PROCESO" || existing.status === "ERROR") &&
+      nextStatus === "RECIBIDO"
+    ) {
+      nextStatus = existing.status;
+    }
+
+    const patch = {
+      client_id: input.clientId ?? existing?.client_id ?? undefined,
+      conversation_id:
+        input.conversationId ?? existing?.conversation_id ?? undefined,
+      submitted_by_agent_id:
+        input.submittedByAgentId ?? existing?.submitted_by_agent_id ?? undefined,
+      wispro_client_id: nextWisproId ?? undefined,
+      client_name: nextClientName,
+      cedula: nextCedula,
+      phone_id: trimOrNull(input.phoneId) ?? existing?.phone_id ?? undefined,
+      amount: nextAmount,
+      amount_raw:
+        input.amount == null
+          ? existing?.amount_raw ?? undefined
+          : String(input.amount),
+      bank: nextBank,
+      transaction_code: nextTransactionCode,
+      payment_date:
+        input.paymentDate?.slice(0, 10) ||
+        existing?.payment_date ||
+        todayInCaracas(),
+      comment: input.comment?.trim() || existing?.comment || undefined,
+      source: input.source || existing?.source,
+      external_payment_id:
+        input.externalPaymentId ||
+        extractExternalId(input.externalResponse) ||
+        existing?.external_payment_id ||
+        undefined,
+      external_api_status:
+        input.externalApiStatus ?? existing?.external_api_status ?? undefined,
+      external_response:
+        input.externalResponse ?? existing?.external_response ?? undefined,
+      error_message:
+        input.errorMessage === undefined
+          ? existing?.error_message ?? undefined
+          : input.errorMessage?.trim() || null,
+      receipt_media_url:
+        input.receiptMediaUrl || existing?.receipt_media_url || undefined,
+    };
+
+    if (existing) {
+      if (isTerminalStatus(existing.status)) {
+        return { ok: true, payment: existing, duplicate: false };
+      }
+
+      const { data, error } = await supabase
+        .from("crm_payments")
+        .update({
+          ...patch,
+          status: nextStatus,
+          receipt_metadata: mergeMetadata(
+            existing.receipt_metadata,
+            input.receiptMetadata,
+          ),
+        })
+        .eq("id", existing.id)
+        .select("*")
+        .maybeSingle<CrmPayment>();
+
+      if (error) {
+        if (error.code === "23505") {
+          return { ok: true, payment: existing, duplicate: true };
+        }
+        throw new Error(error.message);
+      }
+
+      return { ok: true, payment: data, duplicate: false };
+    }
+
+    return insertCrmPayment(supabase, {
+      ...input,
+      status: nextStatus,
+    });
+  } catch (error) {
+    console.error(`${LOG_PREFIX} extract_unexpected`, {
+      error: error instanceof Error ? error.message : String(error),
+      messageId: input.messageId ?? null,
+    });
+    return { ok: false, payment: null, duplicate: false };
+  }
+};
+
 export const recordCrmPayment = async (
   supabase: SupabaseClient,
   input: RecordCrmPaymentInput,
@@ -160,21 +419,11 @@ const insertCrmPayment = async (
   input: RecordCrmPaymentInput,
 ): Promise<{ ok: boolean; payment: CrmPayment | null; duplicate: boolean }> => {
   const amount = parseAmount(input.amount);
-  const cedula = String(input.cedula || "").replace(/\D/g, "");
-  const bank = String(input.bank || "").trim();
-  const transactionCode = String(input.transactionCode || "").replace(/\D/g, "");
-  const clientName = String(input.clientName || "").trim();
-
-  if (!amount || !cedula || !bank || !transactionCode || !clientName) {
-    console.warn(`${LOG_PREFIX} persist_skipped_invalid`, {
-      hasAmount: Boolean(amount),
-      hasCedula: Boolean(cedula),
-      hasBank: Boolean(bank),
-      hasRef: Boolean(transactionCode),
-      hasName: Boolean(clientName),
-    });
-    return { ok: false, payment: null, duplicate: false };
-  }
+  const cedula = digitsOnly(input.cedula);
+  const bank = trimOrNull(input.bank);
+  const transactionCode = digitsOnly(input.transactionCode);
+  const clientName = trimOrNull(input.clientName);
+  const complete = Boolean(amount && cedula && bank && transactionCode && clientName);
 
   const payload = {
     client_id: input.clientId ?? null,
@@ -186,12 +435,12 @@ const insertCrmPayment = async (
     cedula,
     phone_id: input.phoneId?.trim() || null,
     amount,
-    amount_raw: String(input.amount),
+    amount_raw: input.amount == null ? null : String(input.amount),
     bank,
     transaction_code: transactionCode,
     payment_date: input.paymentDate?.slice(0, 10) || todayInCaracas(),
     comment: input.comment?.trim() || null,
-    status: input.status || "EN_PROCESO",
+    status: input.status || (complete ? "EN_PROCESO" : "RECIBIDO"),
     source: input.source || "ai",
     external_payment_id:
       input.externalPaymentId || extractExternalId(input.externalResponse),
@@ -271,6 +520,7 @@ const applyListFilters = <T>(
 };
 
 const emptyStatusCounts = (): CrmPaymentStatusCounts => ({
+  RECIBIDO: 0,
   EN_PROCESO: 0,
   APROBADO: 0,
   RECHAZADO: 0,

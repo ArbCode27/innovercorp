@@ -18,6 +18,7 @@ const PAGE_SIZE = 50;
 const SEARCH_DEBOUNCE_MS = 300;
 
 const EMPTY_COUNTS: CrmPaymentStatusCounts = {
+  RECIBIDO: 0,
   EN_PROCESO: 0,
   APROBADO: 0,
   RECHAZADO: 0,
@@ -173,7 +174,7 @@ export const PaymentsView = () => {
             Pagos
           </h2>
           <p className={`text-sm ${CRM_SURFACES.textMuted}`}>
-            Comprobantes registrados desde WhatsApp para revisión del asesor
+            Bandeja de comprobantes: entran al registrarlos y se completan con la extracción
           </p>
         </div>
         <CrmButton

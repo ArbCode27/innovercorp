@@ -83,6 +83,7 @@ export const STATUS_LABELS: Record<string, string> = {
   busy: "Ocupado",
   offline: "Desconectado",
   inactive: "Inactivo",
+  RECIBIDO: "Recibido",
   EN_PROCESO: "En proceso",
   APROBADO: "Aprobado",
   RECHAZADO: "Rechazado",
