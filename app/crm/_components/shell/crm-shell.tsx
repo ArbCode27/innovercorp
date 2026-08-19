@@ -103,7 +103,9 @@ export const CrmShell = () => {
                 onAssignAgent={crm.assignAgent}
                 onAssociateWispro={crm.associateWisproToConversation}
                 onUnlinkWispro={crm.unlinkWisproFromClient}
-                onCreatePaymentPromise={crm.createWisproPaymentPromise}
+                onCreatePaymentPromise={async () => {
+                  await crm.createWisproPaymentPromise();
+                }}
                 onOpenSettingsView={handleSelectView}
               />
             ) : null}
@@ -147,7 +149,9 @@ export const CrmShell = () => {
                 onAssignAgent={crm.assignAgent}
                 onAssociateWispro={crm.associateWisproToConversation}
                 onUnlinkWispro={crm.unlinkWisproFromClient}
-                onCreatePaymentPromise={crm.createWisproPaymentPromise}
+                onCreatePaymentPromise={async () => {
+                  await crm.createWisproPaymentPromise();
+                }}
                 onOpenSettingsView={handleSelectView}
               />
             ) : null}
@@ -207,6 +211,7 @@ export const CrmShell = () => {
                 currentAgent={auth.agent}
                 settings={crm.settings}
                 onUpdateAiSystemPrompt={crm.updateAiSystemPrompt}
+                onUpdatePaymentSuccessMessage={crm.updatePaymentSuccessMessage}
                 onUpdateOfficeHours={crm.updateOfficeHoursSettings}
               />
             ) : null}

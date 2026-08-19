@@ -19,6 +19,7 @@ export type CrmSettings = {
   bot_engine: BotEngine;
   gemini_model: string;
   ai_system_prompt: string | null;
+  payment_success_message: string | null;
   office_hours: OfficeHoursConfig;
   after_hours_payments: AfterHoursPaymentsConfig;
   updated_at: string | null;
@@ -32,6 +33,7 @@ const DEFAULT_SETTINGS: CrmSettings = {
   bot_engine: DEFAULT_BOT_ENGINE,
   gemini_model: DEFAULT_GEMINI_MODEL,
   ai_system_prompt: null,
+  payment_success_message: null,
   office_hours: DEFAULT_OFFICE_HOURS,
   after_hours_payments: DEFAULT_AFTER_HOURS_PAYMENTS,
   updated_at: null,
@@ -65,6 +67,10 @@ const mapSettingsRow = (row: Record<string, unknown> | null): CrmSettings => {
         : DEFAULT_GEMINI_MODEL,
     ai_system_prompt:
       typeof row.ai_system_prompt === "string" ? row.ai_system_prompt : null,
+    payment_success_message:
+      typeof row.payment_success_message === "string"
+        ? row.payment_success_message
+        : null,
     office_hours: officeFromDb,
     after_hours_payments: afterHoursFromDb,
     updated_at:
@@ -128,6 +134,7 @@ export const updateCrmSettings = async (
     bot_engine?: BotEngine;
     gemini_model?: string;
     ai_system_prompt?: string | null;
+    payment_success_message?: string | null;
     office_hours?: OfficeHoursConfig;
     after_hours_payments?: AfterHoursPaymentsConfig;
     updated_by?: number | null;
@@ -149,6 +156,10 @@ export const updateCrmSettings = async (
       payload.ai_system_prompt === undefined
         ? current.ai_system_prompt
         : payload.ai_system_prompt,
+    payment_success_message:
+      payload.payment_success_message === undefined
+        ? current.payment_success_message
+        : payload.payment_success_message,
     office_hours: nextOfficeHours,
     after_hours_payments: nextAfterHours,
     updated_at: new Date().toISOString(),

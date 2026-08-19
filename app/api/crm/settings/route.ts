@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@supabase/supabase-js";
 import { AI_SYSTEM_PROMPT_MAX_LENGTH } from "@/app/crm/_lib/ai-default-prompt";
+import { PAYMENT_SUCCESS_MESSAGE_MAX_LENGTH } from "@/app/crm/_lib/payment-success-message";
 import { getCrmSettings, updateCrmSettings } from "../_lib/crm-settings";
 import {
   DEFAULT_AFTER_HOURS_PAYMENT_TOOLS,
@@ -48,6 +49,14 @@ const updateSchema = z
       )
       .nullable()
       .optional(),
+    payment_success_message: z
+      .string()
+      .max(
+        PAYMENT_SUCCESS_MESSAGE_MAX_LENGTH,
+        `El mensaje no puede superar ${PAYMENT_SUCCESS_MESSAGE_MAX_LENGTH} caracteres`,
+      )
+      .nullable()
+      .optional(),
     office_hours: officeHoursSchema.optional(),
     after_hours_payments: afterHoursPaymentsSchema.optional(),
   })
@@ -55,6 +64,7 @@ const updateSchema = z
     (value) =>
       value.gemini_model !== undefined ||
       value.ai_system_prompt !== undefined ||
+      value.payment_success_message !== undefined ||
       value.office_hours !== undefined ||
       value.after_hours_payments !== undefined,
     { message: "Debes enviar al menos un campo para actualizar" },
@@ -156,6 +166,10 @@ export async function PATCH(req: NextRequest) {
         typeof payload.data.ai_system_prompt === "string"
           ? payload.data.ai_system_prompt.trim() || null
           : payload.data.ai_system_prompt,
+      payment_success_message:
+        typeof payload.data.payment_success_message === "string"
+          ? payload.data.payment_success_message.trim() || null
+          : payload.data.payment_success_message,
       office_hours: officeHours,
       after_hours_payments: afterHoursPayments,
       updated_by: payload.data.agent_id,

@@ -64,6 +64,7 @@ const emptyData: CrmData = {
     bot_engine: DEFAULT_BOT_ENGINE,
     gemini_model: "gemini-2.0-flash",
     ai_system_prompt: null,
+    payment_success_message: null,
     office_hours: undefined,
     after_hours_payments: undefined,
     updated_at: null,
@@ -903,6 +904,36 @@ export const useCrmData = (agent: Agent | null) => {
     }
   };
 
+  const updatePaymentSuccessMessage = async (message: string | null) => {
+    if (!agent) return;
+    if (!isAdminRole(agent.role)) {
+      toast.error("Solo un administrador puede cambiar el mensaje de pago");
+      return;
+    }
+
+    const normalized =
+      typeof message === "string" ? message.trim() || null : null;
+
+    try {
+      const settings = await crmService.updateCrmSettings(agent.id, {
+        payment_success_message: normalized,
+      });
+      setData((current) => ({ ...current, settings }));
+      toast.success(
+        normalized
+          ? "Mensaje de pago aprobado actualizado"
+          : "Mensaje de pago aprobado restaurado al predeterminado",
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "No se pudo guardar el mensaje de pago aprobado",
+      );
+      throw error;
+    }
+  };
+
   const resolveConversation = async () => {
     if (!selectedConversation || !agent) return;
 
@@ -1288,6 +1319,7 @@ export const useCrmData = (agent: Agent | null) => {
     takeControl,
     reactivateBot,
     updateAiSystemPrompt,
+    updatePaymentSuccessMessage,
     updateOfficeHoursSettings,
     resolveConversation,
     updateLabels,

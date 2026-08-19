@@ -49,6 +49,7 @@ export interface CrmSettings {
   bot_engine: BotEngine;
   gemini_model: string;
   ai_system_prompt: string | null;
+  payment_success_message: string | null;
   office_hours?: OfficeHoursConfig;
   after_hours_payments?: AfterHoursPaymentsConfig;
   updated_at: string | null;

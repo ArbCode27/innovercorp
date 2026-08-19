@@ -128,6 +128,10 @@ export const crmService = {
             typeof settingsRow.ai_system_prompt === "string"
               ? settingsRow.ai_system_prompt
               : null,
+          payment_success_message:
+            typeof settingsRow.payment_success_message === "string"
+              ? settingsRow.payment_success_message
+              : null,
           office_hours:
             settingsRow.office_hours !== undefined &&
             settingsRow.office_hours !== null
@@ -154,6 +158,7 @@ export const crmService = {
           bot_engine: DEFAULT_BOT_ENGINE,
           gemini_model: "gemini-2.0-flash",
           ai_system_prompt: null,
+          payment_success_message: null,
           office_hours: DEFAULT_OFFICE_HOURS,
           after_hours_payments: DEFAULT_AFTER_HOURS_PAYMENTS,
           updated_at: null,
@@ -182,6 +187,7 @@ export const crmService = {
     patch: {
       gemini_model?: string;
       ai_system_prompt?: string | null;
+      payment_success_message?: string | null;
       office_hours?: import("./office-hours").OfficeHoursConfig;
       after_hours_payments?: import("./office-hours").AfterHoursPaymentsConfig;
     },
