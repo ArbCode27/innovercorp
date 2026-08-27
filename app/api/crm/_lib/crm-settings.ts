@@ -13,6 +13,11 @@ import {
   type AfterHoursPaymentsConfig,
   type OfficeHoursConfig,
 } from "./office-hours";
+import {
+  EMPTY_AI_RECOVERY_MESSAGES,
+  parseAiRecoveryMessages,
+  type AiRecoveryMessages,
+} from "@/app/crm/_lib/ai-recovery-messages";
 
 export type CrmSettings = {
   id: number;
@@ -20,6 +25,7 @@ export type CrmSettings = {
   gemini_model: string;
   ai_system_prompt: string | null;
   payment_success_message: string | null;
+  ai_recovery_messages: AiRecoveryMessages;
   office_hours: OfficeHoursConfig;
   after_hours_payments: AfterHoursPaymentsConfig;
   updated_at: string | null;
@@ -34,6 +40,7 @@ const DEFAULT_SETTINGS: CrmSettings = {
   gemini_model: DEFAULT_GEMINI_MODEL,
   ai_system_prompt: null,
   payment_success_message: null,
+  ai_recovery_messages: { ...EMPTY_AI_RECOVERY_MESSAGES },
   office_hours: DEFAULT_OFFICE_HOURS,
   after_hours_payments: DEFAULT_AFTER_HOURS_PAYMENTS,
   updated_at: null,
@@ -71,6 +78,7 @@ const mapSettingsRow = (row: Record<string, unknown> | null): CrmSettings => {
       typeof row.payment_success_message === "string"
         ? row.payment_success_message
         : null,
+    ai_recovery_messages: parseAiRecoveryMessages(row.ai_recovery_messages),
     office_hours: officeFromDb,
     after_hours_payments: afterHoursFromDb,
     updated_at:
@@ -135,6 +143,7 @@ export const updateCrmSettings = async (
     gemini_model?: string;
     ai_system_prompt?: string | null;
     payment_success_message?: string | null;
+    ai_recovery_messages?: AiRecoveryMessages;
     office_hours?: OfficeHoursConfig;
     after_hours_payments?: AfterHoursPaymentsConfig;
     updated_by?: number | null;
@@ -160,6 +169,10 @@ export const updateCrmSettings = async (
       payload.payment_success_message === undefined
         ? current.payment_success_message
         : payload.payment_success_message,
+    ai_recovery_messages:
+      payload.ai_recovery_messages === undefined
+        ? current.ai_recovery_messages
+        : parseAiRecoveryMessages(payload.ai_recovery_messages),
     office_hours: nextOfficeHours,
     after_hours_payments: nextAfterHours,
     updated_at: new Date().toISOString(),
@@ -178,10 +191,12 @@ export const updateCrmSettings = async (
   if (error) {
     // Soft message if migration not applied yet.
     if (
-      /office_hours|after_hours_payments|column/i.test(error.message || "")
+      /office_hours|after_hours_payments|ai_recovery_messages|column/i.test(
+        error.message || "",
+      )
     ) {
       throw new Error(
-        "Falta la migración de horarios en Supabase (office_hours / after_hours_payments). Ejecuta supabase/migrations/20260817140000_crm_settings_office_hours.sql",
+        "Falta una migración de ajustes en Supabase. Ejecuta supabase/migrations/20260817140000_crm_settings_office_hours.sql y supabase/migrations/20260827120000_ai_agent_reliability.sql",
       );
     }
     throw error;

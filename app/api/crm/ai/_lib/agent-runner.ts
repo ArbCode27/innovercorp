@@ -2,6 +2,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { DEFAULT_AI_SYSTEM_PROMPT } from "@/app/crm/_lib/ai-default-prompt";
 import { parseClientEnvoicing, resolveLinkedClientIdentity } from "@/app/crm/_lib/client-profile-utils";
 import {
+  defaultAdvisorHandoffMessage,
+  resolveOfficeHoursSnapshot,
+  type OfficeHoursSnapshot,
+} from "@/app/crm/_lib/office-hours";
+import {
   AFTER_HOURS_PAYMENTS_PROMPT,
   type BotReplyMode,
 } from "@/app/api/crm/_lib/bot-reply-policy";
@@ -89,6 +94,7 @@ const createAgentContext = (input: {
   paymentRequestedByAgentId?: number | null;
   replyMode?: BotReplyMode;
   allowedToolNames?: string[] | null;
+  officeHours?: OfficeHoursSnapshot | null;
 }): AgentRunContext => {
   const identity = resolveLinkedClientIdentity(input.client);
   return {
@@ -103,6 +109,7 @@ const createAgentContext = (input: {
     paymentRequestedByAgentId: input.paymentRequestedByAgentId ?? null,
     replyMode: input.replyMode ?? "full",
     allowedToolNames: input.allowedToolNames ?? null,
+    officeHours: input.officeHours ?? null,
     lastLookupByWisproId: new Map(),
     lastLookupCedula: null,
     linkedWisproId: identity.wisproId,
@@ -143,6 +150,7 @@ const runAgentLoop = async (input: {
       enableTools: true,
       allowedToolNames: input.allowedToolNames,
       timeoutsMs: input.timeoutsMs,
+      backoffMs: 800,
       logContext: { ...logContext, step },
     });
 
@@ -234,7 +242,7 @@ const runAgentLoop = async (input: {
       action: "handoff",
       message:
         input.ctx.escalateMessage ||
-        "Un asesor de nuestro equipo continuará contigo en breve.",
+        defaultAdvisorHandoffMessage(input.ctx.officeHours),
       reason: input.ctx.escalateReason || "escalate_to_human",
       runId: input.ctx.runId,
       clientId: input.ctx.clientId,
@@ -247,6 +255,7 @@ const runAgentLoop = async (input: {
     model: input.model,
     enableTools: false,
     timeoutsMs: input.timeoutsMs,
+    backoffMs: 800,
     logContext: { ...logContext, step: "text_fallback" },
   });
 
@@ -276,10 +285,13 @@ export const runGeminiAgent = async (input: {
   model: string;
   replyMode?: BotReplyMode;
   allowedToolNames?: string[] | null;
+  officeHours?: OfficeHoursSnapshot | null;
 }): Promise<AgentDecision> => {
   const runId = crypto.randomUUID();
   const replyMode = input.replyMode ?? "full";
   const allowedToolNames = input.allowedToolNames ?? null;
+  const officeHours =
+    input.officeHours ?? resolveOfficeHoursSnapshot(new Date());
   const { contents, attachedMediaIds } = await buildAgentContents({
     messages: input.messages,
     triggerMessageId: input.triggerMessageId,
@@ -294,9 +306,15 @@ export const runGeminiAgent = async (input: {
     "",
     replyMode === "after_hours_payments" ? AFTER_HOURS_PAYMENTS_PROMPT : null,
     replyMode === "after_hours_payments" ? "" : null,
+    officeHours.enabled && officeHours.closed && replyMode === "full"
+      ? "La oficina está CERRADA ahora. Si el cliente pide un asesor, soporte humano o no puedes resolver: informa el horario inyectado y la próxima apertura. No prometas atención “en breve”. Los pagos/comprobantes sí puedes registrarlos."
+      : null,
+    officeHours.enabled && officeHours.closed && replyMode === "full" ? "" : null,
     GEMINI_TOOLS_CONTRACT_PROMPT,
     "",
     GEMINI_MEDIA_CONTRACT_PROMPT,
+    "",
+    officeHours.promptBlock,
     "",
     buildIdentityBlock({
       conversationId: input.conversationId,
@@ -308,11 +326,9 @@ export const runGeminiAgent = async (input: {
     .join("\n");
 
   const hasInlineMedia = attachedMediaIds.length > 0;
-  // Text: 3 attempts. Media: longer primary + degraded text-only path.
-  const primaryTimeouts = hasInlineMedia
-    ? [60000, 75000, 90000]
-    : [40000, 55000, 70000];
-  const degradedTimeouts = [45000, 60000, 70000];
+  // Short attempts so the delayed client ack can fire if Gemini saturates.
+  const primaryTimeouts = hasInlineMedia ? [15000, 18000] : [10000, 12000];
+  const degradedTimeouts = [12000, 15000];
   const fallbackModel = (
     process.env.GEMINI_FALLBACK_MODEL || "gemini-2.0-flash"
   ).trim();
@@ -323,6 +339,8 @@ export const runGeminiAgent = async (input: {
     runId,
     model: primaryModel,
     replyMode,
+    officeClosed: officeHours.closed,
+    nextOpen: officeHours.nextOpenLabel,
     allowedToolNames,
     fallbackModel:
       fallbackModel && fallbackModel !== primaryModel ? fallbackModel : null,
@@ -346,6 +364,7 @@ export const runGeminiAgent = async (input: {
       paymentRequestedByAgentId: input.paymentRequestedByAgentId,
       replyMode,
       allowedToolNames,
+      officeHours,
     });
 
     const degraded = Boolean(options?.degraded);

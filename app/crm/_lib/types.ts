@@ -50,6 +50,7 @@ export interface CrmSettings {
   gemini_model: string;
   ai_system_prompt: string | null;
   payment_success_message: string | null;
+  ai_recovery_messages?: import("./ai-recovery-messages").AiRecoveryMessages;
   office_hours?: OfficeHoursConfig;
   after_hours_payments?: AfterHoursPaymentsConfig;
   updated_at: string | null;

@@ -65,6 +65,7 @@ const emptyData: CrmData = {
     gemini_model: "gemini-2.0-flash",
     ai_system_prompt: null,
     payment_success_message: null,
+    ai_recovery_messages: undefined,
     office_hours: undefined,
     after_hours_payments: undefined,
     updated_at: null,
@@ -934,6 +935,31 @@ export const useCrmData = (agent: Agent | null) => {
     }
   };
 
+  const updateAiRecoveryMessages = async (
+    messages: import("../_lib/ai-recovery-messages").AiRecoveryMessages,
+  ) => {
+    if (!agent) return;
+    if (!isAdminRole(agent.role)) {
+      toast.error("Solo un administrador puede cambiar los mensajes de recuperación");
+      return;
+    }
+
+    try {
+      const settings = await crmService.updateCrmSettings(agent.id, {
+        ai_recovery_messages: messages,
+      });
+      setData((current) => ({ ...current, settings }));
+      toast.success("Mensajes de recuperación de Nova actualizados");
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "No se pudieron guardar los mensajes de recuperación",
+      );
+      throw error;
+    }
+  };
+
   const resolveConversation = async () => {
     if (!selectedConversation || !agent) return;
 
@@ -1320,6 +1346,7 @@ export const useCrmData = (agent: Agent | null) => {
     reactivateBot,
     updateAiSystemPrompt,
     updatePaymentSuccessMessage,
+    updateAiRecoveryMessages,
     updateOfficeHoursSettings,
     resolveConversation,
     updateLabels,

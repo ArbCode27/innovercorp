@@ -46,7 +46,8 @@ export const isRetryableGeminiError = (error: unknown): boolean => {
     message.includes("overloaded") ||
     message.includes("high demand") ||
     message.includes("try again later") ||
-    message.includes("temporarily")
+    message.includes("temporarily") ||
+    message.includes("circuit_open")
   );
 };
 

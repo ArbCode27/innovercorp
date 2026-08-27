@@ -1,18 +1,26 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-export type CrmAutoLabelKey = "verificar_pago" | "soporte";
+export type CrmAutoLabelKey = "verificar_pago" | "soporte" | "ia_error";
 
 const LOG_PREFIX = "[CRM_LABELS]";
 
 const LABEL_ENV_KEYS: Record<CrmAutoLabelKey, string> = {
   verificar_pago: "CRM_LABEL_VERIFICAR_PAGO_ID",
   soporte: "CRM_LABEL_SOPORTE_ID",
+  ia_error: "CRM_LABEL_IA_ERROR_ID",
 };
 
 /** Name fallbacks when env ID is not set (matched case-insensitive). */
 const LABEL_NAME_CANDIDATES: Record<CrmAutoLabelKey, string[]> = {
   verificar_pago: ["verificar pago", "verificar_pago", "verificacion de pago"],
   soporte: ["soporte", "soporte tecnico", "soporte técnico", "falla tecnica"],
+  ia_error: [
+    "ia error",
+    "error ia",
+    "ia_error",
+    "requiere asesor",
+    "requiere_asesor",
+  ],
 };
 
 const normalizeLabelName = (value: string) =>

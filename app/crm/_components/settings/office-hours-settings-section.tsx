@@ -210,8 +210,9 @@ export const OfficeHoursSettingsSection = ({
               Horario de oficina
             </h3>
             <p className={`mt-1 max-w-xl text-sm ${CRM_SURFACES.textMuted}`}>
-              Define cuándo hay asesores. Fuera de ese horario Nova atiende
-              pagos aunque el chat esté en modo humano.
+              Define cuándo hay asesores. Nova usa este horario para
+              avisarle al cliente cuándo pueden atenderlo. Fuera de jornada
+              también puede registrar pagos aunque el chat esté en modo humano.
             </p>
           </div>
         </div>

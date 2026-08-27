@@ -212,6 +212,7 @@ export const CrmShell = () => {
                 settings={crm.settings}
                 onUpdateAiSystemPrompt={crm.updateAiSystemPrompt}
                 onUpdatePaymentSuccessMessage={crm.updatePaymentSuccessMessage}
+                onUpdateAiRecoveryMessages={crm.updateAiRecoveryMessages}
                 onUpdateOfficeHours={crm.updateOfficeHoursSettings}
               />
             ) : null}

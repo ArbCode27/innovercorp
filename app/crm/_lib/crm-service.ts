@@ -22,6 +22,10 @@ import type {
   UpdateQuickReplyInput,
   UpsertAgentInput,
 } from "./types";
+import {
+  EMPTY_AI_RECOVERY_MESSAGES,
+  parseAiRecoveryMessages,
+} from "./ai-recovery-messages";
 import { DEFAULT_BOT_ENGINE, normalizeBotEngine } from "./bot-engine";
 import {
   DEFAULT_AFTER_HOURS_PAYMENTS,
@@ -132,6 +136,9 @@ export const crmService = {
             typeof settingsRow.payment_success_message === "string"
               ? settingsRow.payment_success_message
               : null,
+          ai_recovery_messages: parseAiRecoveryMessages(
+            settingsRow.ai_recovery_messages,
+          ),
           office_hours:
             settingsRow.office_hours !== undefined &&
             settingsRow.office_hours !== null
@@ -159,6 +166,7 @@ export const crmService = {
           gemini_model: "gemini-2.0-flash",
           ai_system_prompt: null,
           payment_success_message: null,
+          ai_recovery_messages: { ...EMPTY_AI_RECOVERY_MESSAGES },
           office_hours: DEFAULT_OFFICE_HOURS,
           after_hours_payments: DEFAULT_AFTER_HOURS_PAYMENTS,
           updated_at: null,
@@ -188,6 +196,7 @@ export const crmService = {
       gemini_model?: string;
       ai_system_prompt?: string | null;
       payment_success_message?: string | null;
+      ai_recovery_messages?: import("./ai-recovery-messages").AiRecoveryMessages;
       office_hours?: import("./office-hours").OfficeHoursConfig;
       after_hours_payments?: import("./office-hours").AfterHoursPaymentsConfig;
     },

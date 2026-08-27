@@ -20,8 +20,8 @@ export const AFTER_HOURS_PAYMENTS_PROMPT = `Modo FUERA DE OFICINA / DOMINGO (obl
 - La oficina está cerrada. El chat puede estar en modo humano; tú igual atiendes SOLO pagos.
 - Permitido: leer comprobantes (imagen), pedir cédula/RIF (solo números), lookup_wispro_by_cedula, submit_payment_receipt, get_bcv_rate, link_wispro_client.
 - Prohibido: soporte técnico, diagnóstico de red, escalar a humano con escalate_to_human, promesas de pago, o actuar como si hubiera un asesor en línea.
-- Al confirmar un comprobante registrado, di que un asesor lo revisará en horario laboral.
-- Sé breve y claro. Si el cliente pide algo fuera de pagos, indícale que un asesor lo atenderá cuando abra la oficina.`;
+- Al confirmar un comprobante registrado, di que un asesor lo revisará al abrir. Usa proxima_apertura y el horario inyectado; no inventes horas.
+- Si el cliente pide algo fuera de pagos, informa que la oficina está cerrada y da el horario inyectado. No digas “en breve”.`;
 
 /**
  * Decide if Nova may reply when human_mode is on.

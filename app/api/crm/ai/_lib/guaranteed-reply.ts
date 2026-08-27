@@ -1,13 +1,28 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ensureConversationLabel } from "@/app/api/crm/_lib/conversation-labels";
+import {
+  resolveAiRecoveryMessage,
+  type AiRecoveryMessages,
+} from "@/app/crm/_lib/ai-recovery-messages";
+import {
+  resolveOfficeHoursSnapshot,
+  withClosedOfficeNotice,
+  type OfficeHoursSnapshot,
+} from "@/app/crm/_lib/office-hours";
+import { getCrmSettings } from "@/app/api/crm/_lib/crm-settings";
 import type { AgentHistoryMessage } from "./context-builder";
 import { isTransientGeminiErrorMessage } from "./gemini-retry";
+import {
+  classifyInboundIntent,
+  type InboundIntent,
+} from "./inbound-intent";
 
 const LOG_PREFIX = "[AI_FALLBACK]";
 const GRAPH_API_VERSION = "v19.0";
 /** Soft holds allowed in the window before hard human handoff. */
 const SOFT_FAIL_LIMIT = 2;
 const SOFT_FAIL_WINDOW_MS = 15 * 60 * 1000;
+const ACK_WINDOW_MS = 45 * 1000;
 
 const normalizePhone = (value: string) => value.replace(/\D/g, "");
 
@@ -56,73 +71,15 @@ const sendWhatsAppText = async (to: string, message: string) => {
   return waMessageId;
 };
 
-const looksLikeCedula = (value: string | null | undefined) => {
-  const digits = String(value || "").replace(/\D/g, "");
-  return digits.length >= 5 && digits.length <= 12 && /^\d+$/.test(digits);
+const readMetadata = (value: unknown): Record<string, unknown> | null => {
+  if (!value || typeof value !== "object") return null;
+  return value as Record<string, unknown>;
 };
 
-const recentInboundHasImage = (messages: AgentHistoryMessage[]) =>
-  messages.some(
-    (message) =>
-      (message.type === "in" || message.sender_type === "client") &&
-      String(message.media_type || "").toLowerCase() === "image",
-  );
-
-export const buildSoftHoldClientMessage = (input: {
-  latestInbound?: AgentHistoryMessage | null;
-  messages?: AgentHistoryMessage[];
-}) => {
-  const content = String(input.latestInbound?.content || "").trim();
-  const hasImage =
-    String(input.latestInbound?.media_type || "").toLowerCase() === "image" ||
-    recentInboundHasImage(input.messages || []);
-
-  if (looksLikeCedula(content) && hasImage) {
-    return "Recibí tu cédula y tu comprobante. Tuve una demora momentánea; en unos segundos continúo contigo. Si quieres, reenvía la cédula 😊";
-  }
-
-  if (looksLikeCedula(content)) {
-    return "Recibí tu cédula. Tuve una demora momentánea al consultarla; reenvíamela en unos segundos y sigo contigo 😊";
-  }
-
-  if (hasImage) {
-    return "Recibí tu mensaje/comprobante. Dame un momento para procesarlo. Si puedes, indícame tu número de cédula por aquí 😊";
-  }
-
-  return "Un momento, estoy procesando tu mensaje 😊";
-};
-
-export const buildFallbackClientMessage = (input: {
-  latestInbound?: AgentHistoryMessage | null;
-  messages?: AgentHistoryMessage[];
-}) => {
-  const content = String(input.latestInbound?.content || "").trim();
-  const hasImage =
-    String(input.latestInbound?.media_type || "").toLowerCase() === "image" ||
-    recentInboundHasImage(input.messages || []);
-
-  if (looksLikeCedula(content) && hasImage) {
-    return "Recibí tu cédula y tu comprobante. Tuve una demora técnica al procesarlos; un asesor continuará contigo en breve 😊";
-  }
-
-  if (looksLikeCedula(content)) {
-    return "Recibí tu cédula. Tuve un problema técnico al procesarla; un asesor continuará contigo en breve 😊";
-  }
-
-  if (hasImage) {
-    return "Recibí tu mensaje/comprobante. Estoy teniendo una demora técnica; un asesor te atenderá en breve. Si aún no enviaste tu cédula, indícamela por aquí 😊";
-  }
-
-  return "Disculpa la demora. Un asesor te atenderá en breve por este chat 😊";
-};
-
-export type GuaranteedReplyResult = {
-  ok: boolean;
-  reason: string;
-  messageId?: number | null;
-  skipped?: boolean;
-  recovery?: "soft" | "hard";
-};
+const resolveRecipientPhone = (candidates: Array<string | null | undefined>) =>
+  candidates
+    .map((value) => normalizePhone(String(value || "")))
+    .find((value) => value.length >= 8 && value.length <= 15) || null;
 
 const countRecentSoftHolds = async (
   supabase: SupabaseClient,
@@ -146,12 +103,271 @@ const countRecentSoftHolds = async (
   }
 
   return (data || []).filter((row) => {
-    const metadata =
-      row.metadata && typeof row.metadata === "object"
-        ? (row.metadata as Record<string, unknown>)
-        : null;
-    return metadata?.ai_recovery === "soft";
+    const metadata = readMetadata(row.metadata);
+    return metadata?.ai_recovery === "soft" || metadata?.ai_ack === true;
   }).length;
+};
+
+const loadRecentOutbound = async (
+  supabase: SupabaseClient,
+  conversationId: number,
+  sinceIso: string,
+) => {
+  const { data, error } = await supabase
+    .from("messages")
+    .select("id, created_at, metadata")
+    .eq("conversation_id", conversationId)
+    .eq("type", "out")
+    .gte("created_at", sinceIso)
+    .order("created_at", { ascending: false })
+    .limit(20);
+
+  if (error) {
+    console.warn(`${LOG_PREFIX} recent_outbound_failed`, {
+      conversationId,
+      error: error.message,
+    });
+    return [];
+  }
+
+  return data || [];
+};
+
+export const hasBotReplyForTrigger = async (
+  supabase: SupabaseClient,
+  input: {
+    conversationId: number;
+    triggerMessageId?: number | null;
+  },
+) => {
+  if (!input.triggerMessageId) return false;
+
+  const since = new Date(Date.now() - SOFT_FAIL_WINDOW_MS).toISOString();
+  const rows = await loadRecentOutbound(
+    supabase,
+    input.conversationId,
+    since,
+  );
+
+  return rows.some((row) => {
+    const metadata = readMetadata(row.metadata);
+    return Number(metadata?.trigger_message_id) === input.triggerMessageId;
+  });
+};
+
+const hasRecentAck = async (
+  supabase: SupabaseClient,
+  input: {
+    conversationId: number;
+    triggerMessageId?: number | null;
+  },
+) => {
+  const since = new Date(Date.now() - ACK_WINDOW_MS).toISOString();
+  const rows = await loadRecentOutbound(
+    supabase,
+    input.conversationId,
+    since,
+  );
+
+  return rows.some((row) => {
+    const metadata = readMetadata(row.metadata);
+    if (metadata?.ai_ack !== true) return false;
+    if (!input.triggerMessageId) return true;
+    const triggerId = Number(metadata.trigger_message_id);
+    return !Number.isFinite(triggerId) || triggerId === input.triggerMessageId;
+  });
+};
+
+const persistTriggerRecovery = async (
+  supabase: SupabaseClient,
+  triggerMessageId: number | null | undefined,
+  patch: Record<string, unknown>,
+) => {
+  if (!triggerMessageId) return;
+
+  const { data: trigger } = await supabase
+    .from("messages")
+    .select("id, metadata")
+    .eq("id", triggerMessageId)
+    .maybeSingle();
+
+  if (!trigger) return;
+
+  const metadata = readMetadata(trigger.metadata) || {};
+  await supabase
+    .from("messages")
+    .update({
+      metadata: {
+        ...metadata,
+        ...patch,
+      },
+    })
+    .eq("id", trigger.id);
+};
+
+export type GuaranteedReplyResult = {
+  ok: boolean;
+  reason: string;
+  messageId?: number | null;
+  skipped?: boolean;
+  recovery?: "ack" | "soft" | "hard";
+};
+
+type RecoveryInput = {
+  conversationId: number;
+  triggerMessageId?: number | null;
+  customerPhone?: string | null;
+  whatsappId?: string | null;
+  clientPhone?: string | null;
+  latestInbound?: AgentHistoryMessage | null;
+  messages?: AgentHistoryMessage[];
+  intent?: InboundIntent;
+  recoveryMessages?: AiRecoveryMessages | null;
+  officeHours?: OfficeHoursSnapshot | null;
+  errorMessage?: string | null;
+};
+
+const resolveIntent = (input: RecoveryInput): InboundIntent =>
+  input.intent ||
+  classifyInboundIntent({
+    latestInbound: input.latestInbound,
+    messages: input.messages,
+  });
+
+const resolveHoursSnapshot = async (
+  supabase: SupabaseClient,
+  provided?: OfficeHoursSnapshot | null,
+) => {
+  if (provided) return provided;
+  try {
+    const settings = await getCrmSettings(supabase);
+    return resolveOfficeHoursSnapshot(new Date(), settings.office_hours);
+  } catch {
+    return resolveOfficeHoursSnapshot(new Date());
+  }
+};
+
+/**
+ * Early deterministic ack so the client is not left in silence while Gemini runs.
+ */
+export const sendProcessingAck = async (
+  supabase: SupabaseClient,
+  input: RecoveryInput,
+): Promise<GuaranteedReplyResult> => {
+  const { data: conversation, error: conversationError } = await supabase
+    .from("conversations")
+    .select("id, customer_phone, status")
+    .eq("id", input.conversationId)
+    .maybeSingle();
+
+  if (conversationError || !conversation) {
+    return { ok: false, skipped: true, reason: "conversation_not_found" };
+  }
+
+  if (conversation.status === "resuelto") {
+    return { ok: false, skipped: true, reason: "conversation_resolved" };
+  }
+
+  if (
+    await hasBotReplyForTrigger(supabase, {
+      conversationId: input.conversationId,
+      triggerMessageId: input.triggerMessageId,
+    })
+  ) {
+    return { ok: true, skipped: true, reason: "trigger_already_replied" };
+  }
+
+  if (
+    await hasRecentAck(supabase, {
+      conversationId: input.conversationId,
+      triggerMessageId: input.triggerMessageId,
+    })
+  ) {
+    return { ok: true, skipped: true, reason: "ack_already_sent", recovery: "ack" };
+  }
+
+  const to = resolveRecipientPhone([
+    input.customerPhone,
+    conversation.customer_phone,
+    input.whatsappId,
+    input.clientPhone,
+  ]);
+
+  if (!to) {
+    return { ok: false, reason: "missing_recipient" };
+  }
+
+  const intent = resolveIntent(input);
+  const message = resolveAiRecoveryMessage({
+    kind: "ack",
+    intent,
+    overrides: input.recoveryMessages,
+  });
+
+  try {
+    const waMessageId = await sendWhatsAppText(to, message);
+    const now = new Date().toISOString();
+    const { data: saved, error: saveError } = await supabase
+      .from("messages")
+      .insert({
+        conversation_id: input.conversationId,
+        wa_message_id: waMessageId,
+        type: "out",
+        content: message,
+        sender_type: "bot",
+        sent_by: "Bot IA",
+        status: "sent",
+        created_at: now,
+        metadata: {
+          engine: "gemini",
+          action: "ack",
+          reason: "ai_processing_ack",
+          ai_ack: true,
+          ai_recovery: "ack",
+          intent,
+          trigger_message_id: input.triggerMessageId ?? null,
+        },
+      })
+      .select("id")
+      .single();
+
+    if (saveError) {
+      console.error(`${LOG_PREFIX} ack_persist_failed`, {
+        conversationId: input.conversationId,
+        error: saveError.message,
+      });
+      return { ok: false, reason: "ack_persist_failed", recovery: "ack" };
+    }
+
+    await supabase
+      .from("conversations")
+      .update({
+        preview: message,
+        updated_at: now,
+        last_message_at: now,
+      })
+      .eq("id", input.conversationId);
+
+    console.log(`${LOG_PREFIX} ack_sent`, {
+      conversationId: input.conversationId,
+      messageId: saved?.id ?? null,
+      intent,
+      willReplyToClient: true,
+    });
+
+    return {
+      ok: true,
+      reason: "ack_sent",
+      messageId: saved?.id ?? null,
+      recovery: "ack",
+    };
+  } catch (error) {
+    console.error(`${LOG_PREFIX} ack_failed`, {
+      conversationId: input.conversationId,
+      error: error instanceof Error ? error.message : "unknown_error",
+    });
+    return { ok: false, reason: "ack_send_failed", recovery: "ack" };
+  }
 };
 
 /**
@@ -160,17 +376,11 @@ const countRecentSoftHolds = async (
  */
 export const sendGuaranteedClientReply = async (
   supabase: SupabaseClient,
-  input: {
-    conversationId: number;
-    triggerMessageId?: number | null;
-    customerPhone?: string | null;
-    whatsappId?: string | null;
-    clientPhone?: string | null;
-    latestInbound?: AgentHistoryMessage | null;
-    messages?: AgentHistoryMessage[];
-    errorMessage?: string | null;
+  input: RecoveryInput & {
     /** Force hard handoff (e.g. failed business handoff send). */
     forceHardHandoff?: boolean;
+    /** Skip a second WhatsApp message when an ack already covered this trigger. */
+    skipSoftWhatsApp?: boolean;
   },
 ): Promise<GuaranteedReplyResult> => {
   const { data: conversation, error: conversationError } = await supabase
@@ -216,15 +426,12 @@ export const sendGuaranteedClientReply = async (
     return { ok: false, skipped: true, reason: "empty_conversation" };
   }
 
-  const to =
-    [
-      input.customerPhone,
-      conversation.customer_phone,
-      input.whatsappId,
-      input.clientPhone,
-    ]
-      .map((value) => normalizePhone(String(value || "")))
-      .find((value) => value.length >= 8 && value.length <= 15) || null;
+  const to = resolveRecipientPhone([
+    input.customerPhone,
+    conversation.customer_phone,
+    input.whatsappId,
+    input.clientPhone,
+  ]);
 
   if (!to) {
     console.error(`${LOG_PREFIX} missing_recipient`, {
@@ -233,10 +440,9 @@ export const sendGuaranteedClientReply = async (
     return { ok: false, reason: "missing_recipient" };
   }
 
-  const hasImage =
-    String(input.latestInbound?.media_type || "").toLowerCase() === "image" ||
-    recentInboundHasImage(input.messages || []);
-
+  const intent = resolveIntent(input);
+  const isPaymentIntent =
+    intent === "receipt_image" || intent === "cedula_and_image";
   const recentSoftFails = await countRecentSoftHolds(
     supabase,
     input.conversationId,
@@ -244,18 +450,41 @@ export const sendGuaranteedClientReply = async (
   const isTransient = isTransientGeminiErrorMessage(input.errorMessage);
   const useSoft =
     !input.forceHardHandoff &&
+    intent !== "human_request" &&
     isTransient &&
     recentSoftFails < SOFT_FAIL_LIMIT;
 
-  const message = useSoft
-    ? buildSoftHoldClientMessage({
-        latestInbound: input.latestInbound,
-        messages: input.messages,
-      })
-    : buildFallbackClientMessage({
-        latestInbound: input.latestInbound,
-        messages: input.messages,
-      });
+  if (useSoft && input.skipSoftWhatsApp) {
+    await persistTriggerRecovery(supabase, input.triggerMessageId, {
+      ai_recovery: "soft",
+      ai_soft_hold: true,
+      ai_fallback: false,
+      ai_error: input.errorMessage || null,
+      ai_fallback_at: new Date().toISOString(),
+    });
+
+    console.log(`${LOG_PREFIX} soft_covered_by_ack`, {
+      conversationId: input.conversationId,
+      intent,
+      recentSoftFails,
+    });
+
+    return {
+      ok: true,
+      skipped: true,
+      reason: "ack_covers_soft_hold",
+      recovery: "soft",
+    };
+  }
+
+  const message = withClosedOfficeNotice(
+    resolveAiRecoveryMessage({
+      kind: useSoft ? "soft" : "hard",
+      intent,
+      overrides: input.recoveryMessages,
+    }),
+    useSoft ? null : await resolveHoursSnapshot(supabase, input.officeHours),
+  );
 
   const recovery: "soft" | "hard" = useSoft ? "soft" : "hard";
 
@@ -283,6 +512,7 @@ export const sendGuaranteedClientReply = async (
           ai_recovery: recovery,
           ai_soft_fail_count: recentSoftFails + (recovery === "soft" ? 1 : 0),
           ai_error: input.errorMessage || null,
+          intent,
           trigger_message_id: input.triggerMessageId ?? null,
         },
       })
@@ -309,11 +539,16 @@ export const sendGuaranteedClientReply = async (
         })
         .eq("id", input.conversationId);
 
-      await ensureConversationLabel(
-        supabase,
-        input.conversationId,
-        hasImage ? "verificar_pago" : "soporte",
-      );
+      await ensureConversationLabel(supabase, input.conversationId, "ia_error");
+      if (isPaymentIntent) {
+        await ensureConversationLabel(
+          supabase,
+          input.conversationId,
+          "verificar_pago",
+        );
+      } else if (intent !== "human_request") {
+        await ensureConversationLabel(supabase, input.conversationId, "soporte");
+      }
     } else {
       await supabase
         .from("conversations")
@@ -325,39 +560,19 @@ export const sendGuaranteedClientReply = async (
         .eq("id", input.conversationId);
     }
 
-    if (input.triggerMessageId) {
-      const { data: trigger } = await supabase
-        .from("messages")
-        .select("id, metadata")
-        .eq("id", input.triggerMessageId)
-        .maybeSingle();
-
-      if (trigger) {
-        const metadata =
-          trigger.metadata && typeof trigger.metadata === "object"
-            ? { ...(trigger.metadata as Record<string, unknown>) }
-            : {};
-        await supabase
-          .from("messages")
-          .update({
-            metadata: {
-              ...metadata,
-              ai_recovery: recovery,
-              ai_fallback: recovery === "hard",
-              ai_soft_hold: recovery === "soft",
-              ai_fallback_at: now,
-              ai_error: input.errorMessage || null,
-            },
-          })
-          .eq("id", trigger.id);
-      }
-    }
+    await persistTriggerRecovery(supabase, input.triggerMessageId, {
+      ai_recovery: recovery,
+      ai_fallback: recovery === "hard",
+      ai_soft_hold: recovery === "soft",
+      ai_fallback_at: now,
+      ai_error: input.errorMessage || null,
+    });
 
     console.log(`${LOG_PREFIX} sent`, {
       conversationId: input.conversationId,
       messageId: saved?.id ?? null,
       to,
-      hasImage,
+      intent,
       recovery,
       recentSoftFails,
       softFailLimit: SOFT_FAIL_LIMIT,

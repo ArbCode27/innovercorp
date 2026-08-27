@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createClient } from "@supabase/supabase-js";
 import { AI_SYSTEM_PROMPT_MAX_LENGTH } from "@/app/crm/_lib/ai-default-prompt";
 import { PAYMENT_SUCCESS_MESSAGE_MAX_LENGTH } from "@/app/crm/_lib/payment-success-message";
+import { AI_RECOVERY_MESSAGE_MAX_LENGTH } from "@/app/crm/_lib/ai-recovery-messages";
 import { getCrmSettings, updateCrmSettings } from "../_lib/crm-settings";
 import {
   DEFAULT_AFTER_HOURS_PAYMENT_TOOLS,
@@ -32,6 +33,20 @@ const officeHoursSchema = z.object({
   holidays: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).optional(),
 });
 
+const recoveryMessageSchema = z
+  .string()
+  .max(
+    AI_RECOVERY_MESSAGE_MAX_LENGTH,
+    `El mensaje no puede superar ${AI_RECOVERY_MESSAGE_MAX_LENGTH} caracteres`,
+  )
+  .nullable();
+
+const aiRecoveryMessagesSchema = z.object({
+  ack: recoveryMessageSchema,
+  soft_hold: recoveryMessageSchema,
+  hard_fallback: recoveryMessageSchema,
+});
+
 const afterHoursPaymentsSchema = z.object({
   enabled: z.boolean(),
   allowedTools: z.array(z.string().trim().min(1)).min(1).optional(),
@@ -57,6 +72,7 @@ const updateSchema = z
       )
       .nullable()
       .optional(),
+    ai_recovery_messages: aiRecoveryMessagesSchema.optional(),
     office_hours: officeHoursSchema.optional(),
     after_hours_payments: afterHoursPaymentsSchema.optional(),
   })
@@ -65,6 +81,7 @@ const updateSchema = z
       value.gemini_model !== undefined ||
       value.ai_system_prompt !== undefined ||
       value.payment_success_message !== undefined ||
+      value.ai_recovery_messages !== undefined ||
       value.office_hours !== undefined ||
       value.after_hours_payments !== undefined,
     { message: "Debes enviar al menos un campo para actualizar" },
@@ -170,6 +187,15 @@ export async function PATCH(req: NextRequest) {
         typeof payload.data.payment_success_message === "string"
           ? payload.data.payment_success_message.trim() || null
           : payload.data.payment_success_message,
+      ai_recovery_messages: payload.data.ai_recovery_messages
+        ? {
+            ack: payload.data.ai_recovery_messages.ack?.trim() || null,
+            soft_hold:
+              payload.data.ai_recovery_messages.soft_hold?.trim() || null,
+            hard_fallback:
+              payload.data.ai_recovery_messages.hard_fallback?.trim() || null,
+          }
+        : undefined,
       office_hours: officeHours,
       after_hours_payments: afterHoursPayments,
       updated_by: payload.data.agent_id,

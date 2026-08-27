@@ -17,6 +17,10 @@ import {
 } from "@/app/api/crm/_lib/crm-payments";
 import { ensureConversationLabel } from "@/app/api/crm/_lib/conversation-labels";
 import {
+  withClosedOfficeNotice,
+  type OfficeHoursSnapshot,
+} from "@/app/crm/_lib/office-hours";
+import {
   DolarVzlaError,
   enrichDebtWithBcv,
   getBcvRate,
@@ -46,6 +50,7 @@ export type AgentRunContext = {
   paymentRequestedByAgentId?: number | null;
   replyMode?: "full" | "after_hours_payments" | "forced" | "skip";
   allowedToolNames?: string[] | null;
+  officeHours?: OfficeHoursSnapshot | null;
   lastLookupByWisproId: Map<string, WisproSearchResult>;
   lastLookupCedula: string | null;
   linkedWisproId: string | null;
@@ -65,6 +70,9 @@ export type ToolHandlerResult = {
   handoffMessage?: string;
   handoffReason?: string;
 };
+
+const forClient = (ctx: AgentRunContext, message: string) =>
+  withClosedOfficeNotice(message, ctx.officeHours);
 
 type PendingReceipt = {
   amount: string;
@@ -705,8 +713,10 @@ const handleSubmitPaymentReceipt = async (
   const comment = parsed.data.comment ?? pending?.comment ?? null;
 
   if (existingMetadata.payment_submitted === true) {
-    const message =
-      "Tu comprobante ya fue registrado. Un asesor lo verificará en breve.";
+    const message = forClient(
+      ctx,
+      "Tu comprobante ya fue registrado. Un asesor lo verificará en breve.",
+    );
     const label = await applyPaymentVerificationLabel(ctx);
     markHandoff(ctx, "payment_already_submitted", message);
     return {
@@ -871,8 +881,10 @@ const handleSubmitPaymentReceipt = async (
 
   const phoneId = resolvePhoneId(ctx);
   if (!phoneId) {
-    const message =
-      "No pudimos identificar tu número de WhatsApp. Un asesor te ayudará en breve.";
+    const message = forClient(
+      ctx,
+      "No pudimos identificar tu número de WhatsApp. Un asesor te ayudará en breve.",
+    );
     const label = await applyPaymentVerificationLabel(ctx);
     markHandoff(ctx, "payment_missing_phone", message);
     return {
@@ -1074,8 +1086,10 @@ const handleSubmitPaymentReceipt = async (
     }
   }
 
-  const message =
-    "Registramos tu comprobante de pago. Un asesor lo verificará en breve.";
+  const message = forClient(
+    ctx,
+    "Registramos tu comprobante de pago. Un asesor lo verificará en breve.",
+  );
   const label = await applyPaymentVerificationLabel(ctx);
   markHandoff(ctx, "payment_submitted", message);
 
@@ -1123,9 +1137,11 @@ const handleEscalate = async (
     };
   }
 
-  const message =
+  const message = forClient(
+    ctx,
     parsed.data.message?.trim() ||
-    "Un asesor de nuestro equipo continuará contigo en breve.";
+      "Un asesor de nuestro equipo continuará contigo en breve.",
+  );
 
   const isSupport =
     parsed.data.category === "support" ||
@@ -1188,7 +1204,7 @@ export const executeAgentTool = async (
         error: `Tool no permitida en modo ${ctx.replyMode || "restricted"}: ${toolName}`,
         hint:
           ctx.replyMode === "after_hours_payments"
-            ? "Fuera de oficina solo puedes gestionar pagos/comprobantes. Indica que un asesor atenderá el resto en horario laboral."
+            ? "Fuera de oficina solo puedes gestionar pagos/comprobantes. Informa el horario inyectado y que un asesor atenderá el resto al abrir. No digas “en breve”."
             : "Tool no disponible en este modo.",
       },
     };

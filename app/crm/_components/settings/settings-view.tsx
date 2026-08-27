@@ -22,12 +22,15 @@ import { isAdminRole } from "../../_lib/agent-role-utils";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
 import { CrmButton } from "../shared/crm-button";
 import { OfficeHoursSettingsSection } from "./office-hours-settings-section";
+import { AiRecoverySettingsSection } from "./ai-recovery-settings-section";
+import type { AiRecoveryMessages } from "../../_lib/ai-recovery-messages";
 
 interface SettingsViewProps {
   currentAgent: Agent;
   settings: CrmSettings;
   onUpdateAiSystemPrompt: (prompt: string | null) => Promise<void>;
   onUpdatePaymentSuccessMessage: (message: string | null) => Promise<void>;
+  onUpdateAiRecoveryMessages: (messages: AiRecoveryMessages) => Promise<void>;
   onUpdateOfficeHours: (input: {
     office_hours: OfficeHoursConfig;
     after_hours_payments: AfterHoursPaymentsConfig;
@@ -39,6 +42,7 @@ export const SettingsView = ({
   settings,
   onUpdateAiSystemPrompt,
   onUpdatePaymentSuccessMessage,
+  onUpdateAiRecoveryMessages,
   onUpdateOfficeHours,
 }: SettingsViewProps) => {
   const isAdmin = isAdminRole(currentAgent.role);
@@ -214,6 +218,12 @@ export const SettingsView = ({
             />
           </div>
         </div>
+
+        <AiRecoverySettingsSection
+          isAdmin={isAdmin}
+          messages={settings.ai_recovery_messages}
+          onSave={onUpdateAiRecoveryMessages}
+        />
 
         <section
           className={`rounded-xl border p-4 md:p-5 ${CRM_SURFACES.border} ${CRM_SURFACES.elevated}`}>
