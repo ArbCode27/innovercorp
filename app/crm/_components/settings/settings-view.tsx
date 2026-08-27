@@ -14,6 +14,7 @@ import {
   PAYMENT_SUCCESS_MESSAGE_MAX_LENGTH,
 } from "../../_lib/payment-success-message";
 import type { Agent, CrmSettings } from "../../_lib/types";
+import { DEFAULT_GEMINI_MODEL } from "../../_lib/gemini-models";
 import type {
   AfterHoursPaymentsConfig,
   OfficeHoursConfig,
@@ -199,7 +200,7 @@ export const SettingsView = ({
                 <p className={`mt-3 text-xs ${CRM_SURFACES.textMuted}`}>
                   Modelo:{" "}
                   <span className={CRM_SURFACES.textSecondary}>
-                    {settings.gemini_model || "gemini-2.0-flash"}
+                    {settings.gemini_model || DEFAULT_GEMINI_MODEL}
                   </span>
                 </p>
                 <p className={`mt-1 text-xs ${CRM_SURFACES.textMuted}`}>

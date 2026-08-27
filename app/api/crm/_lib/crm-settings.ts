@@ -18,6 +18,7 @@ import {
   parseAiRecoveryMessages,
   type AiRecoveryMessages,
 } from "@/app/crm/_lib/ai-recovery-messages";
+import { DEFAULT_GEMINI_MODEL, isRetiredGeminiModel } from "@/app/crm/_lib/gemini-models";
 
 export type CrmSettings = {
   id: number;
@@ -32,7 +33,15 @@ export type CrmSettings = {
   updated_by: number | null;
 };
 
-const DEFAULT_GEMINI_MODEL = "gemini-2.0-flash";
+
+const resolveStoredGeminiModel = (value: unknown) => {
+  const model =
+    typeof value === "string" && value.trim()
+      ? value.trim()
+      : DEFAULT_GEMINI_MODEL;
+  if (isRetiredGeminiModel(model)) return DEFAULT_GEMINI_MODEL;
+  return model;
+};
 
 const DEFAULT_SETTINGS: CrmSettings = {
   id: 1,
@@ -68,10 +77,7 @@ const mapSettingsRow = (row: Record<string, unknown> | null): CrmSettings => {
   return {
     id: Number(row.id) || 1,
     bot_engine: normalizeBotEngine(row.bot_engine),
-    gemini_model:
-      typeof row.gemini_model === "string" && row.gemini_model.trim()
-        ? row.gemini_model.trim()
-        : DEFAULT_GEMINI_MODEL,
+    gemini_model: resolveStoredGeminiModel(row.gemini_model),
     ai_system_prompt:
       typeof row.ai_system_prompt === "string" ? row.ai_system_prompt : null,
     payment_success_message:

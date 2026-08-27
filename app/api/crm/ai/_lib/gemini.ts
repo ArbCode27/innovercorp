@@ -1,3 +1,4 @@
+import { DEFAULT_GEMINI_MODEL } from "@/app/crm/_lib/gemini-models";
 import { GEMINI_TOOL_DECLARATIONS } from "./gemini-tools";
 
 export class GeminiApiError extends Error {
@@ -59,7 +60,7 @@ export type GeminiGenerateResult = {
 };
 
 const LOG_PREFIX = "[GEMINI]";
-const DEFAULT_MODEL = "gemini-2.0-flash";
+const DEFAULT_MODEL = DEFAULT_GEMINI_MODEL;
 
 export const getGeminiApiKey = () => {
   const key =

@@ -7,7 +7,39 @@ import {
 
 const LOG_PREFIX = "[GEMINI_RETRY]";
 
+const PERMANENT_STATUS = new Set([400, 401, 403, 404]);
+
+const readErrorText = (error: unknown) => {
+  if (error instanceof GeminiApiError) {
+    return `${error.status ?? ""} ${error.statusText ?? ""} ${error.message}`.toLowerCase();
+  }
+  if (error instanceof Error) {
+    return `${error.name} ${error.message}`.toLowerCase();
+  }
+  return String(error || "").toLowerCase();
+};
+
+export const isPermanentGeminiError = (error: unknown): boolean => {
+  if (error instanceof GeminiApiError && error.status != null) {
+    if (PERMANENT_STATUS.has(error.status)) return true;
+  }
+
+  const text = readErrorText(error);
+  return (
+    text.includes(" 404 ") ||
+    text.includes("404 not_found") ||
+    text.includes("not_found") ||
+    text.includes("no longer available") ||
+    text.includes("permission_denied") ||
+    text.includes("invalid api key") ||
+    text.includes("api key not valid") ||
+    /\bgemini 40[0143]\b/.test(text)
+  );
+};
+
 export const isRetryableGeminiError = (error: unknown): boolean => {
+  if (isPermanentGeminiError(error)) return false;
+
   if (error instanceof GeminiApiError) {
     if (error.status != null) {
       if (error.status === 429) return true;
@@ -20,6 +52,7 @@ export const isRetryableGeminiError = (error: unknown): boolean => {
     ) {
       return true;
     }
+    return false;
   }
 
   if (!(error instanceof Error)) return false;
@@ -28,7 +61,6 @@ export const isRetryableGeminiError = (error: unknown): boolean => {
 
   return (
     name === "aborterror" ||
-    name === "geminiapierror" ||
     message.includes("timeout") ||
     message.includes("abort") ||
     message.includes("fetch failed") ||
@@ -55,8 +87,9 @@ export const isRetryableGeminiError = (error: unknown): boolean => {
 export const isTransientGeminiError = (error: unknown): boolean =>
   isRetryableGeminiError(error);
 
-export const isTransientGeminiErrorMessage = (message: string | null | undefined) =>
-  isRetryableGeminiError(new Error(String(message || "")));
+export const isTransientGeminiErrorMessage = (
+  message: string | null | undefined,
+) => isRetryableGeminiError(new Error(String(message || "")));
 
 const resolveBackoffMs = (error: unknown, attempt: number, baseMs: number) => {
   const message =

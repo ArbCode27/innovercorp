@@ -2,6 +2,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { DEFAULT_AI_SYSTEM_PROMPT } from "@/app/crm/_lib/ai-default-prompt";
 import { parseClientEnvoicing, resolveLinkedClientIdentity } from "@/app/crm/_lib/client-profile-utils";
 import {
+  DEFAULT_GEMINI_FALLBACK_MODEL,
+  DEFAULT_GEMINI_MODEL,
+  isRetiredGeminiModel,
+  normalizeGeminiModelId,
+} from "@/app/crm/_lib/gemini-models";
+import {
   defaultAdvisorHandoffMessage,
   resolveOfficeHoursSnapshot,
   type OfficeHoursSnapshot,
@@ -18,6 +24,7 @@ import {
 import type { GeminiContent, GeminiContentPart } from "./gemini";
 import {
   generateGeminiWithRetry,
+  isPermanentGeminiError,
   isRetryableGeminiError,
   stripInlineMediaFromContents,
 } from "./gemini-retry";
@@ -29,6 +36,29 @@ import {
 
 const LOG_PREFIX = "[AI_AGENT]";
 const MAX_TOOL_STEPS = 6;
+
+const resolveGeminiFallbackModel = (primaryModel: string) => {
+  const requested = normalizeGeminiModelId(
+    process.env.GEMINI_FALLBACK_MODEL || DEFAULT_GEMINI_FALLBACK_MODEL,
+  );
+  const primary = normalizeGeminiModelId(primaryModel);
+
+  if (!requested || requested === primary) return null;
+  if (isRetiredGeminiModel(requested)) {
+    const safe = normalizeGeminiModelId(DEFAULT_GEMINI_MODEL);
+    if (safe && safe !== primary && !isRetiredGeminiModel(safe)) {
+      console.warn(`${LOG_PREFIX} fallback_model_retired`, {
+        requested,
+        using: safe,
+      });
+      return safe;
+    }
+    console.warn(`${LOG_PREFIX} fallback_model_skipped`, { requested });
+    return null;
+  }
+
+  return requested;
+};
 
 export type AgentClientSnapshot = {
   id: number;
@@ -326,13 +356,12 @@ export const runGeminiAgent = async (input: {
     .join("\n");
 
   const hasInlineMedia = attachedMediaIds.length > 0;
-  // Short attempts so the delayed client ack can fire if Gemini saturates.
-  const primaryTimeouts = hasInlineMedia ? [15000, 18000] : [10000, 12000];
-  const degradedTimeouts = [12000, 15000];
-  const fallbackModel = (
-    process.env.GEMINI_FALLBACK_MODEL || "gemini-2.0-flash"
-  ).trim();
-  const primaryModel = (input.model || "").trim() || "gemini-2.0-flash";
+  // Ack covers UX; these budgets must still let a healthy model finish a tool turn.
+  const primaryTimeouts = hasInlineMedia ? [25000, 35000] : [18000, 25000];
+  const degradedTimeouts = [18000, 25000];
+  const primaryModel =
+    normalizeGeminiModelId(input.model || "") || DEFAULT_GEMINI_MODEL;
+  const fallbackModel = resolveGeminiFallbackModel(primaryModel);
 
   console.log(`${LOG_PREFIX} started`, {
     conversationId: input.conversationId,
@@ -342,8 +371,7 @@ export const runGeminiAgent = async (input: {
     officeClosed: officeHours.closed,
     nextOpen: officeHours.nextOpenLabel,
     allowedToolNames,
-    fallbackModel:
-      fallbackModel && fallbackModel !== primaryModel ? fallbackModel : null,
+    fallbackModel,
     contentsCount: contents.length,
     attachedMediaIds,
     linkedWispro: Boolean(input.client?.wispro_id),
@@ -415,11 +443,7 @@ export const runGeminiAgent = async (input: {
     }
 
     // Capacity/outage: try a different model before giving up to the caller.
-    if (
-      fallbackModel &&
-      fallbackModel !== primaryModel &&
-      isRetryableGeminiError(lastError)
-    ) {
+    if (fallbackModel && isRetryableGeminiError(lastError)) {
       console.warn(`${LOG_PREFIX} model_fallback_used`, {
         conversationId: input.conversationId,
         runId,
@@ -443,7 +467,23 @@ export const runGeminiAgent = async (input: {
             : `model_fallback:${fallbackModel}`,
         };
       } catch (fallbackError) {
-        lastError = fallbackError;
+        if (
+          isPermanentGeminiError(fallbackError) &&
+          isRetryableGeminiError(lastError)
+        ) {
+          console.warn(`${LOG_PREFIX} fallback_model_permanent_error`, {
+            conversationId: input.conversationId,
+            runId,
+            fallbackModel,
+            keeping: lastError instanceof Error ? lastError.message : "unknown_error",
+            fallbackError:
+              fallbackError instanceof Error
+                ? fallbackError.message
+                : "unknown_error",
+          });
+        } else {
+          lastError = fallbackError;
+        }
       }
     }
 

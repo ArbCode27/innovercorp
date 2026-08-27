@@ -45,6 +45,7 @@ import type {
   WisproSearchResult,
 } from "../_lib/types";
 import { DEFAULT_BOT_ENGINE } from "../_lib/bot-engine";
+import { DEFAULT_GEMINI_MODEL } from "../_lib/gemini-models";
 
 // ── Supabase client para Realtime ─────────────────────────
 const supabase = createClient(
@@ -62,7 +63,7 @@ const emptyData: CrmData = {
   settings: {
     id: 1,
     bot_engine: DEFAULT_BOT_ENGINE,
-    gemini_model: "gemini-2.0-flash",
+    gemini_model: DEFAULT_GEMINI_MODEL,
     ai_system_prompt: null,
     payment_success_message: null,
     ai_recovery_messages: undefined,

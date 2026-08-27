@@ -26,6 +26,7 @@ import {
   EMPTY_AI_RECOVERY_MESSAGES,
   parseAiRecoveryMessages,
 } from "./ai-recovery-messages";
+import { DEFAULT_GEMINI_MODEL } from "./gemini-models";
 import { DEFAULT_BOT_ENGINE, normalizeBotEngine } from "./bot-engine";
 import {
   DEFAULT_AFTER_HOURS_PAYMENTS,
@@ -127,7 +128,7 @@ export const crmService = {
             typeof settingsRow.gemini_model === "string" &&
             settingsRow.gemini_model.trim()
               ? settingsRow.gemini_model.trim()
-              : "gemini-2.0-flash",
+              : DEFAULT_GEMINI_MODEL,
           ai_system_prompt:
             typeof settingsRow.ai_system_prompt === "string"
               ? settingsRow.ai_system_prompt
@@ -163,7 +164,7 @@ export const crmService = {
       : {
           id: 1,
           bot_engine: DEFAULT_BOT_ENGINE,
-          gemini_model: "gemini-2.0-flash",
+          gemini_model: DEFAULT_GEMINI_MODEL,
           ai_system_prompt: null,
           payment_success_message: null,
           ai_recovery_messages: { ...EMPTY_AI_RECOVERY_MESSAGES },

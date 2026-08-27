@@ -17,12 +17,24 @@ import {
   sendProcessingAck,
   type GuaranteedReplyResult,
 } from "./guaranteed-reply";
-import { classifyInboundIntent, type InboundIntent } from "./inbound-intent";
+import { classifyInboundIntent, getLatestInboundMessage, type InboundIntent } from "./inbound-intent";
+import {
+  claimConversationAiLock,
+  findLatestInboundId,
+  FORCE_RUN_LOCK_RETRIES,
+  FORCE_RUN_LOCK_WAIT_MS,
+  isCommittedAgentDecision,
+  releaseConversationAiLock,
+  resolveTurnDebounceMs,
+  sleepMs,
+} from "./turn-coordinator";
 
 const LOG_PREFIX = "[CRM_AI_REPLY]";
 const GRAPH_API_VERSION = "v19.0";
 const HISTORY_LIMIT = 24;
-const ACK_DELAY_MS = 8000;
+const ACK_DELAY_MS = 5000;
+const HISTORY_SELECT =
+  "id, type, content, sender_type, created_at, media_url, media_type, mime_type, caption, metadata";
 
 type ConversationRow = {
   id: number;
@@ -244,6 +256,9 @@ export const replyToConversationWithGemini = async (
   let intent: InboundIntent = "general";
   let runHandle: AiRunHandle | null = null;
   let modelName: string | null = null;
+  let effectiveTriggerId = input.triggerMessageId ?? null;
+  let lockToken: string | null = null;
+  let lockUnsupported = false;
 
   const closeRun = async (
     status: Parameters<typeof finishAiRun>[2]["status"],
@@ -346,21 +361,21 @@ export const replyToConversationWithGemini = async (
       client = clientRow;
     }
 
-    const { data: history, error: historyError } = await supabase
-      .from("messages")
-      .select(
-        "id, type, content, sender_type, created_at, media_url, media_type, mime_type, caption, metadata",
-      )
-      .eq("conversation_id", conversation.id)
-      .order("created_at", { ascending: false })
-      .limit(HISTORY_LIMIT);
+    const loadHistory = async () => {
+      const { data: history, error: historyError } = await supabase
+        .from("messages")
+        .select(HISTORY_SELECT)
+        .eq("conversation_id", conversation.id)
+        .order("created_at", { ascending: false })
+        .limit(HISTORY_LIMIT);
 
-    if (historyError) throw historyError;
+      if (historyError) throw historyError;
 
-    chronological = ([...(history || [])] as AgentHistoryMessage[]).reverse();
-    latestInbound = [...chronological]
-      .reverse()
-      .find((message) => message.type === "in" || message.sender_type === "client");
+      chronological = ([...(history || [])] as AgentHistoryMessage[]).reverse();
+      latestInbound = getLatestInboundMessage(chronological);
+    };
+
+    await loadHistory();
 
     const hasInboundSignal = Boolean(
       latestInbound &&
@@ -383,14 +398,101 @@ export const replyToConversationWithGemini = async (
       return result;
     }
 
+    if (!forceRun) {
+      const triggerMessage =
+        chronological.find((message) => message.id === input.triggerMessageId) ||
+        latestInbound;
+      const debounceMs = resolveTurnDebounceMs(triggerMessage);
+      console.log(`${LOG_PREFIX} turn_debounce`, {
+        ...baseContext,
+        debounceMs,
+        triggerMediaType: triggerMessage?.media_type ?? null,
+      });
+      await sleepMs(debounceMs);
+      await loadHistory();
+
+      const latestAfterWait = getLatestInboundMessage(chronological);
+      if (
+        input.triggerMessageId &&
+        latestAfterWait?.id &&
+        latestAfterWait.id !== input.triggerMessageId
+      ) {
+        const result = {
+          ok: false,
+          skipped: true,
+          reason: "turn_superseded",
+        } as const;
+        logGeminiNoReply("skipped", {
+          ...baseContext,
+          ...result,
+          latestInboundId: latestAfterWait.id,
+        });
+        return result;
+      }
+    }
+
+    latestInbound = getLatestInboundMessage(chronological);
+    effectiveTriggerId = forceRun
+      ? input.triggerMessageId ?? latestInbound?.id ?? null
+      : latestInbound?.id ?? input.triggerMessageId ?? null;
+
+    const lockClaim = await claimConversationAiLock(
+      supabase,
+      conversation.id,
+      forceRun
+        ? {
+            retries: FORCE_RUN_LOCK_RETRIES,
+            waitMs: FORCE_RUN_LOCK_WAIT_MS,
+          }
+        : undefined,
+    );
+
+    if (!lockClaim.ok) {
+      const result = {
+        ok: false,
+        skipped: true,
+        reason: lockClaim.reason || "turn_locked",
+      } as const;
+      logGeminiNoReply("skipped", { ...baseContext, ...result });
+      return result;
+    }
+
+    lockToken = lockClaim.token;
+    lockUnsupported = Boolean(lockClaim.unsupported);
+
     intent = classifyInboundIntent({
       latestInbound,
       messages: chronological,
     });
 
+    const isTurnStale = async () => {
+      if (forceRun || !effectiveTriggerId) return false;
+      const latestId = await findLatestInboundId(supabase, conversation.id);
+      return Boolean(latestId && latestId !== effectiveTriggerId);
+    };
+
+    const skipIfStaleBeforeSend = async (decision?: {
+      action?: string | null;
+      reason?: string | null;
+    }) => {
+      if (decision && isCommittedAgentDecision(decision)) return null;
+      if (!(await isTurnStale())) return null;
+      await closeRun("skipped", {
+        error: "turn_stale_before_send",
+        metadata: { intent, effectiveTriggerId },
+      });
+      const result = {
+        ok: false,
+        skipped: true,
+        reason: "turn_stale_before_send",
+      } as const;
+      logGeminiNoReply("skipped", { ...baseContext, ...result });
+      return result;
+    };
+
     const fallbackInput = {
       conversationId: conversation.id,
-      triggerMessageId: input.triggerMessageId,
+      triggerMessageId: effectiveTriggerId,
       customerPhone: conversation.customer_phone,
       whatsappId: client?.whatsapp_id,
       clientPhone: client?.phone,
@@ -418,6 +520,8 @@ export const replyToConversationWithGemini = async (
       }
 
       recordGeminiCircuitFailureMessage(errorMessage);
+      const staleFallback = await skipIfStaleBeforeSend();
+      if (staleFallback) return staleFallback;
       const fallback = await sendGuaranteedClientReply(supabase, {
         ...fallbackInput,
         errorMessage,
@@ -446,17 +550,22 @@ export const replyToConversationWithGemini = async (
     const circuit = await getGeminiCircuitState(supabase);
     runHandle = await startAiRun(supabase, {
       conversationId: conversation.id,
-      triggerMessageId: input.triggerMessageId,
+      triggerMessageId: effectiveTriggerId,
       intent,
       model: settings.gemini_model,
       circuitOpen: circuit.open && !forceRun,
       metadata: {
         forceRun,
         replyMode: replyPolicy.mode,
+        burstSize: chronological.filter(
+          (message) => message.type === "in" || message.sender_type === "client",
+        ).length,
       },
     });
 
     if (!forceRun && intent === "human_request") {
+      const staleHuman = await skipIfStaleBeforeSend();
+      if (staleHuman) return staleHuman;
       console.log(`${LOG_PREFIX} intent_handoff`, {
         ...baseContext,
         intent,
@@ -474,6 +583,8 @@ export const replyToConversationWithGemini = async (
     }
 
     if (!forceRun && circuit.open) {
+      const staleCircuit = await skipIfStaleBeforeSend();
+      if (staleCircuit) return staleCircuit;
       console.warn(`${LOG_PREFIX} circuit_open`, {
         ...baseContext,
         intent,
@@ -501,6 +612,7 @@ export const replyToConversationWithGemini = async (
 
     console.log(`${LOG_PREFIX} generating`, {
       ...baseContext,
+      effectiveTriggerId,
       model: settings.gemini_model,
       replyMode: replyPolicy.mode,
       historyCount: chronological.length,
@@ -515,7 +627,7 @@ export const replyToConversationWithGemini = async (
       : startDelayedAck({
           supabase,
           conversationId: conversation.id,
-          triggerMessageId: input.triggerMessageId,
+          triggerMessageId: effectiveTriggerId,
           customerPhone: conversation.customer_phone,
           whatsappId: client?.whatsapp_id,
           clientPhone: client?.phone,
@@ -535,7 +647,7 @@ export const replyToConversationWithGemini = async (
         customerPhone: conversation.customer_phone,
         client,
         messages: chronological,
-        triggerMessageId: input.triggerMessageId,
+        triggerMessageId: effectiveTriggerId,
         paymentRequestedByAgentId: input.paymentRequestedByAgentId ?? null,
         businessPrompt: settings.ai_system_prompt,
         model: settings.gemini_model,
@@ -706,7 +818,7 @@ export const replyToConversationWithGemini = async (
               action: "handoff",
               reason: decision.reason || null,
               run_id: decision.runId,
-              trigger_message_id: input.triggerMessageId ?? null,
+              trigger_message_id: effectiveTriggerId,
               intent,
             },
           })
@@ -770,6 +882,9 @@ export const replyToConversationWithGemini = async (
       return sendFallback("empty_model_reply", { skipSoftWhatsApp: ackSent });
     }
 
+    const staleReply = await skipIfStaleBeforeSend(decision);
+    if (staleReply) return staleReply;
+
     const to = resolveRecipient(freshConversation, client);
     if (!to) {
       const result = {
@@ -825,7 +940,7 @@ export const replyToConversationWithGemini = async (
           action: "reply",
           reason: decision.reason || null,
           run_id: decision.runId,
-          trigger_message_id: input.triggerMessageId ?? null,
+          trigger_message_id: effectiveTriggerId,
           intent,
         },
       })
@@ -885,10 +1000,22 @@ export const replyToConversationWithGemini = async (
     });
 
     if (conversation && !forceRun) {
+      const latestId = await findLatestInboundId(supabase, conversation.id);
+      if (effectiveTriggerId && latestId && latestId !== effectiveTriggerId) {
+        await closeRun("skipped", {
+          error: "turn_stale_before_send",
+          metadata: { intent, effectiveTriggerId, latestId },
+        });
+        return {
+          ok: false,
+          skipped: true,
+          reason: "turn_stale_before_send",
+        };
+      }
       recordGeminiCircuitFailureMessage(errorMessage);
       const fallback = await sendGuaranteedClientReply(supabase, {
         conversationId: conversation.id,
-        triggerMessageId: input.triggerMessageId,
+        triggerMessageId: effectiveTriggerId,
         customerPhone: conversation.customer_phone,
         whatsappId: client?.whatsapp_id,
         clientPhone: client?.phone,
@@ -929,5 +1056,12 @@ export const replyToConversationWithGemini = async (
       ok: false,
       reason: "unexpected_error",
     };
+  } finally {
+    await releaseConversationAiLock(
+      supabase,
+      input.conversationId,
+      lockToken,
+      lockUnsupported,
+    );
   }
 };
