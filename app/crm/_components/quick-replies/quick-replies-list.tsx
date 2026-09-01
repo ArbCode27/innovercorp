@@ -44,7 +44,7 @@ export const QuickRepliesList = ({
                 {quickReply.title}
               </p>
               {quickReply.shortcut ? (
-                <span className="rounded-md bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-600/25 dark:text-blue-100">
+                <span className="rounded-md bg-crm-accent-muted px-2 py-0.5 text-xs font-medium text-crm-accent-muted-foreground">
                   /{quickReply.shortcut}
                 </span>
               ) : null}

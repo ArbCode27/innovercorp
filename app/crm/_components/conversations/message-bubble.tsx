@@ -139,7 +139,7 @@ export const MessageBubble = ({
         <div
           className={`rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed shadow-sm ${
             isOutgoing
-              ? "rounded-br-md bg-blue-600 text-white shadow-blue-950/20"
+              ? "rounded-br-md bg-crm-accent text-crm-accent-foreground shadow-black/20"
               : `rounded-bl-md border ${CRM_SURFACES.border} ${CRM_SURFACES.card} ${CRM_SURFACES.textPrimary}`
           }`}>
           <MessageContent message={message} isOutgoing={isOutgoing} />
@@ -152,7 +152,7 @@ export const MessageBubble = ({
             <StatusIcon
               className={`size-3 ${
                 status === "read"
-                  ? "text-blue-100"
+                  ? "text-crm-accent-foreground/80"
                   : status === "failed"
                     ? "text-red-200"
                     : "text-slate-400 dark:text-slate-500"

@@ -215,7 +215,7 @@ export const WisproSearchDialog = ({
                     type="button"
                     disabled={isAssociating}
                     onClick={() => handleAssociateClick(result)}
-                    className={`w-full rounded-lg border p-3 text-left transition-colors disabled:opacity-60 ${CRM_SURFACES.border} ${CRM_SURFACES.card} ${CRM_SURFACES.hover} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400`}>
+                    className={`w-full rounded-lg border p-3 text-left transition-colors disabled:opacity-60 ${CRM_SURFACES.border} ${CRM_SURFACES.card} ${CRM_SURFACES.hover} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-crm-accent`}>
                     <p className={`text-sm font-medium ${CRM_SURFACES.textPrimary}`}>
                       {result.customer.name}
                     </p>

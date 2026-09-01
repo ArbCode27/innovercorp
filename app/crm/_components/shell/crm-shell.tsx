@@ -6,7 +6,7 @@ import { LoadingState } from "../shared/loading-state";
 import { CrmLogin } from "../auth/crm-login";
 import { useCrmAuth } from "../../_hooks/use-crm-auth";
 import { useCrmData } from "../../_hooks/use-crm-data";
-import type { CrmView } from "../../_lib/types";
+import type { Agent, CrmView } from "../../_lib/types";
 import { AgentsView } from "../agents/agents-view";
 import { ClientsView } from "../clients/clients-view";
 import { MyConversationsView } from "../conversations/my-conversations-view";
@@ -17,7 +17,9 @@ import { QuickRepliesView } from "../quick-replies/quick-replies-view";
 import { SettingsView } from "../settings/settings-view";
 import { PaymentsView } from "../payments/payments-view";
 import { TicketsView } from "../tickets/tickets-view";
+import { CrmAppearanceHydrator } from "./crm-appearance-hydrator";
 import { CrmMobileNav, CrmSidebar } from "./crm-sidebar";
+import { parseCrmAccentId, type CrmAccentId, type CrmColorMode } from "../../_lib/crm-accents";
 
 export const CrmShell = () => {
   const [activeView, setActiveView] = useState<CrmView>("conversations");
@@ -37,6 +39,23 @@ export const CrmShell = () => {
   }
 
   const handleSelectView = (view: CrmView) => setActiveView(view);
+  const handleUpdateAppearance = async (patch: {
+    ui_accent?: CrmAccentId;
+    ui_mode?: CrmColorMode;
+    office_ui_accent?: CrmAccentId;
+  }) => {
+    const result = await crm.updateAppearance(patch);
+    if (!result) return null;
+    const latestAgent = auth.agent;
+    if (!latestAgent) return result;
+    const nextAgent: Agent = {
+      ...latestAgent,
+      ui_accent: result.ui_accent ?? latestAgent.ui_accent,
+      ui_mode: result.ui_mode ?? latestAgent.ui_mode,
+    };
+    auth.replaceAgent(nextAgent);
+    return result;
+  };
   const isConversationView =
     activeView === "conversations" || activeView === "my-conversations";
   const shouldHideMobileNav =
@@ -44,6 +63,10 @@ export const CrmShell = () => {
 
   return (
     <main className={`flex h-full overflow-hidden ${CRM_SURFACES.page}`}>
+      <CrmAppearanceHydrator
+        agent={auth.agent}
+        officeAccent={parseCrmAccentId(crm.settings.ui_accent)}
+      />
       <CrmSidebar
         agent={auth.agent}
         activeView={activeView}
@@ -214,6 +237,7 @@ export const CrmShell = () => {
                 onUpdatePaymentSuccessMessage={crm.updatePaymentSuccessMessage}
                 onUpdateAiRecoveryMessages={crm.updateAiRecoveryMessages}
                 onUpdateOfficeHours={crm.updateOfficeHoursSettings}
+                onUpdateAppearance={handleUpdateAppearance}
               />
             ) : null}
           </>

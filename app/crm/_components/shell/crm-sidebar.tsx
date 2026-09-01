@@ -68,7 +68,7 @@ export const CrmSidebar = ({
 }: CrmSidebarProps) => (
   <aside
     className={`hidden h-full min-h-0 w-16 shrink-0 flex-col items-center border-r py-4 md:flex ${CRM_SURFACES.elevated} ${CRM_SURFACES.border}`}>
-    <div className="mb-5 flex size-10 items-center justify-center rounded-xl bg-blue-600 text-white">
+    <div className="mb-5 flex size-10 items-center justify-center rounded-xl bg-crm-accent text-crm-accent-foreground">
       <Layers className="size-5" aria-hidden="true" />
     </div>
 
@@ -93,7 +93,7 @@ export const CrmSidebar = ({
         <DropdownMenuTrigger asChild>
           <button
             type="button"
-            className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
+            className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-crm-accent"
             title="Abrir menú de agente"
             aria-label="Abrir menú de agente">
             <AvatarInitials
@@ -153,14 +153,14 @@ export const CrmMobileNav = ({
             aria-current={isActive ? "page" : undefined}
             className={`relative flex min-w-0 flex-1 flex-col items-center gap-1 rounded-lg px-2 py-2 text-[11px] transition ${
               isActive
-                ? "bg-blue-100 text-blue-800 dark:bg-blue-600/20 dark:text-blue-100"
+                ? "bg-crm-accent-muted text-crm-accent-muted-foreground"
                 : "text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-slate-200"
             }`}>
             <Icon className="size-4" aria-hidden="true" />
             <span className="truncate">{label}</span>
             {badgeCount > 0 ? (
               <span
-                className="absolute right-3 top-1 flex min-w-4 items-center justify-center rounded-full bg-blue-600 px-1 text-[10px] font-semibold leading-4 text-white"
+                className="absolute right-3 top-1 flex min-w-4 items-center justify-center rounded-full bg-crm-accent px-1 text-[10px] font-semibold leading-4 text-crm-accent-foreground"
                 aria-hidden="true">
                 {badgeCount > 99 ? "99+" : badgeCount}
               </span>

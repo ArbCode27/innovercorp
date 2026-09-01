@@ -19,6 +19,11 @@ import {
   type AiRecoveryMessages,
 } from "@/app/crm/_lib/ai-recovery-messages";
 import { DEFAULT_GEMINI_MODEL, isRetiredGeminiModel } from "@/app/crm/_lib/gemini-models";
+import {
+  DEFAULT_CRM_ACCENT,
+  parseCrmAccentId,
+  type CrmAccentId,
+} from "@/app/crm/_lib/crm-accents";
 
 export type CrmSettings = {
   id: number;
@@ -29,6 +34,7 @@ export type CrmSettings = {
   ai_recovery_messages: AiRecoveryMessages;
   office_hours: OfficeHoursConfig;
   after_hours_payments: AfterHoursPaymentsConfig;
+  ui_accent: CrmAccentId;
   updated_at: string | null;
   updated_by: number | null;
 };
@@ -52,6 +58,7 @@ const DEFAULT_SETTINGS: CrmSettings = {
   ai_recovery_messages: { ...EMPTY_AI_RECOVERY_MESSAGES },
   office_hours: DEFAULT_OFFICE_HOURS,
   after_hours_payments: DEFAULT_AFTER_HOURS_PAYMENTS,
+  ui_accent: DEFAULT_CRM_ACCENT,
   updated_at: null,
   updated_by: null,
 };
@@ -87,6 +94,7 @@ const mapSettingsRow = (row: Record<string, unknown> | null): CrmSettings => {
     ai_recovery_messages: parseAiRecoveryMessages(row.ai_recovery_messages),
     office_hours: officeFromDb,
     after_hours_payments: afterHoursFromDb,
+    ui_accent: parseCrmAccentId(row.ui_accent),
     updated_at:
       typeof row.updated_at === "string" ? row.updated_at : null,
     updated_by:
@@ -152,6 +160,7 @@ export const updateCrmSettings = async (
     ai_recovery_messages?: AiRecoveryMessages;
     office_hours?: OfficeHoursConfig;
     after_hours_payments?: AfterHoursPaymentsConfig;
+    ui_accent?: CrmAccentId;
     updated_by?: number | null;
   },
 ): Promise<CrmSettings> => {
@@ -186,6 +195,9 @@ export const updateCrmSettings = async (
       payload.updated_by === undefined
         ? current.updated_by
         : payload.updated_by,
+    ...(payload.ui_accent !== undefined
+      ? { ui_accent: payload.ui_accent }
+      : {}),
   };
 
   const { data, error } = await supabase
@@ -197,12 +209,12 @@ export const updateCrmSettings = async (
   if (error) {
     // Soft message if migration not applied yet.
     if (
-      /office_hours|after_hours_payments|ai_recovery_messages|column/i.test(
+      /office_hours|after_hours_payments|ai_recovery_messages|ui_accent|column/i.test(
         error.message || "",
       )
     ) {
       throw new Error(
-        "Falta una migración de ajustes en Supabase. Ejecuta supabase/migrations/20260817140000_crm_settings_office_hours.sql y supabase/migrations/20260827120000_ai_agent_reliability.sql",
+        "Falta una migración de ajustes en Supabase. Ejecuta supabase/migrations/20260817140000_crm_settings_office_hours.sql, supabase/migrations/20260827120000_ai_agent_reliability.sql y supabase/migrations/20260901140000_crm_ui_appearance.sql",
       );
     }
     throw error;

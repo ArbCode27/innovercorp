@@ -201,7 +201,7 @@ export const OfficeHoursSettingsSection = ({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-3">
           <Clock3
-            className="mt-0.5 size-4 shrink-0 text-blue-500"
+            className="mt-0.5 size-4 shrink-0 text-crm-accent"
             aria-hidden="true"
           />
           <div className="min-w-0">

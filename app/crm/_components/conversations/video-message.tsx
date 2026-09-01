@@ -30,7 +30,7 @@ export const VideoMessage = ({ src, caption, isOutgoing }: VideoMessageProps) =>
       {visibleCaption ? (
         <p
           className={`whitespace-pre-wrap break-words text-xs leading-relaxed ${
-            isOutgoing ? "text-blue-50" : CRM_SURFACES.textSecondary
+            isOutgoing ? "text-crm-accent-foreground/80" : CRM_SURFACES.textSecondary
           }`}>
           {visibleCaption}
         </p>

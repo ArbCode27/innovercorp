@@ -56,7 +56,7 @@ export const LocationMessage = ({ message, isOutgoing }: LocationMessageProps) =
       href={mapsUrl}
       target="_blank"
       rel="noopener noreferrer"
-      className={`block w-[min(20rem,78vw)] overflow-hidden rounded-2xl border transition hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 ${CRM_SURFACES.border} ${CRM_SURFACES.card}`}
+      className={`block w-[min(20rem,78vw)] overflow-hidden rounded-2xl border transition hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-crm-accent ${CRM_SURFACES.border} ${CRM_SURFACES.card}`}
       aria-label="Abrir ubicación en Google Maps">
       <div className="relative h-40 w-full overflow-hidden">
         {mapPreviewUrl ? (
@@ -95,7 +95,7 @@ export const LocationMessage = ({ message, isOutgoing }: LocationMessageProps) =
 
         {coordinateLabel ? (
           <p
-            className={`font-mono text-[11px] ${isOutgoing ? "text-blue-100/90" : CRM_SURFACES.textMuted}`}>
+            className={`font-mono text-[11px] ${isOutgoing ? "text-crm-accent" : CRM_SURFACES.textMuted}`}>
             {coordinateLabel}
           </p>
         ) : null}

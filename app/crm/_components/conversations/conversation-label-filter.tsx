@@ -65,7 +65,7 @@ export const ConversationLabelFilter = ({
             <CommandGroup heading="Etiquetas">
               <CommandItem
                 value="todas"
-                className="data-[selected=true]:bg-blue-600/25 data-[selected=true]:text-blue-100"
+                className="data-[selected=true]:bg-crm-accent/25 data-[selected=true]:text-crm-accent-foreground"
                 onSelect={() => {
                   onLabelChange(null);
                   setIsLabelMenuOpen(false);
@@ -83,7 +83,7 @@ export const ConversationLabelFilter = ({
                 <CommandItem
                   key={label.id}
                   value={label.name}
-                  className="data-[selected=true]:bg-blue-600/25 data-[selected=true]:text-blue-100"
+                  className="data-[selected=true]:bg-crm-accent/25 data-[selected=true]:text-crm-accent-foreground"
                   onSelect={() => {
                     onLabelChange(label.id);
                     setIsLabelMenuOpen(false);

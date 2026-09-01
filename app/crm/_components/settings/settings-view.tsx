@@ -24,7 +24,10 @@ import { CRM_SURFACES } from "../../_lib/crm-theme";
 import { CrmButton } from "../shared/crm-button";
 import { OfficeHoursSettingsSection } from "./office-hours-settings-section";
 import { AiRecoverySettingsSection } from "./ai-recovery-settings-section";
+import { AppearanceSettingsSection } from "./appearance-settings-section";
+import { useCrmAppearance } from "../shell/crm-appearance-provider";
 import type { AiRecoveryMessages } from "../../_lib/ai-recovery-messages";
+import type { CrmAccentId, CrmColorMode } from "../../_lib/crm-accents";
 
 interface SettingsViewProps {
   currentAgent: Agent;
@@ -36,6 +39,15 @@ interface SettingsViewProps {
     office_hours: OfficeHoursConfig;
     after_hours_payments: AfterHoursPaymentsConfig;
   }) => Promise<void>;
+  onUpdateAppearance: (input: {
+    ui_accent?: CrmAccentId;
+    ui_mode?: CrmColorMode;
+    office_ui_accent?: CrmAccentId;
+  }) => Promise<{
+    ui_accent?: CrmAccentId;
+    ui_mode?: CrmColorMode | null;
+    office_ui_accent: CrmAccentId;
+  } | null>;
 }
 
 export const SettingsView = ({
@@ -45,8 +57,12 @@ export const SettingsView = ({
   onUpdatePaymentSuccessMessage,
   onUpdateAiRecoveryMessages,
   onUpdateOfficeHours,
+  onUpdateAppearance,
 }: SettingsViewProps) => {
   const isAdmin = isAdminRole(currentAgent.role);
+  const { accent, colorMode, officeAccent, applyAccent, applyColorMode } =
+    useCrmAppearance();
+  const [isSavingAppearance, setIsSavingAppearance] = useState(false);
   const savedPrompt = settings.ai_system_prompt?.trim() || "";
   const savedPaymentMessage = settings.payment_success_message?.trim() || "";
   const [draftPrompt, setDraftPrompt] = useState(
@@ -159,6 +175,44 @@ export const SettingsView = ({
     }
   };
 
+  const handleAccentChange = async (nextAccent: CrmAccentId) => {
+    if (isSavingAppearance) return;
+    const previous = accent;
+    applyAccent(nextAccent);
+    setIsSavingAppearance(true);
+    try {
+      await onUpdateAppearance({ ui_accent: nextAccent });
+    } catch {
+      applyAccent(previous);
+    } finally {
+      setIsSavingAppearance(false);
+    }
+  };
+
+  const handleColorModeChange = async (nextMode: CrmColorMode) => {
+    if (isSavingAppearance) return;
+    const previous = colorMode;
+    applyColorMode(nextMode);
+    setIsSavingAppearance(true);
+    try {
+      await onUpdateAppearance({ ui_mode: nextMode });
+    } catch {
+      applyColorMode(previous);
+    } finally {
+      setIsSavingAppearance(false);
+    }
+  };
+
+  const handleOfficeAccentChange = async (nextAccent: CrmAccentId) => {
+    if (!isAdmin || isSavingAppearance) return;
+    setIsSavingAppearance(true);
+    try {
+      await onUpdateAppearance({ office_ui_accent: nextAccent });
+    } finally {
+      setIsSavingAppearance(false);
+    }
+  };
+
   return (
     <div
       className={`crm-scrollbar min-h-0 flex-1 overflow-y-auto p-4 md:p-6 ${CRM_SURFACES.page}`}>
@@ -170,12 +224,25 @@ export const SettingsView = ({
             Ajustes del CRM
           </h2>
           <p className={`mt-1 text-sm ${CRM_SURFACES.textMuted}`}>
-            Gemini, horarios de oficina y atención de pagos fuera de jornada
+            Gemini, apariencia, horarios de oficina y pagos fuera de jornada
           </p>
         </div>
       </div>
 
       <div className="flex w-full flex-col gap-4">
+        <AppearanceSettingsSection
+          isAdmin={isAdmin}
+          accent={accent}
+          colorMode={colorMode}
+          officeAccent={officeAccent}
+          isSaving={isSavingAppearance}
+          onAccentChange={(nextAccent) => void handleAccentChange(nextAccent)}
+          onColorModeChange={(nextMode) => void handleColorModeChange(nextMode)}
+          onOfficeAccentChange={(nextAccent) =>
+            void handleOfficeAccentChange(nextAccent)
+          }
+        />
+
         <div className="grid gap-4 lg:grid-cols-12">
           <section
             className={`rounded-xl border p-4 md:p-5 lg:col-span-4 ${CRM_SURFACES.border} ${CRM_SURFACES.elevated}`}>
@@ -185,7 +252,7 @@ export const SettingsView = ({
             </h3>
             <div className="mt-3 flex items-start gap-3">
               <Sparkles
-                className="mt-0.5 size-4 shrink-0 text-blue-500"
+                className="mt-0.5 size-4 shrink-0 text-crm-accent"
                 aria-hidden="true"
               />
               <div className="min-w-0">

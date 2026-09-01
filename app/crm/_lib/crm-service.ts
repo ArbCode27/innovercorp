@@ -34,6 +34,8 @@ import {
   parseAfterHoursPaymentsConfig,
   parseOfficeHoursConfig,
 } from "./office-hours";
+import { DEFAULT_CRM_ACCENT, parseCrmAccentId } from "./crm-accents";
+import type { CrmAccentId, CrmColorMode } from "./crm-accents";
 
 const db = () => getSupabaseClient();
 
@@ -150,6 +152,7 @@ export const crmService = {
             settingsRow.after_hours_payments !== null
               ? parseAfterHoursPaymentsConfig(settingsRow.after_hours_payments)
               : DEFAULT_AFTER_HOURS_PAYMENTS,
+          ui_accent: parseCrmAccentId(settingsRow.ui_accent),
           updated_at:
             typeof settingsRow.updated_at === "string"
               ? settingsRow.updated_at
@@ -170,6 +173,7 @@ export const crmService = {
           ai_recovery_messages: { ...EMPTY_AI_RECOVERY_MESSAGES },
           office_hours: DEFAULT_OFFICE_HOURS,
           after_hours_payments: DEFAULT_AFTER_HOURS_PAYMENTS,
+          ui_accent: DEFAULT_CRM_ACCENT,
           updated_at: null,
           updated_by: null,
         };
@@ -217,6 +221,35 @@ export const crmService = {
     }
 
     return data.settings as CrmSettings;
+  },
+
+  async updateAppearance(
+    agentId: number,
+    patch: {
+      ui_accent?: CrmAccentId;
+      ui_mode?: CrmColorMode;
+      office_ui_accent?: CrmAccentId;
+    },
+  ) {
+    const response = await fetch("/api/crm/appearance", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        agent_id: agentId,
+        ...patch,
+      }),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "No se pudo guardar la apariencia");
+    }
+
+    return data as {
+      ui_accent?: CrmAccentId;
+      ui_mode?: CrmColorMode | null;
+      office_ui_accent: CrmAccentId;
+    };
   },
 
   async loadMessages(conversationId: number) {

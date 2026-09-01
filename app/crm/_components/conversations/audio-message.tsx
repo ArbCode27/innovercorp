@@ -33,8 +33,8 @@ export const AudioMessage = ({ src, caption, isOutgoing }: AudioMessageProps) =>
     ? `Mensaje de audio: ${trimmedCaption}`
     : "Mensaje de audio";
   const playButtonClassName = isOutgoing
-    ? "bg-white text-blue-700 hover:bg-blue-50 focus-visible:ring-white/70"
-    : "bg-blue-600 text-white hover:bg-blue-500 focus-visible:ring-blue-400";
+    ? "bg-crm-accent-foreground text-crm-accent hover:opacity-90 focus-visible:ring-white/70"
+    : "bg-crm-accent text-crm-accent-foreground hover:bg-crm-accent-hover focus-visible:ring-crm-accent";
   const durationLabel = duration ? formatAudioTime(duration) : "--:--";
 
   const handleTogglePlayback = async () => {
@@ -148,7 +148,7 @@ export const AudioMessage = ({ src, caption, isOutgoing }: AudioMessageProps) =>
       {visibleCaption ? (
         <p
           className={`whitespace-pre-wrap break-words text-xs leading-relaxed ${
-            isOutgoing ? "text-blue-50" : CRM_SURFACES.textSecondary
+            isOutgoing ? "text-crm-accent-foreground/80" : CRM_SURFACES.textSecondary
           }`}>
           {visibleCaption}
         </p>

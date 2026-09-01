@@ -10,7 +10,7 @@ const crmButtonVariants = cva(
     variants: {
       variant: {
         primary:
-          "bg-blue-600 text-white hover:bg-blue-500 focus-visible:ring-blue-400",
+          "bg-crm-accent text-crm-accent-foreground hover:bg-crm-accent-hover focus-visible:ring-crm-accent",
         secondary:
           "border border-slate-200 bg-slate-100 text-slate-900 hover:bg-slate-200 hover:text-slate-950 focus-visible:ring-slate-400 dark:border-white/15 dark:bg-[#1d2130] dark:text-slate-100 dark:hover:bg-white/10 dark:hover:text-white",
         danger:

@@ -568,7 +568,7 @@ export const MessageComposer = ({
                   aria-selected={index === highlightedQuickReplyIndex}
                   className={`flex w-full flex-col rounded-lg px-3 py-2 text-left transition ${
                     index === highlightedQuickReplyIndex
-                      ? "bg-blue-100 text-blue-900 dark:bg-blue-600/20 dark:text-blue-100"
+                      ? "bg-crm-accent-muted text-crm-accent-muted-foreground"
                       : `${CRM_SURFACES.hover} ${CRM_SURFACES.textSecondary}`
                   }`}
                   onMouseEnter={() => setHighlightedQuickReplyIndex(index)}
@@ -579,7 +579,7 @@ export const MessageComposer = ({
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium">{quickReply.title}</span>
                     {quickReply.shortcut ? (
-                      <span className="rounded bg-blue-600/10 px-1.5 py-0.5 text-[11px] font-semibold text-blue-700 dark:text-blue-200">
+                      <span className="rounded bg-crm-accent/10 px-1.5 py-0.5 text-[11px] font-semibold text-crm-accent">
                         /{quickReply.shortcut}
                       </span>
                     ) : null}
@@ -661,7 +661,7 @@ export const MessageComposer = ({
             selectedImage ? "Escribe un pie de foto (opcional)..." : placeholder
           }
           className={cn(
-            "min-h-11 max-h-28 resize-none rounded-2xl focus-visible:ring-blue-400 md:max-h-32",
+            "min-h-11 max-h-28 resize-none rounded-2xl focus-visible:ring-crm-accent md:max-h-32",
             CRM_SURFACES.border,
             readOnly
               ? `${CRM_SURFACES.inputReadonly} ${CRM_SURFACES.textMuted} cursor-not-allowed`

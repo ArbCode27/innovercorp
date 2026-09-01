@@ -53,6 +53,7 @@ export interface CrmSettings {
   ai_recovery_messages?: import("./ai-recovery-messages").AiRecoveryMessages;
   office_hours?: OfficeHoursConfig;
   after_hours_payments?: AfterHoursPaymentsConfig;
+  ui_accent?: import("./crm-accents").CrmAccentId | null;
   updated_at: string | null;
   updated_by: number | null;
 }
@@ -68,6 +69,8 @@ export interface Agent {
   avatar_color: string | null;
   avatar_bg: string | null;
   max_conversations: number | null;
+  ui_accent?: string | null;
+  ui_mode?: string | null;
   created_at: string | null;
   updated_at: string | null;
 }

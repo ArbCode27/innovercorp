@@ -64,7 +64,7 @@ export const CrmLogin = ({ isSubmitting, onLogin }: CrmLoginProps) => {
       <form
         onSubmit={handleSubmit}
         className={`w-full max-w-sm rounded-2xl border p-9 shadow-2xl ${CRM_SURFACES.elevated} ${CRM_SURFACES.border}`}>
-        <div className="mx-auto mb-5 flex size-12 items-center justify-center rounded-2xl bg-blue-600 text-white">
+        <div className="mx-auto mb-5 flex size-12 items-center justify-center rounded-2xl bg-crm-accent text-crm-accent-foreground">
           <Layers className="size-6" aria-hidden="true" />
         </div>
         <div className="mb-7 text-center">

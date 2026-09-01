@@ -23,7 +23,7 @@ export const ImageMessage = ({ src, caption, isOutgoing }: ImageMessageProps) =>
         href={src}
         target="_blank"
         rel="noopener noreferrer"
-        className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-50 dark:focus-visible:ring-offset-[#0f1117]"
+        className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-crm-accent focus-visible:ring-offset-2 focus-visible:ring-offset-slate-50 dark:focus-visible:ring-offset-[#0f1117]"
         aria-label="Abrir imagen en una pestaña nueva">
         <Image
           src={src}
@@ -38,7 +38,7 @@ export const ImageMessage = ({ src, caption, isOutgoing }: ImageMessageProps) =>
       {visibleCaption ? (
         <p
           className={`mt-2 whitespace-pre-wrap break-words text-xs leading-relaxed ${
-            isOutgoing ? "text-blue-50" : CRM_SURFACES.textSecondary
+            isOutgoing ? "text-crm-accent-foreground/80" : CRM_SURFACES.textSecondary
           }`}>
           {visibleCaption}
         </p>

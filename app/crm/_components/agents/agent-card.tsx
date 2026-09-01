@@ -42,7 +42,7 @@ export const AgentCard = ({
               {agent.name}
             </h3>
             {agent.id === currentAgent.id ? (
-              <span className="text-[10px] text-blue-700 dark:text-blue-100">(tú)</span>
+              <span className="text-[10px] text-crm-accent">(tú)</span>
             ) : null}
           </div>
           <p className={`mt-1 truncate text-xs ${CRM_SURFACES.textMuted}`}>

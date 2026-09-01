@@ -69,6 +69,7 @@ const emptyData: CrmData = {
     ai_recovery_messages: undefined,
     office_hours: undefined,
     after_hours_payments: undefined,
+    ui_accent: undefined,
     updated_at: null,
     updated_by: null,
   },
@@ -961,6 +962,33 @@ export const useCrmData = (agent: Agent | null) => {
     }
   };
 
+  const updateAppearance = async (input: {
+    ui_accent?: import("../_lib/crm-accents").CrmAccentId;
+    ui_mode?: import("../_lib/crm-accents").CrmColorMode;
+    office_ui_accent?: import("../_lib/crm-accents").CrmAccentId;
+  }) => {
+    if (!agent) return null;
+
+    try {
+      const result = await crmService.updateAppearance(agent.id, input);
+      setData((current) => ({
+        ...current,
+        settings: {
+          ...current.settings,
+          ui_accent: result.office_ui_accent ?? current.settings.ui_accent,
+        },
+      }));
+      return result;
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "No se pudo guardar la apariencia",
+      );
+      throw error;
+    }
+  };
+
   const resolveConversation = async () => {
     if (!selectedConversation || !agent) return;
 
@@ -1349,6 +1377,7 @@ export const useCrmData = (agent: Agent | null) => {
     updatePaymentSuccessMessage,
     updateAiRecoveryMessages,
     updateOfficeHoursSettings,
+    updateAppearance,
     resolveConversation,
     updateLabels,
     quickToggleLabel,

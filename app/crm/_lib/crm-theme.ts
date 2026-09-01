@@ -29,12 +29,23 @@ export const CRM_MENU_ITEM =
 
 /** Shared focus ring for interactive CRM controls (WCAG-visible focus). */
 export const CRM_FOCUS_RING =
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-50 dark:focus-visible:ring-offset-[#0f1117]";
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-crm-accent focus-visible:ring-offset-2 focus-visible:ring-offset-slate-50 dark:focus-visible:ring-offset-[#0f1117]";
+
+/** Brand accent surfaces — follow `data-crm-accent`, not hardcoded blue. */
+export const CRM_BRAND = {
+  solid:
+    "bg-crm-accent text-crm-accent-foreground hover:bg-crm-accent-hover",
+  muted: "bg-crm-accent-muted text-crm-accent-muted-foreground",
+  text: "text-crm-accent",
+  ring: "focus-visible:ring-crm-accent",
+  navActive: "bg-crm-accent-muted text-crm-accent-muted-foreground",
+  outgoingOnAccent: "text-crm-accent-foreground/80",
+} as const;
 
 /** Conversation list item states in the inbox sidebar. */
 export const CRM_INBOX_ITEM = {
   active:
-    "border-b border-l-2 border-l-blue-500 border-slate-200 bg-blue-50 dark:border-white/10 dark:bg-blue-950/40",
+    "border-b border-l-2 border-l-crm-accent border-slate-200 bg-crm-accent-muted dark:border-white/10",
   unread:
     "border-b border-l-4 border-l-amber-400 border-slate-200 bg-amber-50/60 dark:border-l-amber-400 dark:border-white/10 dark:bg-amber-950/25",
   default: "border-b border-slate-200 dark:border-white/10",
