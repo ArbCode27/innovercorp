@@ -28,8 +28,8 @@ export const CrmFilterChip = ({
         CRM_FOCUS_RING,
         "inline-flex h-8 shrink-0 items-center rounded-full border px-3 text-xs font-semibold transition",
         isActive
-          ? "border-emerald-500/60 bg-emerald-900/20 text-emerald-200"
-          : "border-slate-700/70 bg-[#111827] text-slate-300 hover:border-slate-500/80 hover:text-slate-100",
+          ? "border-crm-accent/40 bg-crm-accent-muted text-crm-accent-muted-foreground"
+          : "border-white/50 bg-white/40 text-slate-600 hover:border-crm-accent/30 hover:text-slate-900 dark:border-white/10 dark:bg-white/[.06] dark:text-slate-300 dark:hover:text-slate-100",
       )}>
       <span>{`${label}${countText}`}</span>
     </button>

@@ -9,7 +9,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { toast } from "sonner";
-import { CRM_SURFACES } from "../../_lib/crm-theme";
+import { CRM_BUBBLE, CRM_SURFACES } from "../../_lib/crm-theme";
 import type { Message } from "../../_lib/types";
 import { formatCrmTime } from "../../_lib/formatters";
 import { MessageContent } from "./message-content";
@@ -49,7 +49,7 @@ export const MessageBubble = ({
 
   if (message.type === "note") {
     return (
-      <div className="mx-auto flex max-w-[90%] items-center gap-2 rounded-xl border border-amber-400/30 bg-amber-50 px-4 py-2 text-center text-xs italic text-amber-800 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-300">
+      <div className="mx-auto flex max-w-[90%] items-center gap-2 rounded-2xl border border-amber-400/30 bg-amber-50/80 px-4 py-2 text-center text-xs italic text-amber-800 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-300">
         <FileText className="size-4 shrink-0" aria-hidden="true" />
         {message.content}
       </div>
@@ -133,29 +133,27 @@ export const MessageBubble = ({
           </span>
         ) : null}
       </div>
-      {isImageMessage || isLocationMessage ? (
+      {isLocationMessage ? (
         <MessageContent message={message} isOutgoing={isOutgoing} />
       ) : (
         <div
-          className={`rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed shadow-sm ${
-            isOutgoing
-              ? "rounded-br-md border border-black/5 bg-crm-accent text-crm-accent-foreground shadow-black/10 dark:border-white/10"
-              : `rounded-bl-md border ${CRM_SURFACES.border} ${CRM_SURFACES.card} ${CRM_SURFACES.textPrimary}`
+          className={`px-3.5 py-2.5 text-sm leading-relaxed ${
+            isOutgoing ? CRM_BUBBLE.outgoing : CRM_BUBBLE.incoming
           }`}>
           <MessageContent message={message} isOutgoing={isOutgoing} />
         </div>
       )}
-      <span className={`flex items-center gap-1 text-[10px] ${CRM_SURFACES.textLabel}`}>
+      <span className={`flex items-center gap-1 text-[10px] ${CRM_SURFACES.textMuted}`}>
         {formatCrmTime(message.created_at)}
         {isOutgoing ? (
           <>
             <StatusIcon
               className={`size-3 ${
                 status === "read"
-                  ? "text-crm-accent-foreground/80"
+                  ? "text-crm-accent"
                   : status === "failed"
-                    ? "text-red-200"
-                    : "text-slate-400 dark:text-slate-500"
+                    ? "text-red-500 dark:text-red-300"
+                    : CRM_SURFACES.textMuted
               }`}
               aria-hidden="true"
             />

@@ -59,7 +59,7 @@ export const ConversationDetails = ({
   return (
     <aside
       className={cn(
-        `crm-scrollbar hidden w-72 shrink-0 overflow-y-auto border-l lg:block ${CRM_SURFACES.border} ${CRM_SURFACES.elevated}`,
+        `crm-scrollbar hidden w-72 shrink-0 overflow-y-auto border-l bg-white/25 dark:bg-white/[.03] lg:block ${CRM_SURFACES.border}`,
         className,
       )}>
       <section className={`space-y-4 border-b p-4 ${CRM_SURFACES.border}`}>

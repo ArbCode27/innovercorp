@@ -28,7 +28,7 @@ export const AgentCard = ({
   ).length;
 
   return (
-    <article className={`rounded-xl border p-4 ${CRM_SURFACES.border} ${CRM_SURFACES.card}`}>
+    <article className={`rounded-2xl p-4 ${CRM_SURFACES.card}`}>
       <div className="flex items-start gap-3">
         <AvatarInitials
           name={agent.name}

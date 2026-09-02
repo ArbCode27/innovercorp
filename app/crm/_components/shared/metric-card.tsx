@@ -1,4 +1,3 @@
-import { Card, CardContent } from "@/components/ui/card";
 import type { LucideIcon } from "lucide-react";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
 
@@ -25,8 +24,8 @@ export const MetricCard = ({
   icon: Icon,
   tone = "blue",
 }: MetricCardProps) => (
-  <Card className={`${CRM_SURFACES.border} ${CRM_SURFACES.elevated} ${CRM_SURFACES.textPrimary}`}>
-    <CardContent className="flex items-start justify-between p-4">
+  <article className={`rounded-2xl p-4 ${CRM_SURFACES.elevated} ${CRM_SURFACES.textPrimary}`}>
+    <div className="flex items-start justify-between">
       <div>
         <p className={`text-xs ${CRM_SURFACES.textMuted}`}>{title}</p>
         <p className={`mt-1 text-2xl font-semibold ${tones[tone]}`}>{value}</p>
@@ -35,6 +34,6 @@ export const MetricCard = ({
         ) : null}
       </div>
       {Icon ? <Icon className={`size-5 ${tones[tone]}`} aria-hidden="true" /> : null}
-    </CardContent>
-  </Card>
+    </div>
+  </article>
 );

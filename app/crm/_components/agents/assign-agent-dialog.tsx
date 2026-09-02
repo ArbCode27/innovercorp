@@ -67,7 +67,7 @@ export const AssignAgentDialog = ({
                   key={agent.id}
                   type="button"
                   onClick={() => handleAssignAgent(agent.id)}
-                  className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left transition hover:border-blue-400/40 ${CRM_FOCUS_RING} ${CRM_SURFACES.border} ${CRM_SURFACES.card}`}>
+                  className={`flex w-full items-center gap-3 rounded-2xl p-3 text-left transition hover:border-crm-accent/40 ${CRM_FOCUS_RING} ${CRM_SURFACES.card}`}>
                   <AvatarInitials
                     name={agent.name}
                     initials={agent.initials}
@@ -87,7 +87,7 @@ export const AssignAgentDialog = ({
             })
           ) : (
             <div
-              className={`rounded-xl border p-4 text-sm ${CRM_SURFACES.border} ${CRM_SURFACES.card} ${CRM_SURFACES.textMuted}`}>
+              className={`rounded-2xl p-4 text-sm ${CRM_SURFACES.card} ${CRM_SURFACES.textMuted}`}>
               No hay agentes registrados.
             </div>
           )}

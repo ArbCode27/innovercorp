@@ -197,7 +197,7 @@ export const OfficeHoursSettingsSection = ({
 
   return (
     <section
-      className={`rounded-xl border p-4 md:p-5 ${CRM_SURFACES.border} ${CRM_SURFACES.elevated}`}>
+      className={`rounded-2xl p-4 md:p-5 ${CRM_SURFACES.elevated}`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-3">
           <Clock3
@@ -226,7 +226,7 @@ export const OfficeHoursSettingsSection = ({
         {/* Left: policy controls */}
         <aside className="flex flex-col gap-3">
           <div
-            className={`rounded-lg border p-3 ${CRM_SURFACES.border} ${CRM_SURFACES.input}`}>
+            className={`rounded-2xl border p-3 ${CRM_SURFACES.border} ${CRM_SURFACES.input}`}>
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p
@@ -252,7 +252,7 @@ export const OfficeHoursSettingsSection = ({
           </div>
 
           <div
-            className={`rounded-lg border p-3 ${CRM_SURFACES.border} ${CRM_SURFACES.input}`}>
+            className={`rounded-2xl border p-3 ${CRM_SURFACES.border} ${CRM_SURFACES.input}`}>
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p
@@ -273,7 +273,7 @@ export const OfficeHoursSettingsSection = ({
           </div>
 
           <div
-            className={`rounded-lg border p-3 ${CRM_SURFACES.border} ${CRM_SURFACES.input}`}>
+            className={`rounded-2xl border p-3 ${CRM_SURFACES.border} ${CRM_SURFACES.input}`}>
             <label
               htmlFor="crm-office-timezone"
               className={`text-xs font-medium uppercase tracking-wide ${CRM_SURFACES.textLabel}`}>
@@ -350,7 +350,7 @@ export const OfficeHoursSettingsSection = ({
               return (
                 <li
                   key={key}
-                  className={`rounded-lg border p-3 transition-colors ${CRM_SURFACES.border} ${
+                  className={`rounded-2xl border p-3 transition-colors ${CRM_SURFACES.border} ${
                     isOpen ? CRM_SURFACES.elevated : CRM_SURFACES.input
                   }`}>
                   <div className="flex items-center justify-between gap-2">

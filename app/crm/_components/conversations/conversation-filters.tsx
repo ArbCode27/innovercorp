@@ -45,7 +45,7 @@ export const ConversationFilters = ({
           value={searchTerm}
           onChange={(event) => onSearchChange(event.target.value)}
           placeholder="Buscar..."
-          className={`pl-9 ${CRM_SURFACES.border} ${CRM_SURFACES.input} ${CRM_SURFACES.textPrimary} ${CRM_SURFACES.placeholder}`}
+          className={`rounded-full pl-9 ${CRM_SURFACES.border} ${CRM_SURFACES.input} ${CRM_SURFACES.textPrimary} ${CRM_SURFACES.placeholder}`}
         />
       </div>
     </div>

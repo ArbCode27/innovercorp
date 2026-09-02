@@ -22,7 +22,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { CRM_MENU, CRM_MENU_ITEM, CRM_SURFACES } from "../../_lib/crm-theme";
+import { CRM_MENU, CRM_MENU_ITEM, CRM_PANEL, CRM_SURFACES } from "../../_lib/crm-theme";
 import { CRM_NAV_ITEMS } from "../../_lib/constants";
 import type { Agent, CrmView } from "../../_lib/types";
 import { AvatarInitials } from "../shared/avatar-initials";
@@ -67,8 +67,8 @@ export const CrmSidebar = ({
   onLogout,
 }: CrmSidebarProps) => (
   <aside
-    className={`hidden h-full min-h-0 w-16 shrink-0 flex-col items-center border-r py-4 md:flex ${CRM_SURFACES.elevated} ${CRM_SURFACES.border}`}>
-    <div className="mb-5 flex size-10 items-center justify-center rounded-xl bg-crm-accent text-crm-accent-foreground">
+    className={`hidden h-full min-h-0 w-16 shrink-0 flex-col items-center py-4 md:flex ${CRM_PANEL}`}>
+    <div className="mb-5 flex size-10 items-center justify-center rounded-2xl bg-crm-accent text-crm-accent-foreground">
       <Layers className="size-5" aria-hidden="true" />
     </div>
 
@@ -136,7 +136,7 @@ export const CrmMobileNav = ({
   onSelectView,
 }: Pick<CrmSidebarProps, "activeView" | "myAssignedCount" | "onSelectView">) => (
   <nav
-    className={`fixed inset-x-0 bottom-0 z-40 border-t px-2 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] pt-2 md:hidden ${CRM_SURFACES.elevatedTranslucent} ${CRM_SURFACES.border}`}
+    className={`fixed inset-x-2 bottom-2 z-40 rounded-3xl px-2 pb-[calc(env(safe-area-inset-bottom)+0.4rem)] pt-2 md:hidden ${CRM_PANEL}`}
     aria-label="Navegación móvil CRM">
     <div className="mx-auto flex max-w-screen-sm items-center justify-between gap-1">
       {MOBILE_PRIMARY_NAV_ITEMS.map((view) => {
@@ -151,7 +151,7 @@ export const CrmMobileNav = ({
             type="button"
             onClick={() => onSelectView(view)}
             aria-current={isActive ? "page" : undefined}
-            className={`relative flex min-w-0 flex-1 flex-col items-center gap-1 rounded-lg px-2 py-2 text-[11px] transition ${
+            className={`relative flex min-w-0 flex-1 flex-col items-center gap-1 rounded-2xl px-2 py-2 text-[11px] transition ${
               isActive
                 ? "bg-crm-accent-muted text-crm-accent-muted-foreground"
                 : "text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-slate-200"

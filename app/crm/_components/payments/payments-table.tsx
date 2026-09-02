@@ -8,7 +8,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { CRM_SURFACES } from "../../_lib/crm-theme";
+import { CRM_SURFACES, CRM_TABLE } from "../../_lib/crm-theme";
 import {
   canRejectPayment,
   formatPaymentAmount,
@@ -57,7 +57,7 @@ export const PaymentsTable = ({
   if (!payments.length) {
     return (
       <div
-        className={`overflow-hidden rounded-xl border ${CRM_SURFACES.border} ${CRM_SURFACES.elevated}`}>
+        className={CRM_TABLE}>
         <EmptyState
           icon={Wallet}
           title="Sin comprobantes"
@@ -69,7 +69,7 @@ export const PaymentsTable = ({
 
   return (
     <div
-      className={`overflow-hidden rounded-xl border ${CRM_SURFACES.border} ${CRM_SURFACES.elevated}`}>
+      className={`overflow-hidden ${CRM_TABLE}`}>
       <div className="overflow-x-auto">
         <Table className="min-w-[980px]">
           <TableHeader>

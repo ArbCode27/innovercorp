@@ -61,7 +61,7 @@ export const AppearanceSettingsSection = ({
 
   return (
     <section
-      className={`rounded-xl border p-4 md:p-5 ${CRM_SURFACES.border} ${CRM_SURFACES.elevated}`}>
+      className={`rounded-2xl p-4 md:p-5 ${CRM_SURFACES.elevated}`}>
       <div className="flex items-start gap-3">
         <Palette
           className="mt-0.5 size-4 shrink-0 text-crm-accent"
@@ -99,7 +99,7 @@ export const AppearanceSettingsSection = ({
                 onClick={() => onColorModeChange(option.id)}
                 className={cn(
                   CRM_FOCUS_RING,
-                  "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium transition",
+                  "inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border px-3 py-2 text-sm font-medium transition",
                   isSelected
                     ? "border-crm-accent bg-crm-accent-muted text-crm-accent-muted-foreground"
                     : `${CRM_SURFACES.border} ${CRM_SURFACES.card} ${CRM_SURFACES.textSecondary} ${CRM_SURFACES.hover}`,

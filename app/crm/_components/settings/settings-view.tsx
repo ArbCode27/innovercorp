@@ -215,7 +215,7 @@ export const SettingsView = ({
 
   return (
     <div
-      className={`crm-scrollbar min-h-0 flex-1 overflow-y-auto p-4 md:p-6 ${CRM_SURFACES.page}`}>
+      className="crm-scrollbar min-h-0 flex-1 overflow-y-auto p-4 md:p-6">
       <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2
@@ -245,7 +245,7 @@ export const SettingsView = ({
 
         <div className="grid gap-4 lg:grid-cols-12">
           <section
-            className={`rounded-xl border p-4 md:p-5 lg:col-span-4 ${CRM_SURFACES.border} ${CRM_SURFACES.elevated}`}>
+            className={`rounded-2xl p-4 md:p-5 lg:col-span-4 ${CRM_SURFACES.elevated}`}>
             <h3
               className={`text-base font-semibold ${CRM_SURFACES.textPrimary}`}>
               Motor del bot
@@ -294,7 +294,7 @@ export const SettingsView = ({
         />
 
         <section
-          className={`rounded-xl border p-4 md:p-5 ${CRM_SURFACES.border} ${CRM_SURFACES.elevated}`}>
+          className={`rounded-2xl p-4 md:p-5 ${CRM_SURFACES.elevated}`}>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h3
@@ -365,7 +365,7 @@ export const SettingsView = ({
         </section>
 
         <section
-          className={`rounded-xl border p-4 md:p-5 ${CRM_SURFACES.border} ${CRM_SURFACES.elevated}`}>
+          className={`rounded-2xl p-4 md:p-5 ${CRM_SURFACES.elevated}`}>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h3

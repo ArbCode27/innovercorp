@@ -40,7 +40,7 @@ export const ConversationLabelFilter = ({
           aria-label="Filtrar por etiqueta"
           className={cn(
             CRM_FOCUS_RING,
-            "inline-flex h-9 w-full items-center justify-between rounded-xl border px-3 text-sm font-medium transition",
+            "inline-flex h-9 w-full items-center justify-between rounded-2xl border px-3 text-sm font-medium transition",
             "border-slate-700/70 bg-[#111827] text-slate-100 hover:border-slate-500/80",
           )}>
           <span className="truncate">

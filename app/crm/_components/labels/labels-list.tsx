@@ -13,7 +13,7 @@ interface LabelsListProps {
 }
 
 export const LabelsList = ({ labels, conversations, onDeleteLabel }: LabelsListProps) => (
-  <div className={`max-w-3xl overflow-hidden rounded-xl border ${CRM_SURFACES.border} ${CRM_SURFACES.elevated}`}>
+  <div className={`max-w-3xl overflow-hidden rounded-2xl ${CRM_SURFACES.elevated}`}>
     <div className={`border-b px-5 py-4 text-sm font-semibold ${CRM_SURFACES.border} ${CRM_SURFACES.textSecondary}`}>
       Etiquetas ({labels.length})
     </div>

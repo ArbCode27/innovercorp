@@ -1,6 +1,5 @@
 "use client";
 
-import { CRM_SURFACES } from "../../_lib/crm-theme";
 import type { Agent, ConversationHistory, Label } from "../../_lib/types";
 import { HistoryHeader } from "./history-header";
 import { HistoryMessages } from "./history-messages";
@@ -27,7 +26,7 @@ export const HistoryDetailPanel = ({
     return (
       <section
         aria-label="Detalle del historial"
-        className={`flex min-h-0 min-w-0 flex-1 overflow-hidden ${CRM_SURFACES.page}`}>
+        className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
         <HistoryWelcomePanel totalEntries={totalEntries} />
       </section>
     );
@@ -36,7 +35,7 @@ export const HistoryDetailPanel = ({
   return (
     <section
       aria-label="Detalle del historial"
-      className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden ${CRM_SURFACES.page}`}>
+      className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       <HistoryHeader
         entry={entry}
         resolvedByAgent={resolvedByAgent}

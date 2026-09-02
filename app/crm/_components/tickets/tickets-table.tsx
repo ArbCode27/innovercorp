@@ -6,7 +6,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { CRM_SURFACES } from "../../_lib/crm-theme";
+import { CRM_SURFACES, CRM_TABLE } from "../../_lib/crm-theme";
 import type { Client, Ticket } from "../../_lib/types";
 import { formatCrmDate } from "../../_lib/formatters";
 import { AvatarInitials } from "../shared/avatar-initials";
@@ -18,7 +18,7 @@ interface TicketsTableProps {
 }
 
 export const TicketsTable = ({ tickets, clientsById }: TicketsTableProps) => (
-  <div className={`overflow-hidden rounded-xl border ${CRM_SURFACES.border} ${CRM_SURFACES.elevated}`}>
+  <div className={CRM_TABLE}>
     <div className="overflow-x-auto">
       <Table className="min-w-[760px]">
       <TableHeader>

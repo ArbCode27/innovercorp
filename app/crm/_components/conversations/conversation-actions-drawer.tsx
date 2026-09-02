@@ -58,7 +58,7 @@ export const ConversationActionsDrawer = ({
       </CrmButton>
     </DrawerTrigger>
 
-    <DrawerContent className={`${CRM_SURFACES.page} border-t ${CRM_SURFACES.border}`}>
+    <DrawerContent className={`rounded-t-3xl ${CRM_SURFACES.elevatedTranslucent} ${CRM_SURFACES.textPrimary}`}>
       <DrawerHeader>
         <DrawerTitle className={CRM_SURFACES.textPrimary}>
           Acciones de conversación

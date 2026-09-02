@@ -66,7 +66,7 @@ export const EmojiPickerPanel = ({ onEmojiSelect }: EmojiPickerPanelProps) => {
 
   return (
     <div
-      className={`crm-emoji-picker overflow-hidden rounded-xl ${CRM_SURFACES.elevated}`}
+      className={`crm-emoji-picker overflow-hidden rounded-2xl ${CRM_SURFACES.elevated}`}
       data-theme={theme}
       role="dialog"
       aria-label="Selector de emojis">

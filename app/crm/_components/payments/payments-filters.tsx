@@ -76,7 +76,7 @@ export const PaymentsFilters = ({
 
   return (
     <div
-      className={`rounded-xl border p-4 ${CRM_SURFACES.border} ${CRM_SURFACES.elevated}`}>
+      className={`rounded-2xl p-4 ${CRM_SURFACES.elevated}`}>
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
         <div className="xl:col-span-2">
           <label htmlFor="crm-payments-search" className="sr-only">

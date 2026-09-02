@@ -55,7 +55,7 @@ export const QuickRepliesView = ({
   };
 
   return (
-    <div className={`crm-scrollbar min-h-0 flex-1 overflow-y-auto p-4 md:p-6 ${CRM_SURFACES.page}`}>
+    <div className={`crm-scrollbar min-h-0 flex-1 overflow-y-auto p-4 md:p-6`}>
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className={`text-xl font-semibold md:text-2xl ${CRM_SURFACES.textPrimary}`}>
@@ -74,7 +74,7 @@ export const QuickRepliesView = ({
       </div>
 
       {!isAdmin ? (
-        <div className={`mb-4 rounded-xl border px-4 py-3 text-sm ${CRM_SURFACES.border} ${CRM_SURFACES.elevated} ${CRM_SURFACES.textMuted}`}>
+        <div className={`mb-4 rounded-2xl px-4 py-3 text-sm ${CRM_SURFACES.elevated} ${CRM_SURFACES.textMuted}`}>
           Solo los administradores pueden gestionar respuestas rápidas. Como asesor
           puedes usarlas desde el chat escribiendo /.
         </div>

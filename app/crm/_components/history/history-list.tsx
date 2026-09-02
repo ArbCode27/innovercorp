@@ -28,12 +28,12 @@ export const HistoryList = ({
   }
 
   return (
-    <div className="crm-scrollbar min-h-0 flex-1 overflow-y-auto">
+    <div className="crm-scrollbar min-h-0 flex-1 space-y-1 overflow-y-auto p-2">
       {groups.map((group) => (
         <section key={group.dateKey} aria-labelledby={`history-group-${group.dateKey}`}>
           <header
             id={`history-group-${group.dateKey}`}
-            className={`sticky top-0 z-10 border-b px-4 py-2 backdrop-blur ${CRM_SURFACES.border} ${CRM_SURFACES.elevatedTranslucent}`}>
+            className={`sticky top-0 z-10 rounded-2xl px-3 py-2 ${CRM_SURFACES.elevatedTranslucent}`}>
             <p className={`text-[11px] font-semibold uppercase tracking-wide ${CRM_SURFACES.textMuted}`}>
               Resueltas · {group.label}
             </p>

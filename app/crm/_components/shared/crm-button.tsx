@@ -5,14 +5,14 @@ import { cn } from "@/lib/utils";
 import { CRM_FOCUS_RING } from "../../_lib/crm-theme";
 
 const crmButtonVariants = cva(
-  `${CRM_FOCUS_RING} shadow-sm disabled:opacity-60`,
+  `${CRM_FOCUS_RING} rounded-2xl shadow-sm disabled:opacity-60`,
   {
     variants: {
       variant: {
         primary:
           "border border-black/5 bg-crm-accent text-crm-accent-foreground hover:bg-crm-accent-hover focus-visible:ring-crm-accent dark:border-white/10",
         secondary:
-          "border border-slate-200 bg-slate-100 text-slate-900 hover:bg-slate-200 hover:text-slate-950 focus-visible:ring-slate-400 dark:border-white/15 dark:bg-[#1d2130] dark:text-slate-100 dark:hover:bg-white/10 dark:hover:text-white",
+          "border border-white/50 bg-white/45 text-slate-900 hover:bg-white/70 hover:text-slate-950 focus-visible:ring-slate-400 dark:border-white/15 dark:bg-white/[.06] dark:text-slate-100 dark:hover:bg-white/10 dark:hover:text-white",
         danger:
           "border border-red-300 bg-red-50 text-red-900 hover:bg-red-100 focus-visible:ring-red-400 dark:border-red-500/50 dark:bg-red-950/70 dark:text-red-100 dark:hover:bg-red-900/70",
         success:

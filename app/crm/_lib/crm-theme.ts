@@ -1,15 +1,17 @@
-/** CRM surface tokens — always pair light + dark for theme switching. */
+/** CRM surface tokens — glass panels + light/dark pairs. */
 export const CRM_SURFACES = {
-  page: "bg-slate-50 text-slate-900 dark:bg-[#0f1117] dark:text-slate-100",
-  elevated: "bg-white dark:bg-[#161922]",
-  elevatedTranslucent: "bg-white/95 dark:bg-[#161922]/95",
-  input: "bg-slate-100 dark:bg-[#1d2130]",
-  inputReadonly: "bg-slate-200 dark:bg-[#181b24]",
-  card: "bg-white dark:bg-[#1d2130]",
-  border: "border-slate-200 dark:border-white/10",
-  divider: "divide-slate-200 dark:divide-white/10",
-  hover: "hover:bg-slate-100 dark:hover:bg-white/[.04]",
-  hoverStrong: "hover:bg-slate-200 dark:hover:bg-white/10",
+  page: "crm-canvas text-slate-900 dark:text-slate-100",
+  elevated: "crm-glass",
+  elevatedTranslucent: "crm-glass-strong",
+  input:
+    "rounded-2xl border-white/50 bg-white/50 dark:border-white/10 dark:bg-white/[.06]",
+  inputReadonly:
+    "rounded-2xl border-white/40 bg-white/30 dark:border-white/10 dark:bg-white/[.04]",
+  card: "crm-glass",
+  border: "border-white/45 dark:border-white/10",
+  divider: "divide-white/40 dark:divide-white/10",
+  hover: "hover:bg-white/55 dark:hover:bg-white/[.06]",
+  hoverStrong: "hover:bg-white/80 dark:hover:bg-white/10",
   textPrimary: "text-slate-900 dark:text-slate-100",
   textSecondary: "text-slate-600 dark:text-slate-300",
   textMuted: "text-slate-500 dark:text-slate-400",
@@ -18,18 +20,28 @@ export const CRM_SURFACES = {
   placeholder: "placeholder:text-slate-500",
 } as const;
 
+export const CRM_RADIUS = {
+  panel: "rounded-3xl",
+  card: "rounded-2xl",
+  control: "rounded-2xl",
+} as const;
+
+export const CRM_PANEL = `crm-glass ${CRM_RADIUS.panel} overflow-hidden`;
+
+export const CRM_TABLE = `overflow-hidden ${CRM_RADIUS.card} crm-glass`;
+
 export const CRM_DIALOG =
-  "border-slate-200 bg-white text-slate-900 dark:border-white/10 dark:bg-[#161922] dark:text-slate-100";
+  "crm-glass-strong rounded-3xl text-slate-900 dark:text-slate-100";
 
 export const CRM_MENU =
-  "border-slate-200 bg-white text-slate-900 dark:border-white/10 dark:bg-[#161922] dark:text-slate-100";
+  "crm-glass-strong rounded-2xl text-slate-900 dark:text-slate-100";
 
 export const CRM_MENU_ITEM =
-  "cursor-pointer text-slate-700 focus:bg-slate-100 focus:text-slate-900 dark:text-slate-200 dark:focus:bg-white/10 dark:focus:text-white";
+  "cursor-pointer rounded-2xl text-slate-700 focus:bg-white/70 focus:text-slate-900 dark:text-slate-200 dark:focus:bg-white/10 dark:focus:text-white";
 
 /** Shared focus ring for interactive CRM controls (WCAG-visible focus). */
 export const CRM_FOCUS_RING =
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-crm-accent focus-visible:ring-offset-2 focus-visible:ring-offset-slate-50 dark:focus-visible:ring-offset-[#0f1117]";
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-crm-accent focus-visible:ring-offset-2 focus-visible:ring-offset-transparent";
 
 /** Brand accent surfaces — follow `data-crm-accent`, not hardcoded blue. */
 export const CRM_BRAND = {
@@ -45,27 +57,40 @@ export const CRM_BRAND = {
 /** Conversation list item states in the inbox sidebar. */
 export const CRM_INBOX_ITEM = {
   active:
-    "border-b border-l-2 border-l-crm-accent border-slate-200 bg-crm-accent-muted dark:border-white/10",
+    "rounded-2xl border border-crm-accent/25 bg-crm-accent-muted/90",
   unread:
-    "border-b border-l-4 border-l-amber-400 border-slate-200 bg-amber-50/60 dark:border-l-amber-400 dark:border-white/10 dark:bg-amber-950/25",
-  default: "border-b border-slate-200 dark:border-white/10",
+    "rounded-2xl border border-amber-200/60 bg-amber-50/70 dark:border-amber-400/20 dark:bg-amber-950/30",
+  default: "rounded-2xl border border-transparent",
+} as const;
+
+export const CRM_HISTORY_ITEM = {
+  active:
+    "rounded-2xl border border-emerald-400/30 bg-emerald-50/80 dark:border-emerald-400/20 dark:bg-emerald-950/35",
+  default: "rounded-2xl border border-transparent",
+} as const;
+
+export const CRM_BUBBLE = {
+  outgoing:
+    "rounded-3xl rounded-br-lg border border-crm-accent/70 bg-crm-accent/30 text-slate-900 backdrop-blur-md dark:border-crm-accent/50 dark:bg-crm-accent/20 dark:text-slate-100",
+  incoming:
+    "rounded-3xl rounded-bl-lg border border-slate-300/70 bg-white/40 text-slate-900 backdrop-blur-md dark:border-white/20 dark:bg-slate-800/40 dark:text-slate-100",
 } as const;
 
 /** Accessible badge tones for light and dark modes. */
 export const CRM_BADGE_TONES = {
-  blue: "border-blue-300 bg-blue-50 text-blue-800 dark:border-blue-500/40 dark:bg-blue-950/60 dark:text-blue-100",
+  blue: "border-blue-300/60 bg-blue-50/80 text-blue-800 dark:border-blue-500/40 dark:bg-blue-950/60 dark:text-blue-100",
   amber:
-    "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-500/40 dark:bg-amber-950/60 dark:text-amber-100",
+    "border-amber-300/60 bg-amber-50/80 text-amber-900 dark:border-amber-500/40 dark:bg-amber-950/60 dark:text-amber-100",
   emerald:
-    "border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-500/40 dark:bg-emerald-950/60 dark:text-emerald-100",
-  red: "border-red-300 bg-red-50 text-red-800 dark:border-red-500/40 dark:bg-red-950/60 dark:text-red-100",
+    "border-emerald-300/60 bg-emerald-50/80 text-emerald-900 dark:border-emerald-500/40 dark:bg-emerald-950/60 dark:text-emerald-100",
+  red: "border-red-300/60 bg-red-50/80 text-red-800 dark:border-red-500/40 dark:bg-red-950/60 dark:text-red-100",
   violet:
-    "border-violet-300 bg-violet-50 text-violet-900 dark:border-violet-500/40 dark:bg-violet-950/60 dark:text-violet-100",
-  rose: "border-rose-300 bg-rose-50 text-rose-900 dark:border-rose-500/40 dark:bg-rose-950/60 dark:text-rose-100",
+    "border-violet-300/60 bg-violet-50/80 text-violet-900 dark:border-violet-500/40 dark:bg-violet-950/60 dark:text-violet-100",
+  rose: "border-rose-300/60 bg-rose-50/80 text-rose-900 dark:border-rose-500/40 dark:bg-rose-950/60 dark:text-rose-100",
   slate:
-    "border-slate-300 bg-slate-100 text-slate-800 dark:border-slate-500/40 dark:bg-slate-900/60 dark:text-slate-200",
+    "border-slate-300/60 bg-slate-100/80 text-slate-800 dark:border-slate-500/40 dark:bg-slate-900/60 dark:text-slate-200",
   neutral:
-    "border-slate-200 bg-slate-50 text-slate-700 dark:border-white/15 dark:bg-white/5 dark:text-slate-200",
+    "border-white/50 bg-white/40 text-slate-700 dark:border-white/15 dark:bg-white/5 dark:text-slate-200",
 } as const;
 
 export type CrmBadgeTone = keyof typeof CRM_BADGE_TONES;

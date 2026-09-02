@@ -14,7 +14,7 @@ import type {
   WisproCustomer,
   WisproSearchResult,
 } from "../../_lib/types";
-import { CRM_SURFACES } from "../../_lib/crm-theme";
+import { CRM_PANEL, CRM_SURFACES } from "../../_lib/crm-theme";
 import { ConversationFilters } from "./conversation-filters";
 import { ConversationList } from "./conversation-list";
 import { ConversationPanel } from "./conversation-panel";
@@ -118,11 +118,11 @@ export const ConversationsView = ({
   const isConversationOpen = selectedConversationId !== null;
 
   return (
-    <div className="flex min-h-0 flex-1">
+    <div className="flex min-h-0 flex-1 gap-2 md:gap-3">
       <aside
         className={`${
           isConversationOpen ? "hidden md:flex" : "flex"
-        } min-h-0 w-full shrink-0 flex-col border-r md:w-80 ${CRM_SURFACES.border} ${CRM_SURFACES.elevated}`}>
+        } min-h-0 w-full shrink-0 flex-col md:w-80 ${CRM_PANEL}`}>
         <div className={`border-b p-4 ${CRM_SURFACES.border}`}>
           <div className="flex items-center justify-between gap-2">
             <h2 className={`text-sm font-semibold ${CRM_SURFACES.textPrimary}`}>Conversaciones</h2>
@@ -156,7 +156,7 @@ export const ConversationsView = ({
       <div
         className={`${
           isConversationOpen ? "flex" : "hidden md:flex"
-        } min-h-0 min-w-0 flex-1`}>
+        } min-h-0 min-w-0 flex-1 ${CRM_PANEL}`}>
         <ConversationPanel
           conversation={selectedConversation}
           client={selectedClient}

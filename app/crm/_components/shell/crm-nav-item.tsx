@@ -25,7 +25,7 @@ export const CrmNavItem = ({
     aria-label={label}
     aria-current={isActive ? "page" : undefined}
     title={label}
-    className={`relative flex size-10 items-center justify-center rounded-lg transition ${CRM_FOCUS_RING} ${
+    className={`relative flex size-10 items-center justify-center rounded-2xl transition ${CRM_FOCUS_RING} ${
       isActive
         ? "bg-crm-accent-muted text-crm-accent-muted-foreground"
         : "text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-slate-200"

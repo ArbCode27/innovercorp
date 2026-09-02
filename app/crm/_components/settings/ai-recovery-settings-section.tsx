@@ -105,7 +105,7 @@ export const AiRecoverySettingsSection = ({
 
   return (
     <section
-      className={`rounded-xl border p-4 md:p-5 ${CRM_SURFACES.border} ${CRM_SURFACES.elevated}`}>
+      className={`rounded-2xl p-4 md:p-5 ${CRM_SURFACES.elevated}`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className={`text-base font-semibold ${CRM_SURFACES.textPrimary}`}>

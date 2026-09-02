@@ -159,7 +159,7 @@ export const WisproSearchDialog = ({
 
           {isRelink && currentLink ? (
             <div
-              className={`rounded-lg border px-3 py-2 text-xs ${CRM_SURFACES.border} ${CRM_SURFACES.input} ${CRM_SURFACES.textSecondary}`}>
+              className={`rounded-2xl border px-3 py-2 text-xs ${CRM_SURFACES.border} ${CRM_SURFACES.input} ${CRM_SURFACES.textSecondary}`}>
               Vinculación actual:{" "}
               <span className={`font-medium ${CRM_SURFACES.textPrimary}`}>
                 {currentLink.name}
@@ -215,7 +215,7 @@ export const WisproSearchDialog = ({
                     type="button"
                     disabled={isAssociating}
                     onClick={() => handleAssociateClick(result)}
-                    className={`w-full rounded-lg border p-3 text-left transition-colors disabled:opacity-60 ${CRM_SURFACES.border} ${CRM_SURFACES.card} ${CRM_SURFACES.hover} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-crm-accent`}>
+                    className={`w-full rounded-2xl border p-3 text-left transition-colors disabled:opacity-60 ${CRM_SURFACES.border} ${CRM_SURFACES.card} ${CRM_SURFACES.hover} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-crm-accent`}>
                     <p className={`text-sm font-medium ${CRM_SURFACES.textPrimary}`}>
                       {result.customer.name}
                     </p>

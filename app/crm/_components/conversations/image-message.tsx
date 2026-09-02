@@ -1,5 +1,4 @@
 import Image from "next/image";
-import { CRM_SURFACES } from "../../_lib/crm-theme";
 
 interface ImageMessageProps {
   src: string;
@@ -9,7 +8,7 @@ interface ImageMessageProps {
 
 const GENERIC_CAPTIONS = new Set(["imagen", "image"]);
 
-export const ImageMessage = ({ src, caption, isOutgoing }: ImageMessageProps) => {
+export const ImageMessage = ({ src, caption }: ImageMessageProps) => {
   const trimmedCaption = caption?.trim();
   const visibleCaption =
     trimmedCaption && !GENERIC_CAPTIONS.has(trimmedCaption.toLowerCase())
@@ -31,15 +30,13 @@ export const ImageMessage = ({ src, caption, isOutgoing }: ImageMessageProps) =>
           width={320}
           height={400}
           unoptimized
-          className="max-h-80 w-auto max-w-[min(19rem,72vw)] rounded-xl object-contain sm:max-w-80"
+          className="max-h-80 w-auto max-w-[min(19rem,72vw)] rounded-2xl object-contain sm:max-w-80"
         />
       </a>
 
       {visibleCaption ? (
         <p
-          className={`mt-2 whitespace-pre-wrap break-words text-xs leading-relaxed ${
-            isOutgoing ? "text-crm-accent-foreground/80" : CRM_SURFACES.textSecondary
-          }`}>
+          className="mt-2 whitespace-pre-wrap break-words text-xs leading-relaxed opacity-80">
           {visibleCaption}
         </p>
       ) : null}

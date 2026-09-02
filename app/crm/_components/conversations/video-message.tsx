@@ -1,5 +1,3 @@
-import { CRM_SURFACES } from "../../_lib/crm-theme";
-
 interface VideoMessageProps {
   src: string;
   caption?: string;
@@ -8,7 +6,7 @@ interface VideoMessageProps {
 
 const GENERIC_CAPTIONS = new Set(["video", "vídeo"]);
 
-export const VideoMessage = ({ src, caption, isOutgoing }: VideoMessageProps) => {
+export const VideoMessage = ({ src, caption }: VideoMessageProps) => {
   const trimmedCaption = caption?.trim();
   const visibleCaption =
     trimmedCaption && !GENERIC_CAPTIONS.has(trimmedCaption.toLowerCase())
@@ -22,16 +20,14 @@ export const VideoMessage = ({ src, caption, isOutgoing }: VideoMessageProps) =>
         src={src}
         controls
         preload="metadata"
-        className="max-h-80 w-auto max-w-[min(19rem,72vw)] rounded-xl bg-black object-contain sm:max-w-80"
+        className="max-h-80 w-auto max-w-[min(19rem,72vw)] rounded-2xl bg-black object-contain sm:max-w-80"
         aria-label={ariaLabel}>
         Tu navegador no puede reproducir este video.
       </video>
 
       {visibleCaption ? (
         <p
-          className={`whitespace-pre-wrap break-words text-xs leading-relaxed ${
-            isOutgoing ? "text-crm-accent-foreground/80" : CRM_SURFACES.textSecondary
-          }`}>
+          className="whitespace-pre-wrap break-words text-xs leading-relaxed opacity-80">
           {visibleCaption}
         </p>
       ) : null}

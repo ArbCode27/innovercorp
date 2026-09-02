@@ -425,7 +425,7 @@ export const MessageComposer = ({
   };
 
   return (
-    <div className={`shrink-0 border-t p-4 backdrop-blur ${CRM_SURFACES.border} ${CRM_SURFACES.elevatedTranslucent}`}>
+    <div className={`shrink-0 border-t p-4 ${CRM_SURFACES.border} ${CRM_SURFACES.elevatedTranslucent}`}>
       <input
         ref={fileInputRef}
         type="file"
@@ -436,7 +436,7 @@ export const MessageComposer = ({
       />
 
       {selectedImage && selectedImageUrl ? (
-        <div className={`mb-3 rounded-xl border p-3 ${CRM_SURFACES.border} ${CRM_SURFACES.input}`}>
+        <div className={`mb-3 rounded-2xl border p-3 ${CRM_SURFACES.border} ${CRM_SURFACES.input}`}>
           <div className="mb-2 flex items-center justify-between gap-2">
             <p className={`text-sm font-medium ${CRM_SURFACES.textPrimary}`}>
               Imagen lista para enviar
@@ -455,7 +455,7 @@ export const MessageComposer = ({
           <img
             src={selectedImageUrl}
             alt="Vista previa de imagen adjunta"
-            className={`max-h-64 w-auto max-w-full rounded-lg border object-contain ${CRM_SURFACES.border}`}
+            className={`max-h-64 w-auto max-w-full rounded-2xl border object-contain ${CRM_SURFACES.border}`}
           />
           <p className={`mt-2 text-xs ${CRM_SURFACES.textMuted}`}>
             Agrega un mensaje opcional como pie de foto.
@@ -465,7 +465,7 @@ export const MessageComposer = ({
 
       {recorder.status === "recording" ? (
         <div
-          className={`mb-3 rounded-xl border px-3 py-2 ${CRM_SURFACES.border} ${CRM_SURFACES.input}`}
+          className={`mb-3 rounded-2xl border px-3 py-2 ${CRM_SURFACES.border} ${CRM_SURFACES.input}`}
           role="status"
           aria-live="polite">
           <div className="flex items-center justify-between gap-3">
@@ -498,7 +498,7 @@ export const MessageComposer = ({
       ) : null}
 
       {recorder.status === "recorded" && recorder.audioUrl ? (
-        <div className={`mb-3 rounded-xl border p-3 ${CRM_SURFACES.border} ${CRM_SURFACES.input}`}>
+        <div className={`mb-3 rounded-2xl border p-3 ${CRM_SURFACES.border} ${CRM_SURFACES.input}`}>
           <div className="mb-2 flex items-center justify-between gap-2">
             <p className={`text-sm font-medium ${CRM_SURFACES.textPrimary}`}>
               Nota lista ({formatDuration(recorder.durationMs)})
@@ -551,7 +551,7 @@ export const MessageComposer = ({
       ) : null}
 
       {isQuickReplyMenuOpen ? (
-        <div className={`mb-2 rounded-xl border ${CRM_SURFACES.border} ${CRM_SURFACES.elevated}`}>
+        <div className={`mb-2 rounded-2xl border ${CRM_SURFACES.border} ${CRM_SURFACES.elevated}`}>
           <div className={`border-b px-3 py-2 text-xs font-medium ${CRM_SURFACES.border} ${CRM_SURFACES.textMuted}`}>
             Respuestas rápidas {quickReplyQuery ? `para "/${quickReplyQuery}"` : ""}
           </div>
@@ -661,7 +661,7 @@ export const MessageComposer = ({
             selectedImage ? "Escribe un pie de foto (opcional)..." : placeholder
           }
           className={cn(
-            "min-h-11 max-h-28 resize-none rounded-2xl focus-visible:ring-crm-accent md:max-h-32",
+            "min-h-11 max-h-28 resize-none rounded-3xl focus-visible:ring-crm-accent md:max-h-32",
             CRM_SURFACES.border,
             readOnly
               ? `${CRM_SURFACES.inputReadonly} ${CRM_SURFACES.textMuted} cursor-not-allowed`

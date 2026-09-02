@@ -31,7 +31,7 @@ export const ConversationList = ({
   }
 
   return (
-    <div className="crm-scrollbar min-h-0 flex-1 overflow-y-auto">
+    <div className="crm-scrollbar min-h-0 flex-1 space-y-1 overflow-y-auto p-2">
       {conversations.map((conversation) => (
         <ConversationListItem
           key={conversation.id}

@@ -2,7 +2,6 @@
 
 import { Pause, Play, Volume2 } from "lucide-react";
 import { useRef, useState } from "react";
-import { CRM_SURFACES } from "../../_lib/crm-theme";
 
 interface AudioMessageProps {
   src: string;
@@ -21,7 +20,7 @@ const formatAudioTime = (value: number) => {
   return `${minutes}:${seconds}`;
 };
 
-export const AudioMessage = ({ src, caption, isOutgoing }: AudioMessageProps) => {
+export const AudioMessage = ({ src, caption }: AudioMessageProps) => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -32,9 +31,8 @@ export const AudioMessage = ({ src, caption, isOutgoing }: AudioMessageProps) =>
   const audioLabel = trimmedCaption
     ? `Mensaje de audio: ${trimmedCaption}`
     : "Mensaje de audio";
-  const playButtonClassName = isOutgoing
-    ? "bg-crm-accent-foreground text-crm-accent hover:opacity-90 focus-visible:ring-white/70"
-    : "bg-crm-accent text-crm-accent-foreground hover:bg-crm-accent-hover focus-visible:ring-crm-accent";
+  const playButtonClassName =
+    "bg-crm-accent text-crm-accent-foreground hover:bg-crm-accent-hover focus-visible:ring-crm-accent";
   const durationLabel = duration ? formatAudioTime(duration) : "--:--";
 
   const handleTogglePlayback = async () => {
@@ -137,7 +135,7 @@ export const AudioMessage = ({ src, caption, isOutgoing }: AudioMessageProps) =>
             max={duration || 0}
             step="0.01"
             value={duration ? currentTime : 0}
-            className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-white/25 accent-white disabled:cursor-not-allowed disabled:opacity-60 [&::-moz-range-thumb]:size-3.5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-white [&::-webkit-slider-thumb]:size-3.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white"
+          className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-slate-400/35 accent-crm-accent disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white/25 [&::-moz-range-thumb]:size-3.5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-crm-accent [&::-webkit-slider-thumb]:size-3.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-crm-accent"
             onChange={handleSeek}
             disabled={!duration}
             aria-label={audioLabel}
@@ -147,9 +145,7 @@ export const AudioMessage = ({ src, caption, isOutgoing }: AudioMessageProps) =>
 
       {visibleCaption ? (
         <p
-          className={`whitespace-pre-wrap break-words text-xs leading-relaxed ${
-            isOutgoing ? "text-crm-accent-foreground/80" : CRM_SURFACES.textSecondary
-          }`}>
+          className="whitespace-pre-wrap break-words text-xs leading-relaxed opacity-80">
           {visibleCaption}
         </p>
       ) : null}

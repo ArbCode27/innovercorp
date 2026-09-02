@@ -65,7 +65,7 @@ export const ConversationHeader = ({
 
   return (
     <div
-      className={`shrink-0 border-b backdrop-blur ${CRM_SURFACES.border} ${CRM_SURFACES.elevatedTranslucent}`}>
+      className={`shrink-0 border-b ${CRM_SURFACES.border} ${CRM_SURFACES.elevatedTranslucent}`}>
       <div className="flex flex-col gap-3 p-4 xl:flex-row xl:items-start">
         <div className="flex min-w-0 flex-1 gap-3">
           {onBackToList ? (

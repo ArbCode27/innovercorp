@@ -226,7 +226,7 @@ export const ConversationPanel = ({
   const showUnknownBanner = !client || !client.wispro_id;
 
   return (
-    <section className={`relative flex min-w-0 flex-1 ${CRM_SURFACES.page}`}>
+    <section className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
       <div className="flex min-w-0 flex-1 flex-col">
         <ConversationHeader
           conversation={conversation}
@@ -268,7 +268,7 @@ export const ConversationPanel = ({
         />
       </div>
       <Sheet open={isDetailsSheetOpen} onOpenChange={setIsDetailsSheetOpen}>
-        <SheetContent className={`w-[88vw] p-0 sm:max-w-sm ${CRM_SURFACES.border} ${CRM_SURFACES.elevated} ${CRM_SURFACES.textPrimary}`}>
+        <SheetContent className={`inset-y-2 right-2 h-auto w-[min(88vw,24rem)] rounded-3xl border-0 p-0 sm:max-w-sm ${CRM_SURFACES.elevatedTranslucent} ${CRM_SURFACES.textPrimary}`}>
           <SheetHeader className={`border-b p-4 text-left ${CRM_SURFACES.border}`}>
             <SheetTitle className={CRM_SURFACES.textPrimary}>Ficha de conversación</SheetTitle>
             <SheetDescription className={CRM_SURFACES.textMuted}>

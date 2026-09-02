@@ -2,7 +2,12 @@
 
 import { Archive, Bot, Headphones } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { CRM_BADGE_TONES, CRM_FOCUS_RING, CRM_SURFACES } from "../../_lib/crm-theme";
+import {
+  CRM_BADGE_TONES,
+  CRM_FOCUS_RING,
+  CRM_HISTORY_ITEM,
+  CRM_SURFACES,
+} from "../../_lib/crm-theme";
 import { formatCrmTime } from "../../_lib/formatters";
 import { getHistoryMessageCount } from "../../_lib/history-utils";
 import type { ConversationHistory } from "../../_lib/types";
@@ -29,11 +34,10 @@ export const HistoryListItem = ({
       onClick={() => onSelect(entry.id)}
       className={cn(
         CRM_FOCUS_RING,
-        "group w-full border-b p-3 text-left transition",
-        CRM_SURFACES.border,
+        "group w-full rounded-2xl p-3 text-left transition",
         isActive
-          ? "border-l-2 border-l-emerald-500 bg-emerald-50 dark:bg-emerald-950/30"
-          : CRM_SURFACES.hover,
+          ? CRM_HISTORY_ITEM.active
+          : cn(CRM_HISTORY_ITEM.default, CRM_SURFACES.hover),
       )}>
       <div className="flex gap-3">
         <AvatarInitials

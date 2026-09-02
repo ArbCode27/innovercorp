@@ -46,7 +46,7 @@ export const ConversationMessages = ({
   }
 
   return (
-    <div className="crm-scrollbar flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto bg-[radial-gradient(circle_at_top,_rgba(59,130,246,0.06),_transparent_28rem)] p-5">
+    <div className="crm-scrollbar flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-5">
       {messageGroups.map((group) => (
         <section
           key={group.dateKey}

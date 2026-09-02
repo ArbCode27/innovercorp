@@ -52,7 +52,7 @@ export const ConversationListItem = ({
       }
       className={cn(
         CRM_FOCUS_RING,
-        "group w-full p-3 text-left transition",
+        "group w-full rounded-2xl p-3 text-left transition",
         isActive
           ? CRM_INBOX_ITEM.active
           : hasUnread

@@ -62,7 +62,7 @@ export const CrmShell = () => {
     isConversationView && crm.selectedConversationId !== null;
 
   return (
-    <main className={`flex h-full overflow-hidden ${CRM_SURFACES.page}`}>
+    <main className={`flex h-full gap-2 overflow-hidden p-2 md:gap-3 md:p-3 ${CRM_SURFACES.page}`}>
       <CrmAppearanceHydrator
         agent={auth.agent}
         officeAccent={parseCrmAccentId(crm.settings.ui_accent)}
@@ -77,7 +77,7 @@ export const CrmShell = () => {
       />
       <div
         className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden ${
-          shouldHideMobileNav ? "pb-0" : "pb-20"
+          shouldHideMobileNav ? "pb-0" : "pb-24"
         } md:pb-0`}>
         {crm.isLoading ? (
           <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden">

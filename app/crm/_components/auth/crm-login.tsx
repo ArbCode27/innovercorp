@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
 import { requireText } from "../../_lib/validators";
+import { ShinyText } from "@/components/react-bits/shiny-text";
 
 interface CrmLoginProps {
   isSubmitting: boolean;
@@ -63,12 +64,20 @@ export const CrmLogin = ({ isSubmitting, onLogin }: CrmLoginProps) => {
 
       <form
         onSubmit={handleSubmit}
-        className={`w-full max-w-sm rounded-2xl border p-9 shadow-2xl ${CRM_SURFACES.elevated} ${CRM_SURFACES.border}`}>
-        <div className="mx-auto mb-5 flex size-12 items-center justify-center rounded-2xl bg-crm-accent text-crm-accent-foreground">
+        className={`w-full max-w-sm rounded-3xl p-9 crm-glass-strong`}>
+        <div className="mx-auto mb-5 flex size-12 items-center justify-center rounded-3xl bg-crm-accent text-crm-accent-foreground">
           <Layers className="size-6" aria-hidden="true" />
         </div>
         <div className="mb-7 text-center">
-          <h1 className={`text-xl font-semibold ${CRM_SURFACES.textPrimary}`}>Conexiones Innover</h1>
+          <h1 className={`text-xl font-semibold ${CRM_SURFACES.textPrimary}`}>
+            <ShinyText
+              text="Conexiones Innover"
+              className="text-xl font-semibold"
+              color="var(--foreground)"
+              speed={3}
+              delay={1.4}
+            />
+          </h1>
           <p className={`mt-1 text-sm ${CRM_SURFACES.textMuted}`}>CRM · Acceso de agentes</p>
         </div>
 

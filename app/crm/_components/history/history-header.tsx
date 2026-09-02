@@ -97,7 +97,7 @@ export const HistoryHeader = ({
           </div>
         </div>
 
-        <aside className={`rounded-xl border p-3 text-xs xl:min-w-56 ${CRM_SURFACES.border} ${CRM_SURFACES.card}`}>
+        <aside className={`rounded-2xl p-3 text-xs xl:min-w-56 ${CRM_SURFACES.card}`}>
           <p className={`font-medium ${CRM_SURFACES.textSecondary}`}>Resumen archivado</p>
           <ul className={`mt-2 space-y-1.5 ${CRM_SURFACES.textMuted}`}>
             <li>

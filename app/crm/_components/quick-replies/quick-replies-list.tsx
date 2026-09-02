@@ -23,7 +23,7 @@ export const QuickRepliesList = ({
 }: QuickRepliesListProps) => {
   if (!quickReplies.length) {
     return (
-      <div className={`rounded-xl border p-6 text-sm ${CRM_SURFACES.border} ${CRM_SURFACES.elevated} ${CRM_SURFACES.textMuted}`}>
+      <div className={`rounded-2xl p-6 text-sm ${CRM_SURFACES.elevated} ${CRM_SURFACES.textMuted}`}>
         Aún no hay respuestas rápidas creadas.
       </div>
     );
@@ -32,7 +32,7 @@ export const QuickRepliesList = ({
   const isAdmin = isAdminRole(currentAgent.role);
 
   return (
-    <div className={`max-w-5xl overflow-hidden rounded-xl border ${CRM_SURFACES.border} ${CRM_SURFACES.elevated}`}>
+    <div className={`max-w-5xl overflow-hidden rounded-2xl ${CRM_SURFACES.elevated}`}>
       <div className={`border-b px-5 py-4 text-sm font-semibold ${CRM_SURFACES.border} ${CRM_SURFACES.textSecondary}`}>
         Respuestas rápidas ({quickReplies.length})
       </div>
