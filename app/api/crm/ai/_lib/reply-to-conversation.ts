@@ -19,6 +19,10 @@ import {
 } from "./guaranteed-reply";
 import { classifyInboundIntent, getLatestInboundMessage, type InboundIntent } from "./inbound-intent";
 import {
+  detectToolLeakInCustomerReply,
+  SAFE_TOOL_LEAK_CUSTOMER_REPLY,
+} from "./reply-sanitizer";
+import {
   claimConversationAiLock,
   findLatestInboundId,
   FORCE_RUN_LOCK_RETRIES,
@@ -777,8 +781,8 @@ export const replyToConversationWithGemini = async (
         return mapFallbackResult(fallback, decision.runId);
       };
 
-      const handoffText = decision.message.trim();
-      if (!handoffText) {
+      const handoffTextRaw = decision.message.trim();
+      if (!handoffTextRaw) {
         logGeminiNoReply("failed", {
           ...baseContext,
           reason: "handoff_empty_message",
@@ -786,6 +790,21 @@ export const replyToConversationWithGemini = async (
           runId: decision.runId,
         });
         return tryHandoffFallback("handoff_empty_message");
+      }
+
+      const handoffLeak = detectToolLeakInCustomerReply(handoffTextRaw);
+      const handoffText = handoffLeak.matched
+        ? SAFE_TOOL_LEAK_CUSTOMER_REPLY
+        : handoffTextRaw;
+      if (handoffLeak.matched) {
+        console.warn(`${LOG_PREFIX} outbound_tool_leak_blocked`, {
+          ...baseContext,
+          action: "handoff",
+          runId: decision.runId,
+          reason: handoffLeak.reason,
+          matchedToken: handoffLeak.matchedToken,
+          preview: handoffTextRaw.slice(0, 160),
+        });
       }
 
       const to = resolveRecipient(freshConversation, client);
@@ -872,14 +891,29 @@ export const replyToConversationWithGemini = async (
       }
     }
 
-    const replyText = decision.message.trim();
-    if (!replyText) {
+    const replyTextRaw = decision.message.trim();
+    if (!replyTextRaw) {
       logGeminiNoReply("failed", {
         ...baseContext,
         reason: "empty_model_reply",
         runId: decision.runId,
       });
       return sendFallback("empty_model_reply", { skipSoftWhatsApp: ackSent });
+    }
+
+    const replyLeak = detectToolLeakInCustomerReply(replyTextRaw);
+    const replyText = replyLeak.matched
+      ? SAFE_TOOL_LEAK_CUSTOMER_REPLY
+      : replyTextRaw;
+    if (replyLeak.matched) {
+      console.warn(`${LOG_PREFIX} outbound_tool_leak_blocked`, {
+        ...baseContext,
+        action: "reply",
+        runId: decision.runId,
+        reason: replyLeak.reason,
+        matchedToken: replyLeak.matchedToken,
+        preview: replyTextRaw.slice(0, 160),
+      });
     }
 
     const staleReply = await skipIfStaleBeforeSend(decision);

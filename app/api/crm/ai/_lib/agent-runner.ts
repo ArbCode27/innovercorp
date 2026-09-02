@@ -33,6 +33,11 @@ import {
   executeAgentTool,
   type AgentRunContext,
 } from "./tool-handlers";
+import {
+  CUSTOMER_REPLY_SANITIZE_INSTRUCTION,
+  detectToolLeakInCustomerReply,
+  SAFE_TOOL_LEAK_CUSTOMER_REPLY,
+} from "./reply-sanitizer";
 
 const LOG_PREFIX = "[AI_AGENT]";
 const MAX_TOOL_STEPS = 6;
@@ -151,6 +156,72 @@ const createAgentContext = (input: {
   };
 };
 
+const resolveSafeCustomerReply = async (input: {
+  candidate: string;
+  systemPrompt: string;
+  contents: GeminiContent[];
+  model: string;
+  timeoutsMs: number[];
+  logContext: Record<string, unknown>;
+}): Promise<{ message: string; reason?: string }> => {
+  const leak = detectToolLeakInCustomerReply(input.candidate);
+  if (!leak.matched) {
+    return { message: input.candidate };
+  }
+
+  console.warn(`${LOG_PREFIX} tool_leak_blocked`, {
+    ...input.logContext,
+    reason: leak.reason,
+    matchedToken: leak.matchedToken,
+    preview: input.candidate.slice(0, 160),
+  });
+
+  const sanitized = await generateGeminiWithRetry({
+    systemPrompt: `${input.systemPrompt}\n\n${CUSTOMER_REPLY_SANITIZE_INSTRUCTION}`,
+    contents: [
+      ...input.contents,
+      {
+        role: "user",
+        parts: [
+          {
+            text: [
+              "Tu respuesta anterior no es válida para el cliente (contenía detalles internos de herramientas).",
+              "Reescríbela ahora solo como mensaje de WhatsApp para el cliente.",
+              "No nombres tools ni copies descriptions técnicas.",
+            ].join(" "),
+          },
+        ],
+      },
+    ],
+    model: input.model,
+    enableTools: false,
+    timeoutsMs: input.timeoutsMs,
+    backoffMs: 800,
+    logContext: { ...input.logContext, step: "tool_leak_rewrite" },
+  });
+
+  const rewritten = sanitized.text.trim();
+  const rewriteLeak = detectToolLeakInCustomerReply(rewritten);
+  if (rewritten && !rewriteLeak.matched) {
+    console.log(`${LOG_PREFIX} tool_leak_rewritten`, {
+      ...input.logContext,
+      preview: rewritten.slice(0, 160),
+    });
+    return { message: rewritten, reason: "tool_leak_rewritten" };
+  }
+
+  console.warn(`${LOG_PREFIX} tool_leak_safe_fallback`, {
+    ...input.logContext,
+    rewritePreview: rewritten.slice(0, 160),
+    rewriteLeakReason: rewriteLeak.matched ? rewriteLeak.reason : null,
+  });
+
+  return {
+    message: SAFE_TOOL_LEAK_CUSTOMER_REPLY,
+    reason: "tool_leak_safe_fallback",
+  };
+};
+
 const runAgentLoop = async (input: {
   systemPrompt: string;
   contents: GeminiContent[];
@@ -254,14 +325,25 @@ const runAgentLoop = async (input: {
       throw new Error("empty_model_reply");
     }
 
+    const safeReply = await resolveSafeCustomerReply({
+      candidate: replyText,
+      systemPrompt: input.systemPrompt,
+      contents: workingContents,
+      model: input.model,
+      timeoutsMs: input.timeoutsMs,
+      logContext: { ...logContext, step },
+    });
+
     console.log(`${LOG_PREFIX} final_text`, {
       ...logContext,
-      preview: replyText.slice(0, 160),
+      preview: safeReply.message.slice(0, 160),
+      sanitizeReason: safeReply.reason ?? null,
     });
 
     return {
       action: "reply",
-      message: replyText,
+      message: safeReply.message,
+      reason: safeReply.reason,
       runId: input.ctx.runId,
       clientId: input.ctx.clientId,
     };
@@ -280,7 +362,7 @@ const runAgentLoop = async (input: {
   }
 
   const fallback = await generateGeminiWithRetry({
-    systemPrompt: `${input.systemPrompt}\n\nNo uses más tools. Responde ahora al cliente en texto claro.`,
+    systemPrompt: `${input.systemPrompt}\n\n${CUSTOMER_REPLY_SANITIZE_INSTRUCTION}\nNo uses más tools. Responde ahora al cliente en texto claro.`,
     contents: workingContents,
     model: input.model,
     enableTools: false,
@@ -294,10 +376,19 @@ const runAgentLoop = async (input: {
     throw new Error("empty_model_reply_after_tools");
   }
 
+  const safeFallback = await resolveSafeCustomerReply({
+    candidate: fallbackText,
+    systemPrompt: input.systemPrompt,
+    contents: workingContents,
+    model: input.model,
+    timeoutsMs: input.timeoutsMs,
+    logContext: { ...logContext, step: "text_fallback" },
+  });
+
   return {
     action: "reply",
-    message: fallbackText,
-    reason: "tool_loop_exhausted",
+    message: safeFallback.message,
+    reason: safeFallback.reason || "tool_loop_exhausted",
     runId: input.ctx.runId,
     clientId: input.ctx.clientId,
   };

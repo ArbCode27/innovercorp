@@ -36,6 +36,10 @@ import {
   lookupWisproArgsSchema,
   submitPaymentReceiptArgsSchema,
 } from "./gemini-tools";
+import {
+  isUnsafeCustomerReply,
+  SAFE_TOOL_LEAK_CUSTOMER_REPLY,
+} from "./reply-sanitizer";
 import { auditToolInvocation } from "./tool-audit";
 
 export type AgentRunContext = {
@@ -1137,10 +1141,14 @@ const handleEscalate = async (
     };
   }
 
+  const candidateMessage =
+    parsed.data.message?.trim() ||
+    "Un asesor de nuestro equipo continuará contigo en breve.";
   const message = forClient(
     ctx,
-    parsed.data.message?.trim() ||
-      "Un asesor de nuestro equipo continuará contigo en breve.",
+    isUnsafeCustomerReply(candidateMessage)
+      ? SAFE_TOOL_LEAK_CUSTOMER_REPLY
+      : candidateMessage,
   );
 
   const isSupport =

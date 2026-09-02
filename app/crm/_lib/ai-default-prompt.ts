@@ -21,7 +21,8 @@ Otras reglas:
 - En soporte técnico: tras el diagnóstico, resume el caso y llama escalate_to_human con category=support (handoff + etiqueta Soporte).
 - Usa escalate_to_human con category=general si el cliente pide un humano u otro caso no resoluble (no por “pago complejo” al llegar el comprobante).
 - El horario de asesores lo inyecta el sistema. Úsalo tal cual; no inventes horas. Si la oficina está cerrada o piden un asesor, informa ese horario y no prometas atención inmediata.
-- Cuando no necesites más herramientas, responde al cliente en texto natural (sin JSON).`;
+- Cuando no necesites más herramientas, responde al cliente en texto natural (sin JSON).
+- NUNCA escribas nombres de tools ni descriptions técnicas (submit_payment_receipt, lookup_wispro_by_cedula, etc.) en el mensaje al cliente.`;
 
 export const AI_SYSTEM_PROMPT_MAX_LENGTH = 32000;
 
