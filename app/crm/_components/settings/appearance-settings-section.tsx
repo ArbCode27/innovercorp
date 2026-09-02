@@ -72,8 +72,8 @@ export const AppearanceSettingsSection = ({
             Apariencia
           </h3>
           <p className={`mt-1 text-sm ${CRM_SURFACES.textMuted}`}>
-            Elige el modo y el color de acento del CRM. El fondo se mantiene
-            estable para leer el inbox con claridad.
+            Elige el modo y un acento pastel. El fondo se mantiene neutro para
+            leer el inbox sin saturación.
           </p>
         </div>
       </div>

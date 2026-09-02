@@ -43,12 +43,12 @@
   --crm-scrollbar-thumb: rgba(148, 163, 184, 0.85);
   --crm-scrollbar-thumb-hover: rgba(100, 116, 139, 0.95);
   --crm-scrollbar-thumb-border: rgba(248, 250, 252, 1);
-  --crm-accent: oklch(0.546 0.215 262.88);
-  --crm-accent-hover: oklch(0.488 0.243 264.38);
-  --crm-accent-fg: oklch(0.985 0 0);
-  --crm-accent-muted: oklch(0.951 0.026 256.85);
-  --crm-accent-muted-fg: oklch(0.424 0.155 262.05);
-  --crm-ring: oklch(0.707 0.165 254.62);
+  --crm-accent: oklch(0.88 0.04 255);
+  --crm-accent-hover: oklch(0.83 0.05 255);
+  --crm-accent-fg: oklch(0.36 0.06 255);
+  --crm-accent-muted: oklch(0.96 0.02 255);
+  --crm-accent-muted-fg: oklch(0.42 0.05 255);
+  --crm-ring: oklch(0.78 0.045 255);
 }
 
 .dark {
@@ -90,120 +90,120 @@
   --crm-scrollbar-thumb: color-mix(in oklab, var(--crm-accent) 72%, transparent);
   --crm-scrollbar-thumb-hover: color-mix(in oklab, var(--crm-accent) 92%, white);
   --crm-scrollbar-thumb-border: rgba(15, 17, 23, 0.9);
-  --crm-accent: oklch(0.623 0.188 259.81);
-  --crm-accent-hover: oklch(0.707 0.165 254.62);
-  --crm-accent-fg: oklch(0.985 0 0);
-  --crm-accent-muted: oklch(0.32 0.08 260);
-  --crm-accent-muted-fg: oklch(0.88 0.06 255);
-  --crm-ring: oklch(0.707 0.165 254.62);
+  --crm-accent: oklch(0.74 0.055 255);
+  --crm-accent-hover: oklch(0.79 0.05 255);
+  --crm-accent-fg: oklch(0.24 0.04 255);
+  --crm-accent-muted: oklch(0.3 0.03 255);
+  --crm-accent-muted-fg: oklch(0.86 0.03 255);
+  --crm-ring: oklch(0.7 0.05 255);
 }
 
 html[data-crm-accent="rose"] {
-  --crm-accent: oklch(0.592 0.219 12.3);
-  --crm-accent-hover: oklch(0.533 0.228 12.9);
-  --crm-accent-fg: oklch(0.985 0 0);
-  --crm-accent-muted: oklch(0.952 0.028 12);
-  --crm-accent-muted-fg: oklch(0.47 0.17 12);
-  --crm-ring: oklch(0.71 0.16 12);
+  --crm-accent: oklch(0.88 0.05 355);
+  --crm-accent-hover: oklch(0.83 0.06 355);
+  --crm-accent-fg: oklch(0.38 0.07 355);
+  --crm-accent-muted: oklch(0.96 0.025 355);
+  --crm-accent-muted-fg: oklch(0.44 0.06 355);
+  --crm-ring: oklch(0.78 0.05 355);
 }
 
 html.dark[data-crm-accent="rose"] {
-  --crm-accent: oklch(0.696 0.17 13);
-  --crm-accent-hover: oklch(0.75 0.14 12);
-  --crm-accent-fg: oklch(0.2 0.05 12);
-  --crm-accent-muted: oklch(0.3 0.08 12);
-  --crm-accent-muted-fg: oklch(0.9 0.05 12);
-  --crm-ring: oklch(0.72 0.14 12);
+  --crm-accent: oklch(0.74 0.06 355);
+  --crm-accent-hover: oklch(0.79 0.055 355);
+  --crm-accent-fg: oklch(0.26 0.04 355);
+  --crm-accent-muted: oklch(0.3 0.035 355);
+  --crm-accent-muted-fg: oklch(0.88 0.03 355);
+  --crm-ring: oklch(0.7 0.05 355);
 }
 
 html[data-crm-accent="violet"] {
-  --crm-accent: oklch(0.541 0.281 293.01);
-  --crm-accent-hover: oklch(0.491 0.27 292.58);
-  --crm-accent-fg: oklch(0.985 0 0);
-  --crm-accent-muted: oklch(0.954 0.038 301);
-  --crm-accent-muted-fg: oklch(0.432 0.21 292);
-  --crm-ring: oklch(0.702 0.183 293);
+  --crm-accent: oklch(0.88 0.05 300);
+  --crm-accent-hover: oklch(0.83 0.06 300);
+  --crm-accent-fg: oklch(0.36 0.08 300);
+  --crm-accent-muted: oklch(0.96 0.025 300);
+  --crm-accent-muted-fg: oklch(0.42 0.06 300);
+  --crm-ring: oklch(0.78 0.05 300);
 }
 
 html.dark[data-crm-accent="violet"] {
-  --crm-accent: oklch(0.702 0.183 293);
-  --crm-accent-hover: oklch(0.76 0.15 293);
-  --crm-accent-fg: oklch(0.2 0.06 293);
-  --crm-accent-muted: oklch(0.3 0.09 293);
-  --crm-accent-muted-fg: oklch(0.9 0.05 293);
-  --crm-ring: oklch(0.72 0.15 293);
+  --crm-accent: oklch(0.74 0.06 300);
+  --crm-accent-hover: oklch(0.79 0.055 300);
+  --crm-accent-fg: oklch(0.24 0.05 300);
+  --crm-accent-muted: oklch(0.3 0.035 300);
+  --crm-accent-muted-fg: oklch(0.88 0.03 300);
+  --crm-ring: oklch(0.7 0.05 300);
 }
 
 html[data-crm-accent="blue"] {
-  --crm-accent: oklch(0.546 0.215 262.88);
-  --crm-accent-hover: oklch(0.488 0.243 264.38);
-  --crm-accent-fg: oklch(0.985 0 0);
-  --crm-accent-muted: oklch(0.951 0.026 256.85);
-  --crm-accent-muted-fg: oklch(0.424 0.155 262.05);
-  --crm-ring: oklch(0.707 0.165 254.62);
+  --crm-accent: oklch(0.88 0.04 255);
+  --crm-accent-hover: oklch(0.83 0.05 255);
+  --crm-accent-fg: oklch(0.36 0.06 255);
+  --crm-accent-muted: oklch(0.96 0.02 255);
+  --crm-accent-muted-fg: oklch(0.42 0.05 255);
+  --crm-ring: oklch(0.78 0.045 255);
 }
 
 html.dark[data-crm-accent="blue"] {
-  --crm-accent: oklch(0.623 0.188 259.81);
-  --crm-accent-hover: oklch(0.707 0.165 254.62);
-  --crm-accent-fg: oklch(0.985 0 0);
-  --crm-accent-muted: oklch(0.32 0.08 260);
-  --crm-accent-muted-fg: oklch(0.88 0.06 255);
-  --crm-ring: oklch(0.707 0.165 254.62);
+  --crm-accent: oklch(0.74 0.055 255);
+  --crm-accent-hover: oklch(0.79 0.05 255);
+  --crm-accent-fg: oklch(0.24 0.04 255);
+  --crm-accent-muted: oklch(0.3 0.03 255);
+  --crm-accent-muted-fg: oklch(0.86 0.03 255);
+  --crm-ring: oklch(0.7 0.05 255);
 }
 
 html[data-crm-accent="amber"] {
-  --crm-accent: oklch(0.769 0.164 70.08);
-  --crm-accent-hover: oklch(0.723 0.171 70.5);
-  --crm-accent-fg: oklch(0.279 0.077 54.3);
-  --crm-accent-muted: oklch(0.962 0.041 95);
-  --crm-accent-muted-fg: oklch(0.473 0.137 46.2);
-  --crm-ring: oklch(0.828 0.15 81);
+  --crm-accent: oklch(0.9 0.05 85);
+  --crm-accent-hover: oklch(0.85 0.06 85);
+  --crm-accent-fg: oklch(0.38 0.06 70);
+  --crm-accent-muted: oklch(0.97 0.025 90);
+  --crm-accent-muted-fg: oklch(0.44 0.05 75);
+  --crm-ring: oklch(0.82 0.05 85);
 }
 
 html.dark[data-crm-accent="amber"] {
-  --crm-accent: oklch(0.828 0.15 81);
-  --crm-accent-hover: oklch(0.87 0.13 85);
-  --crm-accent-fg: oklch(0.25 0.06 70);
-  --crm-accent-muted: oklch(0.32 0.07 75);
-  --crm-accent-muted-fg: oklch(0.92 0.06 90);
-  --crm-ring: oklch(0.828 0.15 81);
+  --crm-accent: oklch(0.78 0.06 85);
+  --crm-accent-hover: oklch(0.83 0.055 85);
+  --crm-accent-fg: oklch(0.26 0.04 70);
+  --crm-accent-muted: oklch(0.3 0.03 80);
+  --crm-accent-muted-fg: oklch(0.9 0.03 90);
+  --crm-ring: oklch(0.74 0.05 85);
 }
 
 html[data-crm-accent="emerald"] {
-  --crm-accent: oklch(0.596 0.145 163.23);
-  --crm-accent-hover: oklch(0.508 0.118 165.61);
-  --crm-accent-fg: oklch(0.985 0 0);
-  --crm-accent-muted: oklch(0.95 0.04 165);
-  --crm-accent-muted-fg: oklch(0.432 0.095 166.91);
-  --crm-ring: oklch(0.765 0.132 163);
+  --crm-accent: oklch(0.89 0.045 160);
+  --crm-accent-hover: oklch(0.84 0.055 160);
+  --crm-accent-fg: oklch(0.34 0.06 160);
+  --crm-accent-muted: oklch(0.96 0.025 160);
+  --crm-accent-muted-fg: oklch(0.4 0.05 160);
+  --crm-ring: oklch(0.8 0.045 160);
 }
 
 html.dark[data-crm-accent="emerald"] {
-  --crm-accent: oklch(0.696 0.14 162);
-  --crm-accent-hover: oklch(0.765 0.132 163);
-  --crm-accent-fg: oklch(0.2 0.04 165);
-  --crm-accent-muted: oklch(0.3 0.06 165);
-  --crm-accent-muted-fg: oklch(0.9 0.05 165);
-  --crm-ring: oklch(0.765 0.132 163);
+  --crm-accent: oklch(0.75 0.055 160);
+  --crm-accent-hover: oklch(0.8 0.05 160);
+  --crm-accent-fg: oklch(0.22 0.04 160);
+  --crm-accent-muted: oklch(0.3 0.03 160);
+  --crm-accent-muted-fg: oklch(0.88 0.03 160);
+  --crm-ring: oklch(0.72 0.05 160);
 }
 
 html[data-crm-accent="teal"] {
-  --crm-accent: oklch(0.6 0.118 184.7);
-  --crm-accent-hover: oklch(0.511 0.096 186.39);
-  --crm-accent-fg: oklch(0.985 0 0);
-  --crm-accent-muted: oklch(0.95 0.035 185);
-  --crm-accent-muted-fg: oklch(0.437 0.078 188.22);
-  --crm-ring: oklch(0.704 0.14 182.5);
+  --crm-accent: oklch(0.89 0.04 190);
+  --crm-accent-hover: oklch(0.84 0.05 190);
+  --crm-accent-fg: oklch(0.34 0.05 190);
+  --crm-accent-muted: oklch(0.96 0.02 190);
+  --crm-accent-muted-fg: oklch(0.4 0.045 190);
+  --crm-ring: oklch(0.8 0.04 190);
 }
 
 html.dark[data-crm-accent="teal"] {
-  --crm-accent: oklch(0.704 0.14 182.5);
-  --crm-accent-hover: oklch(0.777 0.11 185);
-  --crm-accent-fg: oklch(0.2 0.04 185);
-  --crm-accent-muted: oklch(0.3 0.06 185);
-  --crm-accent-muted-fg: oklch(0.9 0.05 185);
-  --crm-ring: oklch(0.777 0.11 185);
+  --crm-accent: oklch(0.75 0.05 190);
+  --crm-accent-hover: oklch(0.8 0.045 190);
+  --crm-accent-fg: oklch(0.22 0.035 190);
+  --crm-accent-muted: oklch(0.3 0.03 190);
+  --crm-accent-muted-fg: oklch(0.88 0.03 190);
+  --crm-ring: oklch(0.72 0.045 190);
 }
 
 @theme inline {
