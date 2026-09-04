@@ -100,6 +100,12 @@ export interface WisproInvoicingSummary {
   serviceSuspended: boolean;
   /** Primary contract state used for messaging (disabled preferred if present). */
   contractState: string | null;
+  /** Preferred contract UUID used for plan / PPP snapshot. */
+  contractId?: string | null;
+  /** Commercial plan name from Wispro `/plans`. */
+  planName?: string | null;
+  /** PPP profile name from Wispro (`ppp_profiles.name`). */
+  pppProfile?: string | null;
   snapshot: {
     invoiceIndex: number;
     itemIndex: number;

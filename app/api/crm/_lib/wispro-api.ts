@@ -317,8 +317,28 @@ export type WisproContract = {
   client_id: string | null;
   state: string | null;
   plan_id: string | null;
+  /** Commercial plan name when Wispro embeds it or after enrichment. */
+  plan_name: string | null;
+  server_configuration_id: string | null;
+  ppp_profile_id: string | null;
+  /** PPP profile name when Wispro embeds it or after enrichment. */
+  ppp_profile_name: string | null;
+  pppoe_username: string | null;
   created_at: string | null;
   updated_at: string | null;
+};
+
+export type WisproInvoice = {
+  id: string;
+  client_id: string | null;
+  contract_id: string | null;
+  invoice_number: string | null;
+  state: string | null;
+  amount: number;
+  balance: number;
+  issued_at: string | null;
+  first_due_date: string | null;
+  concept: string | null;
 };
 
 export type WisproPaymentPromise = {
@@ -346,6 +366,8 @@ export type CreateWisproInvoicingPaymentInput = {
   paymentDate: string;
   transactionCode?: string | null;
   comment?: string | null;
+  /** When set, Wispro applies the payment to these invoices. */
+  invoiceIds?: string[] | null;
 };
 
 export type CreatePaymentPromiseResult =
@@ -368,11 +390,30 @@ export type CreatePaymentPromiseResult =
       error: string;
     };
 
+const readNestedName = (
+  value: unknown,
+  keys: string[] = ["name"],
+): string | null => {
+  if (typeof value === "string" && value.trim()) return value.trim();
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const row = value as Record<string, unknown>;
+  for (const key of keys) {
+    const candidate = row[key];
+    if (typeof candidate === "string" && candidate.trim()) {
+      return candidate.trim();
+    }
+  }
+  return null;
+};
+
 const normalizeContract = (record: unknown): WisproContract | null => {
   if (!record || typeof record !== "object") return null;
   const row = record as Record<string, unknown>;
   const id = String(row.id || "").trim();
   if (!id) return null;
+
+  const planId = row.plan_id ? String(row.plan_id) : null;
+  const pppProfileId = row.ppp_profile_id ? String(row.ppp_profile_id) : null;
 
   return {
     id,
@@ -384,9 +425,53 @@ const normalizeContract = (record: unknown): WisproContract | null => {
           : null,
     client_id: row.client_id ? String(row.client_id) : null,
     state: row.state ? String(row.state) : null,
-    plan_id: row.plan_id ? String(row.plan_id) : null,
+    plan_id: planId,
+    plan_name:
+      readNestedName(row.plan_name) ||
+      readNestedName(row.plan) ||
+      (typeof row.plan_name === "string" ? row.plan_name.trim() : null) ||
+      null,
+    server_configuration_id: row.server_configuration_id
+      ? String(row.server_configuration_id)
+      : null,
+    ppp_profile_id: pppProfileId,
+    ppp_profile_name:
+      readNestedName(row.ppp_profile_name) ||
+      readNestedName(row.ppp_profile) ||
+      (typeof row.ppp_profile_name === "string"
+        ? row.ppp_profile_name.trim()
+        : null) ||
+      null,
+    pppoe_username: row.pppoe_username ? String(row.pppoe_username) : null,
     created_at: row.created_at ? String(row.created_at) : null,
     updated_at: row.updated_at ? String(row.updated_at) : null,
+  };
+};
+
+const normalizeInvoice = (record: unknown): WisproInvoice | null => {
+  if (!record || typeof record !== "object") return null;
+  const row = record as Record<string, unknown>;
+  const id = String(row.id || "").trim();
+  if (!id) return null;
+
+  const amount = parseAmount(row.amount);
+  const balanceRaw = row.balance;
+  const balance =
+    balanceRaw === undefined || balanceRaw === null
+      ? amount
+      : parseAmount(balanceRaw);
+
+  return {
+    id,
+    client_id: row.client_id ? String(row.client_id) : null,
+    contract_id: row.contract_id ? String(row.contract_id) : null,
+    invoice_number: row.invoice_number ? String(row.invoice_number) : null,
+    state: row.state ? String(row.state).trim().toLowerCase() : null,
+    amount,
+    balance,
+    issued_at: row.issued_at ? String(row.issued_at) : null,
+    first_due_date: row.first_due_date ? String(row.first_due_date) : null,
+    concept: row.concept ? String(row.concept) : null,
   };
 };
 
@@ -495,19 +580,27 @@ export const resolveDebtFromCurrentAccount = (
  */
 export const buildInvoicingSummaryFromCurrentAccount = (
   account: WisproCurrentAccount | null,
-  options?: { contracts?: WisproContract[] | null },
+  options?: {
+    contracts?: WisproContract[] | null;
+    preferredContract?: WisproContract | null;
+  },
 ): WisproInvoicingSummary => {
   const debt = resolveDebtFromCurrentAccount(account);
   const hasDebt = debt > 0;
   const contracts = options?.contracts ?? [];
   const serviceSuspended = resolveServiceSuspended(contracts);
   const contractState = resolvePrimaryContractState(contracts);
+  const preferred =
+    options?.preferredContract ?? resolvePreferredContract(contracts);
 
   return {
     debt,
     hasDebt,
     serviceSuspended,
     contractState,
+    contractId: preferred?.id ?? null,
+    planName: preferred?.plan_name?.trim() || null,
+    pppProfile: preferred?.ppp_profile_name?.trim() || null,
     accountStatus: buildAccountStatusFromService({ hasDebt, serviceSuspended }),
     snapshot: account
       ? {
@@ -518,6 +611,111 @@ export const buildInvoicingSummaryFromCurrentAccount = (
         }
       : null,
   };
+};
+
+/**
+ * Resolve commercial plan name via GET /plans/{id}.
+ * Soft-fails to null on upstream errors.
+ */
+export const getPlanNameById = async (
+  planId: string,
+): Promise<string | null> => {
+  const id = planId.trim();
+  if (!id) return null;
+
+  try {
+    const payload = await wisproGet(`/plans/${encodeURIComponent(id)}`, {});
+    const row =
+      extractDataObject(payload) ||
+      (() => {
+        const records = extractDataRecords(payload);
+        return records[0] && typeof records[0] === "object"
+          ? (records[0] as Record<string, unknown>)
+          : null;
+      })();
+    const name = row?.name ? String(row.name).trim() : "";
+    return name || null;
+  } catch (error) {
+    console.warn(`${LOG_PREFIX} plan_lookup_failed`, {
+      planId: id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+};
+
+/**
+ * Resolve PPP profile name from MikroTik-scoped list.
+ * GET /mikrotiks/{server_configuration_id}/ppp_profiles
+ */
+export const getPppProfileName = async (input: {
+  mikrotikId: string;
+  pppProfileId: string;
+}): Promise<string | null> => {
+  const mikrotikId = input.mikrotikId.trim();
+  const pppProfileId = input.pppProfileId.trim();
+  if (!mikrotikId || !pppProfileId) return null;
+
+  try {
+    const payload = await wisproGet(
+      `/mikrotiks/${encodeURIComponent(mikrotikId)}/ppp_profiles`,
+      {},
+    );
+    const records = extractDataRecords(payload);
+    for (const record of records) {
+      if (!record || typeof record !== "object") continue;
+      const row = record as Record<string, unknown>;
+      if (String(row.id || "").trim() !== pppProfileId) continue;
+      const name = row.name ? String(row.name).trim() : "";
+      return name || null;
+    }
+    return null;
+  } catch (error) {
+    console.warn(`${LOG_PREFIX} ppp_profile_lookup_failed`, {
+      mikrotikId,
+      pppProfileId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+};
+
+/**
+ * Fill plan_name / ppp_profile_name on the preferred contract (in-place copy).
+ * Soft-fails individual lookups so billing never blocks on profile enrichment.
+ */
+export const enrichContractPlanAndPpp = async (
+  contract: WisproContract | null,
+): Promise<WisproContract | null> => {
+  if (!contract) return null;
+
+  const next: WisproContract = { ...contract };
+  const tasks: Promise<void>[] = [];
+
+  if (!next.plan_name && next.plan_id) {
+    tasks.push(
+      getPlanNameById(next.plan_id).then((name) => {
+        if (name) next.plan_name = name;
+      }),
+    );
+  }
+
+  if (!next.ppp_profile_name && next.ppp_profile_id && next.server_configuration_id) {
+    tasks.push(
+      getPppProfileName({
+        mikrotikId: next.server_configuration_id,
+        pppProfileId: next.ppp_profile_id,
+      }).then((name) => {
+        if (name) next.ppp_profile_name = name;
+      }),
+    );
+  }
+
+  if (tasks.length) {
+    await Promise.all(tasks);
+  }
+
+  return next;
 };
 
 export const listContractsByClientId = async (
@@ -553,6 +751,65 @@ export const listContractsByCedula = async (
   }
 
   return [];
+};
+
+/**
+ * List pending (unpaid) invoices for a Wispro client.
+ * Prefers `client_id_eq` (same Ransack pattern as contracts); falls back to cédula.
+ * @see https://doc.cloud.wispro.co/reference/invoices
+ */
+export const listPendingInvoicesForClient = async (input: {
+  wisproClientId?: string | null;
+  cedula?: string | null;
+}): Promise<WisproInvoice[]> => {
+  const wisproClientId = input.wisproClientId?.trim() || "";
+  const digits = normalizeDocumentDigits(input.cedula || "");
+
+  const queries: Record<string, string>[] = [];
+  if (wisproClientId) {
+    queries.push({
+      client_id_eq: wisproClientId,
+      state_eq: "pending",
+    });
+  }
+  if (digits) {
+    for (const candidate of buildVeDocumentCandidates(digits)) {
+      queries.push({
+        client_national_identification_number_eq: candidate,
+        state_eq: "pending",
+      });
+    }
+  }
+
+  if (!queries.length) return [];
+
+  const invoicesById = new Map<string, WisproInvoice>();
+
+  for (const query of queries) {
+    try {
+      const payload = await wisproGet("/invoicing/invoices", {
+        ...query,
+        // Prefer newest page size Wispro allows without paging loops for CRM approve.
+      });
+      const rows = extractDataRecords(payload)
+        .map(normalizeInvoice)
+        .filter((invoice): invoice is WisproInvoice => invoice !== null);
+
+      for (const invoice of rows) {
+        if (invoice.balance <= 0) continue;
+        invoicesById.set(invoice.id, invoice);
+      }
+
+      if (invoicesById.size) break;
+    } catch (error) {
+      console.warn(`${LOG_PREFIX} invoices_lookup_failed`, {
+        query,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  return [...invoicesById.values()];
 };
 
 /** Default duration for Wispro payment promises (auto + CRM UI). */
@@ -623,7 +880,8 @@ const toWisproPaymentDate = (value: string) => {
 
 /**
  * POST /invoicing/payments.
- * Without invoice_ids, Wispro credits the amount to the client's current account.
+ * With `invoice_ids`, Wispro applies the payment to those invoices.
+ * Without them, Wispro credits the amount to the client's current account.
  */
 export const createWisproInvoicingPayment = async (
   input: CreateWisproInvoicingPaymentInput,
@@ -643,12 +901,21 @@ export const createWisproInvoicingPayment = async (
     });
   }
 
+  const invoiceIds = [
+    ...new Set(
+      (input.invoiceIds || [])
+        .map((id) => String(id || "").trim())
+        .filter(Boolean),
+    ),
+  ];
+
   const payload = await wisproPost("/invoicing/payments", {
     client_id: clientId,
     amount: roundMoney(input.amount),
     payment_date: toWisproPaymentDate(input.paymentDate),
     transaction_code: input.transactionCode?.trim() || undefined,
     comment: input.comment?.trim() || undefined,
+    ...(invoiceIds.length ? { invoice_ids: invoiceIds } : {}),
   });
 
   const records = extractDataRecords(payload);
@@ -831,8 +1098,17 @@ export const fetchInvoicingForWisproClientId = async (
     });
   }
 
+  const preferredBase = resolvePreferredContract(contracts);
+  const preferred = await enrichContractPlanAndPpp(preferredBase);
+  if (preferred) {
+    contracts = contracts.map((contract) =>
+      contract.id === preferred.id ? preferred : contract,
+    );
+  }
+
   const invoicing = buildInvoicingSummaryFromCurrentAccount(account, {
     contracts,
+    preferredContract: preferred,
   });
 
   console.log(`${LOG_PREFIX} current_account_ok`, {
@@ -845,6 +1121,8 @@ export const fetchInvoicingForWisproClientId = async (
     serviceSuspended: invoicing.serviceSuspended,
     contractState: invoicing.contractState,
     contractsCount: contracts.length,
+    planName: invoicing.planName,
+    pppProfile: invoicing.pppProfile,
   });
 
   return { account, contracts, invoicing };

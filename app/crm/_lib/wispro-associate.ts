@@ -227,6 +227,10 @@ export const associateWisproClient = async (
   } = input;
 
   const zone = customer.zone_name?.trim() || DEFAULT_ZONE;
+  const plan =
+    invoicing.planName?.trim() ||
+    invoicing.pppProfile?.trim() ||
+    DEFAULT_PLAN;
   const envoicingPayload = serializeWisproLinkForDb(invoicing, customer);
   const waIdentity =
     normalizePhone(whatsappId) ||
@@ -369,6 +373,7 @@ export const associateWisproClient = async (
     wispro_id: customer.id,
     name: customer.name,
     zone,
+    plan,
     account: invoicing.accountStatus,
     envoicing: envoicingPayload,
     initials: getInitials(customer.name),

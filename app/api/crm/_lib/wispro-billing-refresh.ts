@@ -149,6 +149,9 @@ export const serializeBillingRefreshForDb = (
     hasDebt: invoicing.hasDebt,
     serviceSuspended: Boolean(invoicing.serviceSuspended),
     contractState: invoicing.contractState ?? null,
+    contractId: invoicing.contractId ?? null,
+    planName: invoicing.planName ?? null,
+    pppProfile: invoicing.pppProfile ?? null,
     calculatedAt: new Date().toISOString(),
     source: invoicing.snapshot,
     cedula,
@@ -241,14 +244,20 @@ export const refreshClientBillingFromWispro = async (input: {
       clientName: input.clientName,
     });
 
+    const planName = invoicing.planName?.trim() || "";
+    const updatePayload: Record<string, string | null> = {
+      account: invoicing.accountStatus,
+      envoicing: envoicingPayload,
+    };
+    if (planName) {
+      updatePayload.plan = planName;
+    }
+
     const { data: updated, error: updateError } = await input.supabase
       .from("clients")
-      .update({
-        account: invoicing.accountStatus,
-        envoicing: envoicingPayload,
-      })
+      .update(updatePayload)
       .eq("id", input.clientId)
-      .select("id, account, wispro_id")
+      .select("id, account, wispro_id, plan")
       .maybeSingle();
 
     if (updateError) {
@@ -294,6 +303,8 @@ export const refreshClientBillingFromWispro = async (input: {
       debt: invoicing.debt,
       serviceSuspended: invoicing.serviceSuspended,
       contractState: invoicing.contractState,
+      planName: invoicing.planName ?? null,
+      pppProfile: invoicing.pppProfile ?? null,
       persistedAccount: updated.account,
     });
 

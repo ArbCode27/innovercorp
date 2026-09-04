@@ -101,6 +101,9 @@ const buildIdentityBlock = (input: {
         ? "sí"
         : "no"
       : "N/D";
+  const pppProfile = billing?.pppProfile?.trim() || "N/D";
+  const planName =
+    billing?.planName?.trim() || input.client?.plan?.trim() || "N/D";
 
   return [
     "Identidad de ESTE chat (inyectada por el sistema; no la inventes):",
@@ -109,7 +112,8 @@ const buildIdentityBlock = (input: {
     `- cliente_crm_id: ${input.client?.id ?? "N/D"}`,
     `- nombre_crm: ${input.client?.name || input.client?.wa_name || "Desconocido"}`,
     `- wa_name: ${input.client?.wa_name || "N/D"}`,
-    `- plan: ${input.client?.plan || "N/D"}`,
+    `- plan: ${planName}`,
+    `- perfil_ppp: ${pppProfile}`,
     `- zona: ${input.client?.zone || "N/D"}`,
     `- estado_cuenta_crm: ${input.client?.account || "N/D"}`,
     `- deuda_usd_crm: ${debtUsd}`,

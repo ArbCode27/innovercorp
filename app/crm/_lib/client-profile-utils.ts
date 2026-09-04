@@ -16,6 +16,9 @@ export interface ClientEnvoicingData {
   cedula?: string;
   serviceSuspended?: boolean;
   contractState?: string | null;
+  contractId?: string | null;
+  planName?: string | null;
+  pppProfile?: string | null;
 }
 
 export const parseClientEnvoicing = (
@@ -28,6 +31,9 @@ export const parseClientEnvoicing = (
       cedula?: string;
       serviceSuspended?: boolean;
       contractState?: string | null;
+      contractId?: string | null;
+      planName?: string | null;
+      pppProfile?: string | null;
       wisproCustomer?: { national_identification_number?: string };
     };
 
@@ -50,10 +56,34 @@ export const parseClientEnvoicing = (
           : undefined,
       contractState:
         typeof parsed.contractState === "string" ? parsed.contractState : null,
+      contractId:
+        typeof parsed.contractId === "string" ? parsed.contractId : null,
+      planName: typeof parsed.planName === "string" ? parsed.planName : null,
+      pppProfile:
+        typeof parsed.pppProfile === "string" ? parsed.pppProfile : null,
     };
   } catch {
     return null;
   }
+};
+
+/** Match Wispro UI label: `BASICO 200 (Plan: BASICO 200)`. */
+export const formatPppProfileLabel = (
+  pppProfile: string | null | undefined,
+  planName?: string | null,
+) => {
+  const profile = pppProfile?.trim() || "";
+  if (!profile) return null;
+  const plan = planName?.trim() || "";
+  if (
+    !plan ||
+    plan === "Sin asignar" ||
+    plan === "—" ||
+    plan === "Sin plan activo"
+  ) {
+    return profile;
+  }
+  return `${profile} (Plan: ${plan})`;
 };
 
 const digitsOnly = (value: unknown) => String(value || "").replace(/\D/g, "") || null;

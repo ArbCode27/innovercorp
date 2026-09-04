@@ -10,7 +10,11 @@ import {
   markCrmPaymentApprovalError,
   rejectCrmPayment,
 } from "@/app/api/crm/_lib/crm-payments";
-import { createWisproInvoicingPayment } from "@/app/api/crm/_lib/wispro-api";
+import {
+  createWisproInvoicingPayment,
+  listPendingInvoicesForClient,
+} from "@/app/api/crm/_lib/wispro-api";
+import { matchInvoicesToPaymentAmount } from "@/app/api/crm/_lib/wispro-invoice-match";
 import { getCrmSettings } from "@/app/api/crm/_lib/crm-settings";
 import { buildPaymentSuccessMessage } from "@/app/crm/_lib/payment-success-message";
 
@@ -329,23 +333,86 @@ export async function PATCH(req: NextRequest) {
     }
 
     try {
+      let invoiceMatchMeta: Record<string, unknown> = {
+        attempted_at: new Date().toISOString(),
+        strategy: "none",
+        invoice_ids: [],
+      };
+      let invoiceIds: string[] = [];
+
+      try {
+        const pendingInvoices = await listPendingInvoicesForClient({
+          wisproClientId: currentPayment.wispro_client_id,
+          cedula: currentPayment.cedula,
+        });
+        const match = matchInvoicesToPaymentAmount(
+          pendingInvoices.map((invoice) => ({
+            id: invoice.id,
+            balance: invoice.balance,
+            amount: invoice.amount,
+            issuedAt: invoice.issued_at,
+            firstDueDate: invoice.first_due_date,
+            invoiceNumber: invoice.invoice_number,
+            state: invoice.state,
+          })),
+          Number(currentPayment.amount),
+        );
+        invoiceIds = match.invoiceIds;
+        invoiceMatchMeta = {
+          attempted_at: new Date().toISOString(),
+          strategy: match.strategy,
+          invoice_ids: match.invoiceIds,
+          matched_amount: match.matchedAmount,
+          unmatched_amount: match.unmatchedAmount,
+          open_invoices_count: pendingInvoices.length,
+          invoices: match.invoices,
+        };
+      } catch (invoiceError) {
+        invoiceMatchMeta = {
+          attempted_at: new Date().toISOString(),
+          strategy: "none",
+          invoice_ids: [],
+          error:
+            invoiceError instanceof Error
+              ? invoiceError.message
+              : "No se pudieron consultar facturas pendientes",
+        };
+        console.warn("[CRM_PAYMENTS] invoice_match_soft_failed", {
+          paymentId: currentPayment.id,
+          wisproClientId: currentPayment.wispro_client_id,
+          error: invoiceMatchMeta.error,
+        });
+      }
+
+      const paymentForApprove = {
+        ...currentPayment,
+        receipt_metadata: {
+          ...(currentPayment.receipt_metadata || {}),
+          wispro_invoice_match: invoiceMatchMeta,
+        },
+      };
+
       const wisproPayment = await createWisproInvoicingPayment({
         clientId: currentPayment.wispro_client_id,
         amount: Number(currentPayment.amount),
         paymentDate: currentPayment.payment_date,
         transactionCode: currentPayment.transaction_code,
+        invoiceIds,
         comment: [
           "Pago aprobado desde CRM",
           `Banco: ${currentPayment.bank}`,
           `Referencia: ${currentPayment.transaction_code}`,
           currentPayment.comment ? `Comentario: ${currentPayment.comment}` : null,
+          invoiceIds.length
+            ? `Facturas: ${invoiceIds.join(", ")}`
+            : "Sin facturas vinculadas (crédito a cuenta)",
         ]
           .filter(Boolean)
           .join(" | "),
       });
 
       const payment = await approveCrmPayment(supabase, {
-        payment: currentPayment,
+        payment: paymentForApprove,
         wisproPayment,
       });
 
