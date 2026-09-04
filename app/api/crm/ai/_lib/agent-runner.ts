@@ -103,7 +103,10 @@ const buildIdentityBlock = (input: {
       : "N/D";
   const pppProfile = billing?.pppProfile?.trim() || "N/D";
   const planName =
-    billing?.planName?.trim() || input.client?.plan?.trim() || "N/D";
+    billing?.pppProfile?.trim() ||
+    billing?.planName?.trim() ||
+    input.client?.plan?.trim() ||
+    "N/D";
 
   return [
     "Identidad de ESTE chat (inyectada por el sistema; no la inventes):",

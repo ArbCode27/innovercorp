@@ -4,10 +4,9 @@ import type { ReactNode } from "react";
 import { CRM_BADGE_TONES, CRM_SURFACES } from "../../_lib/crm-theme";
 import {
   formatClientDebt,
-  formatClientPlan,
-  formatPppProfileLabel,
   getAccountTextClass,
   parseClientEnvoicing,
+  resolveActivePlanLabel,
 } from "../../_lib/client-profile-utils";
 import type { Client, WisproCustomer } from "../../_lib/types";
 import { AvatarInitials } from "../shared/avatar-initials";
@@ -53,10 +52,11 @@ export const ClientProfileSection = ({
     ? [wisproSnapshot.city, wisproSnapshot.state].filter(Boolean).join(", ")
     : null;
   const envoicingData = parseClientEnvoicing(client.envoicing);
-  const pppProfileLabel = formatPppProfileLabel(
-    envoicingData?.pppProfile,
-    envoicingData?.planName || client.plan,
-  );
+  const activePlan = resolveActivePlanLabel({
+    pppProfile: envoicingData?.pppProfile,
+    planName: envoicingData?.planName,
+    clientPlan: client.plan,
+  });
 
   return (
     <div className="space-y-4">
@@ -177,17 +177,9 @@ export const ClientProfileSection = ({
 
       <ProfileField label="Plan">
         <p className={`text-sm font-medium ${CRM_SURFACES.textPrimary}`}>
-          {formatClientPlan(envoicingData?.planName || client.plan)}
+          {activePlan}
         </p>
       </ProfileField>
-
-      {pppProfileLabel ? (
-        <ProfileField label="Perfil PPP">
-          <p className={`text-sm font-medium ${CRM_SURFACES.textPrimary}`}>
-            {pppProfileLabel}
-          </p>
-        </ProfileField>
-      ) : null}
 
       {client.wispro_id && onCreatePaymentPromise ? (
         <div className="space-y-1.5 pt-1">

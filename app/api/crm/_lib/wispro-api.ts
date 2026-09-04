@@ -647,32 +647,57 @@ export const getPlanNameById = async (
 /**
  * Resolve PPP profile name from MikroTik-scoped list.
  * GET /mikrotiks/{server_configuration_id}/ppp_profiles
+ * Falls back to GET /ppp_profiles/{id} when the scoped list fails.
  */
 export const getPppProfileName = async (input: {
-  mikrotikId: string;
+  mikrotikId?: string | null;
   pppProfileId: string;
 }): Promise<string | null> => {
-  const mikrotikId = input.mikrotikId.trim();
   const pppProfileId = input.pppProfileId.trim();
-  if (!mikrotikId || !pppProfileId) return null;
+  const mikrotikId = input.mikrotikId?.trim() || "";
+  if (!pppProfileId) return null;
+
+  if (mikrotikId) {
+    try {
+      const payload = await wisproGet(
+        `/mikrotiks/${encodeURIComponent(mikrotikId)}/ppp_profiles`,
+        {},
+      );
+      const records = extractDataRecords(payload);
+      for (const record of records) {
+        if (!record || typeof record !== "object") continue;
+        const row = record as Record<string, unknown>;
+        if (String(row.id || "").trim() !== pppProfileId) continue;
+        const name = row.name ? String(row.name).trim() : "";
+        if (name) return name;
+      }
+    } catch (error) {
+      console.warn(`${LOG_PREFIX} ppp_profile_mikrotik_lookup_failed`, {
+        mikrotikId,
+        pppProfileId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
 
   try {
     const payload = await wisproGet(
-      `/mikrotiks/${encodeURIComponent(mikrotikId)}/ppp_profiles`,
+      `/ppp_profiles/${encodeURIComponent(pppProfileId)}`,
       {},
     );
-    const records = extractDataRecords(payload);
-    for (const record of records) {
-      if (!record || typeof record !== "object") continue;
-      const row = record as Record<string, unknown>;
-      if (String(row.id || "").trim() !== pppProfileId) continue;
-      const name = row.name ? String(row.name).trim() : "";
-      return name || null;
-    }
-    return null;
+    const row =
+      extractDataObject(payload) ||
+      (() => {
+        const records = extractDataRecords(payload);
+        return records[0] && typeof records[0] === "object"
+          ? (records[0] as Record<string, unknown>)
+          : null;
+      })();
+    const name = row?.name ? String(row.name).trim() : "";
+    return name || null;
   } catch (error) {
     console.warn(`${LOG_PREFIX} ppp_profile_lookup_failed`, {
-      mikrotikId,
+      mikrotikId: mikrotikId || null,
       pppProfileId,
       error: error instanceof Error ? error.message : String(error),
     });
@@ -680,8 +705,34 @@ export const getPppProfileName = async (input: {
   }
 };
 
+export const getContractById = async (
+  contractId: string,
+): Promise<WisproContract | null> => {
+  const id = contractId.trim();
+  if (!id) return null;
+
+  try {
+    const payload = await wisproGet(`/contracts/${encodeURIComponent(id)}`, {});
+    const row =
+      extractDataObject(payload) ||
+      (() => {
+        const records = extractDataRecords(payload);
+        return records[0] && typeof records[0] === "object"
+          ? (records[0] as Record<string, unknown>)
+          : null;
+      })();
+    return normalizeContract(row);
+  } catch (error) {
+    console.warn(`${LOG_PREFIX} contract_by_id_failed`, {
+      contractId: id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+};
+
 /**
- * Fill plan_name / ppp_profile_name on the preferred contract (in-place copy).
+ * Fill plan_name / ppp_profile_name on the preferred contract.
  * Soft-fails individual lookups so billing never blocks on profile enrichment.
  */
 export const enrichContractPlanAndPpp = async (
@@ -689,7 +740,9 @@ export const enrichContractPlanAndPpp = async (
 ): Promise<WisproContract | null> => {
   if (!contract) return null;
 
-  const next: WisproContract = { ...contract };
+  // Prefer a fresh single-contract GET: list endpoints sometimes omit PPP fields.
+  const detailed = (await getContractById(contract.id)) || contract;
+  const next: WisproContract = { ...detailed };
   const tasks: Promise<void>[] = [];
 
   if (!next.plan_name && next.plan_id) {
@@ -700,7 +753,7 @@ export const enrichContractPlanAndPpp = async (
     );
   }
 
-  if (!next.ppp_profile_name && next.ppp_profile_id && next.server_configuration_id) {
+  if (!next.ppp_profile_name && next.ppp_profile_id) {
     tasks.push(
       getPppProfileName({
         mikrotikId: next.server_configuration_id,

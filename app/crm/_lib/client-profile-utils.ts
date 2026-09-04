@@ -9,6 +9,26 @@ export const formatClientPlan = (plan: string | null) => {
   return plan;
 };
 
+/**
+ * Active plan in CRM chat = Wispro PPP profile (contract "Perfil PPP").
+ * Falls back to commercial plan name / clients.plan only if PPP is missing.
+ */
+export const resolveActivePlanLabel = (input: {
+  pppProfile?: string | null;
+  planName?: string | null;
+  clientPlan?: string | null;
+}) => {
+  const ppp = input.pppProfile?.trim() || "";
+  if (ppp) return ppp;
+
+  const planName = input.planName?.trim() || "";
+  if (planName && planName !== "Sin asignar" && planName !== "—") {
+    return planName;
+  }
+
+  return formatClientPlan(input.clientPlan ?? null);
+};
+
 export interface ClientEnvoicingData {
   debt: number;
   hasDebt: boolean;

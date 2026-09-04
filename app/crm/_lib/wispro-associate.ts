@@ -227,9 +227,10 @@ export const associateWisproClient = async (
   } = input;
 
   const zone = customer.zone_name?.trim() || DEFAULT_ZONE;
+  // CRM "plan" column stores Wispro PPP profile (contract Perfil PPP).
   const plan =
-    invoicing.planName?.trim() ||
     invoicing.pppProfile?.trim() ||
+    invoicing.planName?.trim() ||
     DEFAULT_PLAN;
   const envoicingPayload = serializeWisproLinkForDb(invoicing, customer);
   const waIdentity =

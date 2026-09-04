@@ -244,13 +244,14 @@ export const refreshClientBillingFromWispro = async (input: {
       clientName: input.clientName,
     });
 
-    const planName = invoicing.planName?.trim() || "";
+    const planLabel =
+      invoicing.pppProfile?.trim() || invoicing.planName?.trim() || "";
     const updatePayload: Record<string, string | null> = {
       account: invoicing.accountStatus,
       envoicing: envoicingPayload,
     };
-    if (planName) {
-      updatePayload.plan = planName;
+    if (planLabel) {
+      updatePayload.plan = planLabel;
     }
 
     const { data: updated, error: updateError } = await input.supabase

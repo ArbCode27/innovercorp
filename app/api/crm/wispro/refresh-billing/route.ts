@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
 
     const { data: refreshedClient } = await supabase
       .from("clients")
-      .select("id, name, account, wispro_id, envoicing, zone")
+      .select("id, name, account, wispro_id, envoicing, zone, plan")
       .eq("id", client.id)
       .maybeSingle();
 
