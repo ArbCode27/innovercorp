@@ -332,12 +332,15 @@ export type WisproInvoice = {
   id: string;
   client_id: string | null;
   contract_id: string | null;
+  client_national_identification_number: string | null;
   invoice_number: string | null;
   state: string | null;
   amount: number;
   balance: number;
   issued_at: string | null;
   first_due_date: string | null;
+  /** Billing period end (`to`), useful when issued_at is missing. */
+  period_to: string | null;
   concept: string | null;
 };
 
@@ -465,12 +468,16 @@ const normalizeInvoice = (record: unknown): WisproInvoice | null => {
     id,
     client_id: row.client_id ? String(row.client_id) : null,
     contract_id: row.contract_id ? String(row.contract_id) : null,
+    client_national_identification_number: row.client_national_identification_number
+      ? String(row.client_national_identification_number)
+      : null,
     invoice_number: row.invoice_number ? String(row.invoice_number) : null,
     state: row.state ? String(row.state).trim().toLowerCase() : null,
     amount,
     balance,
     issued_at: row.issued_at ? String(row.issued_at) : null,
     first_due_date: row.first_due_date ? String(row.first_due_date) : null,
+    period_to: row.to ? String(row.to) : null,
     concept: row.concept ? String(row.concept) : null,
   };
 };
@@ -808,41 +815,32 @@ export const listContractsByCedula = async (
 
 /**
  * List pending (unpaid) invoices for a Wispro client.
- * Prefers `client_id_eq` (same Ransack pattern as contracts); falls back to cédula.
+ * Official filter: client_national_identification_number_eq + state_eq=pending.
+ * Do NOT use client_id_eq — Wispro ignores it and returns unrelated invoices.
  * @see https://doc.cloud.wispro.co/reference/invoices
+ * @example /invoicing/invoices?client_national_identification_number_eq=17927238&state_eq=pending
  */
 export const listPendingInvoicesForClient = async (input: {
   wisproClientId?: string | null;
   cedula?: string | null;
 }): Promise<WisproInvoice[]> => {
-  const wisproClientId = input.wisproClientId?.trim() || "";
   const digits = normalizeDocumentDigits(input.cedula || "");
-
-  const queries: Record<string, string>[] = [];
-  if (wisproClientId) {
-    queries.push({
-      client_id_eq: wisproClientId,
-      state_eq: "pending",
+  if (!digits) {
+    console.warn(`${LOG_PREFIX} invoices_skipped_missing_cedula`, {
+      wisproClientId: input.wisproClientId?.trim() || null,
     });
-  }
-  if (digits) {
-    for (const candidate of buildVeDocumentCandidates(digits)) {
-      queries.push({
-        client_national_identification_number_eq: candidate,
-        state_eq: "pending",
-      });
-    }
+    return [];
   }
 
-  if (!queries.length) return [];
-
+  // Prefer bare digits (as in Wispro UI / docs), then V/E/J/G variants.
+  const candidates = buildVeDocumentCandidates(digits);
   const invoicesById = new Map<string, WisproInvoice>();
 
-  for (const query of queries) {
+  for (const candidate of candidates) {
     try {
       const payload = await wisproGet("/invoicing/invoices", {
-        ...query,
-        // Prefer newest page size Wispro allows without paging loops for CRM approve.
+        client_national_identification_number_eq: candidate,
+        state_eq: "pending",
       });
       const rows = extractDataRecords(payload)
         .map(normalizeInvoice)
@@ -850,13 +848,24 @@ export const listPendingInvoicesForClient = async (input: {
 
       for (const invoice of rows) {
         if (invoice.balance <= 0) continue;
+        // Safety: drop rows that clearly belong to another document.
+        const invoiceDoc = normalizeDocumentDigits(
+          invoice.client_national_identification_number || "",
+        );
+        if (invoiceDoc && invoiceDoc !== digits) continue;
         invoicesById.set(invoice.id, invoice);
       }
 
-      if (invoicesById.size) break;
+      if (invoicesById.size) {
+        console.log(`${LOG_PREFIX} invoices_ok`, {
+          cedula: candidate,
+          count: invoicesById.size,
+        });
+        break;
+      }
     } catch (error) {
       console.warn(`${LOG_PREFIX} invoices_lookup_failed`, {
-        query,
+        candidate,
         error: error instanceof Error ? error.message : String(error),
       });
     }
@@ -865,7 +874,7 @@ export const listPendingInvoicesForClient = async (input: {
   return [...invoicesById.values()];
 };
 
-/** Newest pending invoice date (issued_at preferred, else first_due_date). */
+/** Newest pending invoice date (issued_at → period_to → first_due_date). */
 export const resolveLatestPendingInvoiceDate = (
   invoices: WisproInvoice[],
 ): string | null => {
@@ -873,7 +882,12 @@ export const resolveLatestPendingInvoiceDate = (
   let bestMs = Number.NEGATIVE_INFINITY;
 
   for (const invoice of invoices) {
-    const raw = (invoice.issued_at || invoice.first_due_date || "").trim();
+    const raw = (
+      invoice.issued_at ||
+      invoice.period_to ||
+      invoice.first_due_date ||
+      ""
+    ).trim();
     if (!raw) continue;
     const ms = Date.parse(raw);
     if (!Number.isFinite(ms)) continue;
@@ -887,7 +901,7 @@ export const resolveLatestPendingInvoiceDate = (
 };
 
 /**
- * Cache pending-invoice dates by Wispro client / cédula for CRM payment lists.
+ * Cache pending-invoice dates by cédula for CRM payment lists.
  * Soft-fails per client so one upstream error never blanks the table.
  */
 export const resolveLatestPendingInvoiceDatesForClients = async (
@@ -897,27 +911,19 @@ export const resolveLatestPendingInvoiceDatesForClients = async (
   }>,
 ): Promise<Map<string, string | null>> => {
   const cache = new Map<string, string | null>();
-  const jobs = new Map<string, { wisproClientId?: string; cedula?: string }>();
+  const jobs = new Map<string, string>();
 
   for (const client of clients) {
-    const wisproClientId = client.wisproClientId?.trim() || "";
     const digits = normalizeDocumentDigits(client.cedula || "");
-    const key = wisproClientId
-      ? `w:${wisproClientId}`
-      : digits
-        ? `c:${digits}`
-        : "";
-    if (!key || jobs.has(key)) continue;
-    jobs.set(key, {
-      wisproClientId: wisproClientId || undefined,
-      cedula: digits || undefined,
-    });
+    if (!digits || jobs.has(digits)) continue;
+    jobs.set(digits, digits);
   }
 
   await Promise.all(
-    [...jobs.entries()].map(async ([key, lookup]) => {
+    [...jobs.entries()].map(async ([digits]) => {
+      const key = `c:${digits}`;
       try {
-        const invoices = await listPendingInvoicesForClient(lookup);
+        const invoices = await listPendingInvoicesForClient({ cedula: digits });
         cache.set(key, resolveLatestPendingInvoiceDate(invoices));
       } catch (error) {
         console.warn(`${LOG_PREFIX} latest_invoice_date_failed`, {
@@ -932,12 +938,11 @@ export const resolveLatestPendingInvoiceDatesForClients = async (
   return cache;
 };
 
+/** Invoice lookups are keyed by cédula (Wispro invoice filter). */
 export const latestInvoiceCacheKeyForPayment = (payment: {
   wispro_client_id?: string | null;
   cedula?: string | null;
 }): string | null => {
-  const wisproClientId = payment.wispro_client_id?.trim() || "";
-  if (wisproClientId) return `w:${wisproClientId}`;
   const digits = normalizeDocumentDigits(payment.cedula || "");
   return digits ? `c:${digits}` : null;
 };
