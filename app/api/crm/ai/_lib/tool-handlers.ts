@@ -38,7 +38,7 @@ import {
 } from "./gemini-tools";
 import {
   isUnsafeCustomerReply,
-  SAFE_TOOL_LEAK_CUSTOMER_REPLY,
+  SAFE_INTERNAL_LEAK_CUSTOMER_REPLY,
 } from "./reply-sanitizer";
 import { auditToolInvocation } from "./tool-audit";
 
@@ -1147,7 +1147,7 @@ const handleEscalate = async (
   const message = forClient(
     ctx,
     isUnsafeCustomerReply(candidateMessage)
-      ? SAFE_TOOL_LEAK_CUSTOMER_REPLY
+      ? SAFE_INTERNAL_LEAK_CUSTOMER_REPLY
       : candidateMessage,
   );
 

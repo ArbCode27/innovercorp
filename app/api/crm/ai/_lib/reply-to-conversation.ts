@@ -19,8 +19,8 @@ import {
 } from "./guaranteed-reply";
 import { classifyInboundIntent, getLatestInboundMessage, type InboundIntent } from "./inbound-intent";
 import {
-  detectToolLeakInCustomerReply,
-  SAFE_TOOL_LEAK_CUSTOMER_REPLY,
+  detectInternalLeakInCustomerReply,
+  SAFE_INTERNAL_LEAK_CUSTOMER_REPLY,
 } from "./reply-sanitizer";
 import {
   claimConversationAiLock,
@@ -792,12 +792,12 @@ export const replyToConversationWithGemini = async (
         return tryHandoffFallback("handoff_empty_message");
       }
 
-      const handoffLeak = detectToolLeakInCustomerReply(handoffTextRaw);
+      const handoffLeak = detectInternalLeakInCustomerReply(handoffTextRaw);
       const handoffText = handoffLeak.matched
-        ? SAFE_TOOL_LEAK_CUSTOMER_REPLY
+        ? SAFE_INTERNAL_LEAK_CUSTOMER_REPLY
         : handoffTextRaw;
       if (handoffLeak.matched) {
-        console.warn(`${LOG_PREFIX} outbound_tool_leak_blocked`, {
+        console.warn(`${LOG_PREFIX} outbound_internal_leak_blocked`, {
           ...baseContext,
           action: "handoff",
           runId: decision.runId,
@@ -901,12 +901,12 @@ export const replyToConversationWithGemini = async (
       return sendFallback("empty_model_reply", { skipSoftWhatsApp: ackSent });
     }
 
-    const replyLeak = detectToolLeakInCustomerReply(replyTextRaw);
+    const replyLeak = detectInternalLeakInCustomerReply(replyTextRaw);
     const replyText = replyLeak.matched
-      ? SAFE_TOOL_LEAK_CUSTOMER_REPLY
+      ? SAFE_INTERNAL_LEAK_CUSTOMER_REPLY
       : replyTextRaw;
     if (replyLeak.matched) {
-      console.warn(`${LOG_PREFIX} outbound_tool_leak_blocked`, {
+      console.warn(`${LOG_PREFIX} outbound_internal_leak_blocked`, {
         ...baseContext,
         action: "reply",
         runId: decision.runId,
