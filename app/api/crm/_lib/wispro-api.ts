@@ -812,6 +812,83 @@ export const listPendingInvoicesForClient = async (input: {
   return [...invoicesById.values()];
 };
 
+/** Newest pending invoice date (issued_at preferred, else first_due_date). */
+export const resolveLatestPendingInvoiceDate = (
+  invoices: WisproInvoice[],
+): string | null => {
+  let bestIso: string | null = null;
+  let bestMs = Number.NEGATIVE_INFINITY;
+
+  for (const invoice of invoices) {
+    const raw = (invoice.issued_at || invoice.first_due_date || "").trim();
+    if (!raw) continue;
+    const ms = Date.parse(raw);
+    if (!Number.isFinite(ms)) continue;
+    if (ms >= bestMs) {
+      bestMs = ms;
+      bestIso = raw.slice(0, 10);
+    }
+  }
+
+  return bestIso;
+};
+
+/**
+ * Cache pending-invoice dates by Wispro client / cédula for CRM payment lists.
+ * Soft-fails per client so one upstream error never blanks the table.
+ */
+export const resolveLatestPendingInvoiceDatesForClients = async (
+  clients: Array<{
+    wisproClientId?: string | null;
+    cedula?: string | null;
+  }>,
+): Promise<Map<string, string | null>> => {
+  const cache = new Map<string, string | null>();
+  const jobs = new Map<string, { wisproClientId?: string; cedula?: string }>();
+
+  for (const client of clients) {
+    const wisproClientId = client.wisproClientId?.trim() || "";
+    const digits = normalizeDocumentDigits(client.cedula || "");
+    const key = wisproClientId
+      ? `w:${wisproClientId}`
+      : digits
+        ? `c:${digits}`
+        : "";
+    if (!key || jobs.has(key)) continue;
+    jobs.set(key, {
+      wisproClientId: wisproClientId || undefined,
+      cedula: digits || undefined,
+    });
+  }
+
+  await Promise.all(
+    [...jobs.entries()].map(async ([key, lookup]) => {
+      try {
+        const invoices = await listPendingInvoicesForClient(lookup);
+        cache.set(key, resolveLatestPendingInvoiceDate(invoices));
+      } catch (error) {
+        console.warn(`${LOG_PREFIX} latest_invoice_date_failed`, {
+          key,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        cache.set(key, null);
+      }
+    }),
+  );
+
+  return cache;
+};
+
+export const latestInvoiceCacheKeyForPayment = (payment: {
+  wispro_client_id?: string | null;
+  cedula?: string | null;
+}): string | null => {
+  const wisproClientId = payment.wispro_client_id?.trim() || "";
+  if (wisproClientId) return `w:${wisproClientId}`;
+  const digits = normalizeDocumentDigits(payment.cedula || "");
+  return digits ? `c:${digits}` : null;
+};
+
 /** Default duration for Wispro payment promises (auto + CRM UI). */
 export const DEFAULT_PAYMENT_PROMISE_HOURS = 48;
 

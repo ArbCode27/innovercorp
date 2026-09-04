@@ -12,11 +12,98 @@ import {
 } from "@/app/api/crm/_lib/crm-payments";
 import {
   createWisproInvoicingPayment,
+  latestInvoiceCacheKeyForPayment,
   listPendingInvoicesForClient,
+  resolveLatestPendingInvoiceDate,
+  resolveLatestPendingInvoiceDatesForClients,
 } from "@/app/api/crm/_lib/wispro-api";
 import { matchInvoicesToPaymentAmount } from "@/app/api/crm/_lib/wispro-invoice-match";
 import { getCrmSettings } from "@/app/api/crm/_lib/crm-settings";
 import { buildPaymentSuccessMessage } from "@/app/crm/_lib/payment-success-message";
+
+type PaymentWithLatestInvoice = Awaited<
+  ReturnType<typeof listCrmPayments>
+>["payments"][number] & {
+  latest_invoice_date: string | null;
+};
+
+const readLatestInvoiceDateFromMetadata = (
+  metadata: Record<string, unknown> | null | undefined,
+): string | null => {
+  if (!metadata || typeof metadata !== "object") return null;
+
+  const direct = metadata.latest_invoice_date;
+  if (typeof direct === "string" && /^\d{4}-\d{2}-\d{2}/.test(direct.trim())) {
+    return direct.trim().slice(0, 10);
+  }
+
+  const match = metadata.wispro_invoice_match;
+  if (!match || typeof match !== "object") return null;
+  const matchRecord = match as Record<string, unknown>;
+
+  if (
+    typeof matchRecord.latest_invoice_date === "string" &&
+    /^\d{4}-\d{2}-\d{2}/.test(matchRecord.latest_invoice_date.trim())
+  ) {
+    return matchRecord.latest_invoice_date.trim().slice(0, 10);
+  }
+
+  const invoices = Array.isArray(matchRecord.invoices)
+    ? matchRecord.invoices
+    : [];
+  let best: string | null = null;
+  let bestMs = Number.NEGATIVE_INFINITY;
+  for (const item of invoices) {
+    if (!item || typeof item !== "object") continue;
+    const row = item as Record<string, unknown>;
+    const raw = String(row.issued_at || row.issuedAt || "").trim();
+    if (!raw) continue;
+    const ms = Date.parse(raw);
+    if (!Number.isFinite(ms) || ms < bestMs) continue;
+    bestMs = ms;
+    best = raw.slice(0, 10);
+  }
+  return best;
+};
+
+const enrichPaymentsWithLatestInvoiceDate = async (
+  payments: Awaited<ReturnType<typeof listCrmPayments>>["payments"],
+): Promise<PaymentWithLatestInvoice[]> => {
+  const needsLiveLookup = payments.filter((payment) => {
+    if (readLatestInvoiceDateFromMetadata(payment.receipt_metadata)) {
+      return false;
+    }
+    const openForReview =
+      payment.status === "RECIBIDO" ||
+      payment.status === "EN_PROCESO" ||
+      payment.status === "ERROR";
+    if (!openForReview) return false;
+    return Boolean(latestInvoiceCacheKeyForPayment(payment));
+  });
+
+  const dateByKey =
+    needsLiveLookup.length > 0
+      ? await resolveLatestPendingInvoiceDatesForClients(
+          needsLiveLookup.map((payment) => ({
+            wisproClientId: payment.wispro_client_id,
+            cedula: payment.cedula,
+          })),
+        )
+      : new Map<string, string | null>();
+
+  return payments.map((payment) => {
+    const fromMeta = readLatestInvoiceDateFromMetadata(payment.receipt_metadata);
+    if (fromMeta) {
+      return { ...payment, latest_invoice_date: fromMeta };
+    }
+
+    const key = latestInvoiceCacheKeyForPayment(payment);
+    return {
+      ...payment,
+      latest_invoice_date: key ? (dateByKey.get(key) ?? null) : null,
+    };
+  });
+};
 
 const GRAPH_API_VERSION = "v19.0";
 
@@ -246,10 +333,12 @@ export async function GET(req: NextRequest) {
 
     const supabase = getServiceClient();
     const result = await listCrmPayments(supabase, parsed.data);
+    const payments = await enrichPaymentsWithLatestInvoiceDate(result.payments);
 
     return NextResponse.json({
       ok: true,
       ...result,
+      payments,
     });
   } catch (error) {
     if (error instanceof Error && error.message.startsWith("Missing environment")) {
@@ -345,6 +434,8 @@ export async function PATCH(req: NextRequest) {
           wisproClientId: currentPayment.wispro_client_id,
           cedula: currentPayment.cedula,
         });
+        const latestInvoiceDate =
+          resolveLatestPendingInvoiceDate(pendingInvoices);
         const match = matchInvoicesToPaymentAmount(
           pendingInvoices.map((invoice) => ({
             id: invoice.id,
@@ -358,6 +449,9 @@ export async function PATCH(req: NextRequest) {
           Number(currentPayment.amount),
         );
         invoiceIds = match.invoiceIds;
+        const matchedById = new Map(
+          pendingInvoices.map((invoice) => [invoice.id, invoice]),
+        );
         invoiceMatchMeta = {
           attempted_at: new Date().toISOString(),
           strategy: match.strategy,
@@ -365,13 +459,18 @@ export async function PATCH(req: NextRequest) {
           matched_amount: match.matchedAmount,
           unmatched_amount: match.unmatchedAmount,
           open_invoices_count: pendingInvoices.length,
-          invoices: match.invoices,
+          latest_invoice_date: latestInvoiceDate,
+          invoices: match.invoices.map((item) => ({
+            ...item,
+            issued_at: matchedById.get(item.id)?.issued_at ?? null,
+          })),
         };
       } catch (invoiceError) {
         invoiceMatchMeta = {
           attempted_at: new Date().toISOString(),
           strategy: "none",
           invoice_ids: [],
+          latest_invoice_date: null,
           error:
             invoiceError instanceof Error
               ? invoiceError.message
@@ -384,10 +483,16 @@ export async function PATCH(req: NextRequest) {
         });
       }
 
+      const latestInvoiceDate =
+        typeof invoiceMatchMeta.latest_invoice_date === "string"
+          ? invoiceMatchMeta.latest_invoice_date
+          : null;
+
       const paymentForApprove = {
         ...currentPayment,
         receipt_metadata: {
           ...(currentPayment.receipt_metadata || {}),
+          latest_invoice_date: latestInvoiceDate,
           wispro_invoice_match: invoiceMatchMeta,
         },
       };

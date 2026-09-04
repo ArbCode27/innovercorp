@@ -48,6 +48,8 @@ export type CrmPayment = {
   external_api_status: number | null;
   error_message: string | null;
   receipt_media_url: string | null;
+  /** Most recent pending Wispro invoice date (YYYY-MM-DD), when available. */
+  latest_invoice_date?: string | null;
   created_at: string;
   updated_at: string;
 };

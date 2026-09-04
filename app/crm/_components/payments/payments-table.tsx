@@ -71,7 +71,7 @@ export const PaymentsTable = ({
     <div
       className={`overflow-hidden ${CRM_TABLE}`}>
       <div className="overflow-x-auto">
-        <Table className="min-w-[980px]">
+        <Table className="min-w-[1080px]">
           <TableHeader>
             <TableRow className={`${CRM_SURFACES.border} hover:bg-transparent`}>
               <TableHead className={CRM_SURFACES.textMuted}>Fecha</TableHead>
@@ -80,6 +80,9 @@ export const PaymentsTable = ({
               <TableHead className={CRM_SURFACES.textMuted}>Monto</TableHead>
               <TableHead className={CRM_SURFACES.textMuted}>Banco</TableHead>
               <TableHead className={CRM_SURFACES.textMuted}>Referencia</TableHead>
+              <TableHead className={CRM_SURFACES.textMuted}>
+                Factura
+              </TableHead>
               <TableHead className={CRM_SURFACES.textMuted}>Estado</TableHead>
               <TableHead className={CRM_SURFACES.textMuted}>Revisión</TableHead>
             </TableRow>
@@ -93,6 +96,9 @@ export const PaymentsTable = ({
               const approveHint = canApprove
                 ? `Aprobar pago de ${clientName}`
                 : "Faltan datos para aprobar este comprobante";
+              const latestInvoiceDate = payment.latest_invoice_date?.trim()
+                ? formatPaymentDate(payment.latest_invoice_date)
+                : "—";
 
               return (
                 <TableRow
@@ -129,6 +135,17 @@ export const PaymentsTable = ({
                     <PaymentValue
                       value={formatPaymentField(payment.transaction_code)}
                     />
+                  </TableCell>
+                  <TableCell>
+                    <div
+                      className={
+                        latestInvoiceDate === "—"
+                          ? CRM_SURFACES.textMuted
+                          : CRM_SURFACES.textPrimary
+                      }
+                      title="Fecha de la factura pendiente más reciente">
+                      {latestInvoiceDate}
+                    </div>
                   </TableCell>
                   <TableCell>
                     <StatusBadge status={payment.status} />
