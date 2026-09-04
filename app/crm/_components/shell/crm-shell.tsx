@@ -192,7 +192,21 @@ export const CrmShell = () => {
                 onCreateClient={crm.createClient}
               />
             ) : null}
-            {activeView === "payments" ? <PaymentsView /> : null}
+            {activeView === "payments" ? (
+              <PaymentsView
+                onOpenClientChat={(conversationId: number) => {
+                  void crm.selectConversation(conversationId);
+                  const assignedToMe = crm.conversations.some(
+                    (conversation) =>
+                      conversation.id === conversationId &&
+                      conversation.agent_id === auth.agent?.id,
+                  );
+                  setActiveView(
+                    assignedToMe ? "my-conversations" : "conversations",
+                  );
+                }}
+              />
+            ) : null}
             {activeView === "quick-replies" ? (
               <QuickRepliesView
                 currentAgent={auth.agent}

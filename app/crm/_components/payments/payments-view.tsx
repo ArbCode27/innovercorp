@@ -8,8 +8,13 @@ import type {
   CrmPaymentStatus,
   CrmPaymentStatusCounts,
 } from "../../_lib/payments";
+import { formatPaymentField } from "../../_lib/payments";
 import { CrmButton } from "../shared/crm-button";
 import { LoadingState } from "../shared/loading-state";
+import {
+  OpenClientChatDialog,
+  type OpenClientChatPrompt,
+} from "./open-client-chat-dialog";
 import { PaymentsFilters } from "./payments-filters";
 import { PaymentsStats } from "./payments-stats";
 import { PaymentsTable } from "./payments-table";
@@ -53,7 +58,11 @@ const EMPTY_COUNTS: CrmPaymentStatusCounts = {
   ERROR: 0,
 };
 
-export const PaymentsView = () => {
+interface PaymentsViewProps {
+  onOpenClientChat?: (conversationId: number) => void;
+}
+
+export const PaymentsView = ({ onOpenClientChat }: PaymentsViewProps) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [period, setPeriod] = useState<PaymentPeriod>("today");
@@ -67,6 +76,10 @@ export const PaymentsView = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [chatPrompt, setChatPrompt] = useState<OpenClientChatPrompt | null>(
+    null,
+  );
+  const [isChatPromptOpen, setIsChatPromptOpen] = useState(false);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -137,12 +150,25 @@ export const PaymentsView = () => {
     setBank("all");
   };
 
+  const offerOpenClientChat = (payment: CrmPayment) => {
+    if (!onOpenClientChat) return;
+    const conversationId = payment.conversation_id;
+    if (!conversationId || !Number.isFinite(conversationId)) return;
+
+    setChatPrompt({
+      conversationId,
+      clientName: formatPaymentField(payment.client_name),
+    });
+    setIsChatPromptOpen(true);
+  };
+
   const handlePaymentAction = async (
     paymentId: string,
     action: "approve" | "reject",
   ) => {
     setUpdatingId(paymentId);
     setError(null);
+    const paymentBeforeAction = payments.find((item) => item.id === paymentId);
 
     try {
       const response = await fetch("/api/crm/payments", {
@@ -167,12 +193,28 @@ export const PaymentsView = () => {
         throw new Error(payload.error || "No se pudo actualizar el estado");
       }
 
+      const approvedPayment: CrmPayment = {
+        ...payload.payment,
+        conversation_id:
+          payload.payment.conversation_id ??
+          paymentBeforeAction?.conversation_id ??
+          null,
+        client_name:
+          payload.payment.client_name ||
+          paymentBeforeAction?.client_name ||
+          null,
+      };
+
       setPayments((current) =>
         current.map((payment) =>
-          payment.id === paymentId ? payload.payment! : payment,
+          payment.id === paymentId ? approvedPayment : payment,
         ),
       );
       await loadPayments("refresh");
+
+      if (action === "approve") {
+        offerOpenClientChat(approvedPayment);
+      }
     } catch (updateError) {
       setError(
         updateError instanceof Error
@@ -192,6 +234,10 @@ export const PaymentsView = () => {
     void handlePaymentAction(paymentId, "reject");
   };
 
+  const handleConfirmOpenChat = (prompt: OpenClientChatPrompt) => {
+    onOpenClientChat?.(prompt.conversationId);
+  };
+
   return (
     <div className={`crm-scrollbar min-h-0 flex-1 overflow-y-auto p-4 md:p-6`}>
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -200,7 +246,8 @@ export const PaymentsView = () => {
             Pagos
           </h2>
           <p className={`text-sm ${CRM_SURFACES.textMuted}`}>
-            Bandeja de comprobantes: entran al registrarlos y se completan con la extracción
+            Bandeja de comprobantes: entran al registrarlos y se completan con la
+            extracción
           </p>
         </div>
         <CrmButton
@@ -257,6 +304,16 @@ export const PaymentsView = () => {
           </>
         )}
       </div>
+
+      <OpenClientChatDialog
+        open={isChatPromptOpen}
+        prompt={chatPrompt}
+        onOpenChange={(open) => {
+          setIsChatPromptOpen(open);
+          if (!open) setChatPrompt(null);
+        }}
+        onConfirm={handleConfirmOpenChat}
+      />
     </div>
   );
 };
