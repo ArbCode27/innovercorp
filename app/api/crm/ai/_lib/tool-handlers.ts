@@ -1015,10 +1015,13 @@ const handleSubmitPaymentReceipt = async (
   let promiseCreated = false;
 
   try {
+    const debtUsd = Number(match.invoicing.debt) || 0;
     const promiseResult = await createPaymentPromiseForClient({
       wisproClientId: payload.client_id,
       cedula: payload.cedula,
       hours: DEFAULT_PAYMENT_PROMISE_HOURS,
+      amountUsd,
+      debtUsd,
     });
 
     promiseCreated = promiseResult.ok;
@@ -1030,6 +1033,8 @@ const handleSubmitPaymentReceipt = async (
           payment_promise_valid_until: promiseResult.validUntil,
           payment_promise_source: "auto_submit",
           payment_promise_error: null,
+          payment_promise_amount_usd: amountUsd,
+          payment_promise_debt_usd: debtUsd,
         }
       : {
           payment_promise_created: false,
@@ -1039,6 +1044,8 @@ const handleSubmitPaymentReceipt = async (
           payment_promise_source: "auto_submit",
           payment_promise_error: promiseResult.error,
           payment_promise_skip_reason: promiseResult.reason,
+          payment_promise_amount_usd: amountUsd,
+          payment_promise_debt_usd: debtUsd,
         };
   } catch (promiseError) {
     console.warn("[AI_PAYMENT] promise_unexpected_error", {

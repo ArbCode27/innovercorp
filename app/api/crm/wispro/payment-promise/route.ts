@@ -106,7 +106,8 @@ export async function POST(req: NextRequest) {
 
     if (!result.ok) {
       const status =
-        result.reason === "service_active"
+        result.reason === "service_active" ||
+        result.reason === "payment_incomplete"
           ? 409
           : result.reason === "no_contract" || result.reason === "invalid"
             ? 404

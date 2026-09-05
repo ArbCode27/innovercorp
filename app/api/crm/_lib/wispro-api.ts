@@ -387,6 +387,7 @@ export type CreatePaymentPromiseResult =
       reason:
         | "no_contract"
         | "service_active"
+        | "payment_incomplete"
         | "upstream"
         | "config"
         | "invalid";
@@ -488,15 +489,104 @@ const normalizeContractState = (state: string | null | undefined) =>
     .toLowerCase();
 
 /**
- * Wispro contract states eligible for payment promises.
- * Only suspended (`disabled`) service should get a temporary reactivation promise.
+ * Wispro contract states that always qualify for payment promises (reactivation).
+ * Active contracts may also qualify when the registered payment covers the full debt.
  * @see https://doc.cloud.wispro.co/reference/contracts
  */
 export const PROMISE_ELIGIBLE_CONTRACT_STATES = new Set(["disabled"]);
 
+/** USD slack for BCV conversion / rounding when deciding if a payment is complete. */
+export const DEFAULT_FULL_PAYMENT_TOLERANCE_USD = 0.5;
+
 export const isContractSuspendedForPromise = (
   state: string | null | undefined,
 ): boolean => PROMISE_ELIGIBLE_CONTRACT_STATES.has(normalizeContractState(state));
+
+/**
+ * True when amount covers debt within tolerance (or there is no debt to cover).
+ */
+export const isFullPayment = (
+  amountUsd: number,
+  debtUsd: number,
+  toleranceUsd = DEFAULT_FULL_PAYMENT_TOLERANCE_USD,
+): boolean => {
+  if (!Number.isFinite(amountUsd) || amountUsd <= 0) return false;
+  const debt = Number.isFinite(debtUsd) ? Math.max(0, debtUsd) : 0;
+  const tolerance =
+    Number.isFinite(toleranceUsd) && toleranceUsd >= 0
+      ? toleranceUsd
+      : DEFAULT_FULL_PAYMENT_TOLERANCE_USD;
+  return roundMoney(amountUsd) + roundMoney(tolerance) >= roundMoney(debt);
+};
+
+/**
+ * Pick the contract for a payment promise:
+ * 1) Prefer suspended (`disabled`) — always eligible.
+ * 2) Else, if payment is complete, use preferred active contract.
+ * 3) Else skip (caller maps to service_active / payment_incomplete).
+ */
+export const resolveContractForPaymentPromise = (
+  contracts: WisproContract[],
+  options?: {
+    amountUsd?: number | null;
+    debtUsd?: number | null;
+    fullPaymentToleranceUsd?: number;
+  },
+): {
+  contract: WisproContract | null;
+  skipReason: "service_active" | "payment_incomplete" | null;
+  fullPayment: boolean | null;
+} => {
+  const suspended = resolveSuspendedContractForPromise(contracts);
+  if (suspended) {
+    return { contract: suspended, skipReason: null, fullPayment: null };
+  }
+
+  const amountUsd = options?.amountUsd;
+  const debtUsd = options?.debtUsd;
+  const hasPaymentContext =
+    typeof amountUsd === "number" &&
+    Number.isFinite(amountUsd) &&
+    typeof debtUsd === "number" &&
+    Number.isFinite(debtUsd);
+
+  if (!hasPaymentContext) {
+    return { contract: null, skipReason: "service_active", fullPayment: null };
+  }
+
+  const fullPayment = isFullPayment(
+    amountUsd,
+    debtUsd,
+    options?.fullPaymentToleranceUsd,
+  );
+  if (!fullPayment) {
+    return {
+      contract: null,
+      skipReason: "payment_incomplete",
+      fullPayment: false,
+    };
+  }
+
+  // No outstanding debt on an active line — nothing to protect with a promise.
+  if (roundMoney(Math.max(0, debtUsd)) <= 0) {
+    return {
+      contract: null,
+      skipReason: "service_active",
+      fullPayment: true,
+    };
+  }
+
+  const preferred = resolvePreferredContract(contracts);
+  if (!preferred) {
+    return {
+      contract: null,
+      skipReason: "service_active",
+      fullPayment: true,
+    };
+  }
+
+  return { contract: preferred, skipReason: null, fullPayment: true };
+};
 
 const CONTRACT_STATE_PRIORITY: Record<string, number> = {
   enabled: 0,
@@ -1084,11 +1174,21 @@ export const createWisproInvoicingPayment = async (
 /**
  * Resolve contract + create a payment promise. Never throws for business skips;
  * throws only unexpected programmer issues — callers should catch WisproApiError.
+ *
+ * Eligibility:
+ * - Suspended (`disabled`): always create (reactivation).
+ * - Active: create only when amountUsd covers debtUsd within tolerance.
+ * - CRM UI (no amount/debt): suspended-only, same as before.
  */
 export const createPaymentPromiseForClient = async (input: {
   wisproClientId?: string | null;
   cedula?: string | null;
   hours?: number;
+  /** Payment amount in USD (AI auto-submit). Required with debtUsd for active contracts. */
+  amountUsd?: number | null;
+  /** Outstanding debt in USD from Wispro current_account. */
+  debtUsd?: number | null;
+  fullPaymentToleranceUsd?: number;
 }): Promise<CreatePaymentPromiseResult> => {
   const hours =
     input.hours && input.hours > 0 ? input.hours : DEFAULT_PAYMENT_PROMISE_HOURS;
@@ -1126,16 +1226,38 @@ export const createPaymentPromiseForClient = async (input: {
       };
     }
 
-    // Only create promises when service is suspended (disabled). Active = skip.
-    const contract = resolveSuspendedContractForPromise(contracts);
+    const resolved = resolveContractForPaymentPromise(contracts, {
+      amountUsd: input.amountUsd,
+      debtUsd: input.debtUsd,
+      fullPaymentToleranceUsd: input.fullPaymentToleranceUsd,
+    });
+    const contract = resolved.contract;
+
     if (!contract) {
-      const states = contracts.map((item) => normalizeContractState(item.state) || "unknown");
-      console.warn(`${LOG_PREFIX} promise_skipped_service_active`, {
+      const states = contracts.map(
+        (item) => normalizeContractState(item.state) || "unknown",
+      );
+      const skipReason = resolved.skipReason || "service_active";
+      console.warn(`${LOG_PREFIX} promise_skipped_${skipReason}`, {
         wisproClientId: wisproClientId || null,
         cedula: cedula || null,
         contractStates: states,
         preferredActiveId: resolvePreferredContract(contracts)?.id ?? null,
+        amountUsd: input.amountUsd ?? null,
+        debtUsd: input.debtUsd ?? null,
+        fullPayment: resolved.fullPayment,
       });
+
+      if (skipReason === "payment_incomplete") {
+        return {
+          ok: false,
+          created: false,
+          reason: "payment_incomplete",
+          error:
+            "No se creó la promesa: el servicio está activo y el pago no cubre la deuda completa.",
+        };
+      }
+
       return {
         ok: false,
         created: false,
@@ -1154,6 +1276,9 @@ export const createPaymentPromiseForClient = async (input: {
       contractState: normalizeContractState(contract.state),
       validUntil,
       sourceClientId: wisproClientId || null,
+      fullPayment: resolved.fullPayment,
+      amountUsd: input.amountUsd ?? null,
+      debtUsd: input.debtUsd ?? null,
     });
 
     return {
