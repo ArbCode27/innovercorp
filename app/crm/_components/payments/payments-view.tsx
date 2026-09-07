@@ -13,13 +13,16 @@ import { formatPaymentField } from "../../_lib/payments";
 import type { Agent } from "../../_lib/types";
 import { CrmButton } from "../shared/crm-button";
 import { LoadingState } from "../shared/loading-state";
-import { PaymentsFilters } from "./payments-filters";
+import {
+  PaymentsFilters,
+  PaymentsPagination,
+  type PaymentsDateRange,
+} from "./payments-filters";
 import { PaymentsStats } from "./payments-stats";
 import { PaymentsTable } from "./payments-table";
 
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 25;
 const SEARCH_DEBOUNCE_MS = 300;
-type PaymentPeriod = "today" | "week" | "month";
 
 const toCaracasIsoDate = (date: Date) =>
   new Intl.DateTimeFormat("en-CA", {
@@ -29,23 +32,7 @@ const toCaracasIsoDate = (date: Date) =>
     day: "2-digit",
   }).format(date);
 
-const resolvePeriodRange = (value: PaymentPeriod) => {
-  const now = new Date();
-  const to = toCaracasIsoDate(now);
-
-  if (value === "today") {
-    return { from: to, to };
-  }
-
-  if (value === "week") {
-    const fromDate = new Date(now);
-    fromDate.setDate(now.getDate() - 6);
-    return { from: toCaracasIsoDate(fromDate), to };
-  }
-
-  const fromDate = new Date(now.getFullYear(), now.getMonth(), 1);
-  return { from: toCaracasIsoDate(fromDate), to };
-};
+const todayIso = () => toCaracasIsoDate(new Date());
 
 const EMPTY_COUNTS: CrmPaymentStatusCounts = {
   RECIBIDO: 0,
@@ -54,6 +41,11 @@ const EMPTY_COUNTS: CrmPaymentStatusCounts = {
   RECHAZADO: 0,
   DUPLICADO: 0,
   ERROR: 0,
+};
+
+const DEFAULT_DATE_RANGE = (): PaymentsDateRange => {
+  const today = todayIso();
+  return { from: today, to: today };
 };
 
 export type PaymentReviewedPayload = {
@@ -77,9 +69,10 @@ export const PaymentsView = ({
 }: PaymentsViewProps) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [period, setPeriod] = useState<PaymentPeriod>("today");
+  const [dateRange, setDateRange] = useState<PaymentsDateRange>(DEFAULT_DATE_RANGE);
   const [status, setStatus] = useState<CrmPaymentStatus | "all">("all");
   const [bank, setBank] = useState("all");
+  const [page, setPage] = useState(1);
   const [payments, setPayments] = useState<CrmPayment[]>([]);
   const [banks, setBanks] = useState<string[]>([]);
   const [counts, setCounts] = useState<CrmPaymentStatusCounts>(EMPTY_COUNTS);
@@ -92,6 +85,7 @@ export const PaymentsView = ({
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
       setDebouncedSearch(searchTerm.trim());
+      setPage(1);
     }, SEARCH_DEBOUNCE_MS);
 
     return () => window.clearTimeout(timeoutId);
@@ -104,14 +98,13 @@ export const PaymentsView = ({
 
       try {
         const params = new URLSearchParams();
-        const range = resolvePeriodRange(period);
         if (debouncedSearch) params.set("q", debouncedSearch);
-        if (range.from) params.set("from", range.from);
-        if (range.to) params.set("to", range.to);
+        if (dateRange.from) params.set("from", dateRange.from);
+        if (dateRange.to) params.set("to", dateRange.to);
         if (status !== "all") params.set("status", status);
         if (bank !== "all") params.set("bank", bank);
         params.set("limit", String(PAGE_SIZE));
-        params.set("offset", "0");
+        params.set("offset", String((Math.max(page, 1) - 1) * PAGE_SIZE));
 
         const response = await fetch(`/api/crm/payments?${params.toString()}`);
         const payload = (await response.json()) as {
@@ -127,8 +120,14 @@ export const PaymentsView = ({
           throw new Error(payload.error || "No se pudieron cargar los pagos");
         }
 
+        const nextTotal = payload.total ?? 0;
+        const maxPage = Math.max(1, Math.ceil(nextTotal / PAGE_SIZE));
+        if (page > maxPage) {
+          setPage(maxPage);
+        }
+
         setPayments(payload.payments || []);
-        setTotal(payload.total ?? 0);
+        setTotal(nextTotal);
         setCounts(payload.counts || EMPTY_COUNTS);
         setBanks(payload.banks || []);
         setError(null);
@@ -143,7 +142,7 @@ export const PaymentsView = ({
         setIsRefreshing(false);
       }
     },
-    [bank, debouncedSearch, period, status],
+    [bank, dateRange.from, dateRange.to, debouncedSearch, page, status],
   );
 
   useEffect(() => {
@@ -153,9 +152,25 @@ export const PaymentsView = ({
   const handleClearFilters = () => {
     setSearchTerm("");
     setDebouncedSearch("");
-    setPeriod("today");
+    setDateRange(DEFAULT_DATE_RANGE());
     setStatus("all");
     setBank("all");
+    setPage(1);
+  };
+
+  const handleDateRangeChange = (value: PaymentsDateRange) => {
+    setDateRange(value);
+    setPage(1);
+  };
+
+  const handleStatusChange = (value: CrmPaymentStatus | "all") => {
+    setStatus(value);
+    setPage(1);
+  };
+
+  const handleBankChange = (value: string) => {
+    setBank(value);
+    setPage(1);
   };
 
   /** Local list/stats update — no full refetch after approve/reject. */
@@ -174,8 +189,7 @@ export const PaymentsView = ({
       }));
     }
 
-    const matchesStatusFilter =
-      status === "all" || status === nextStatus;
+    const matchesStatusFilter = status === "all" || status === nextStatus;
 
     if (!matchesStatusFilter) {
       setPayments((current) =>
@@ -264,7 +278,6 @@ export const PaymentsView = ({
       applyLocalPaymentUpdate(paymentBeforeAction, nextPayment);
 
       if (conversationId) {
-        // Background: reinforce assign + refresh inbox (don't block UI).
         void Promise.resolve(
           onPaymentReviewed?.({
             conversationId,
@@ -331,7 +344,7 @@ export const PaymentsView = ({
           variant="secondary"
           onClick={() => void loadPayments("refresh")}
           disabled={isRefreshing || isLoading}
-          className="w-full sm:w-auto"
+          className="w-full cursor-pointer sm:w-auto"
           aria-label="Actualizar listado de pagos">
           <RefreshCw
             className={`mr-2 size-4 ${isRefreshing ? "animate-spin" : ""}`}
@@ -345,14 +358,14 @@ export const PaymentsView = ({
         <PaymentsStats total={total} counts={counts} />
         <PaymentsFilters
           searchTerm={searchTerm}
-          period={period}
+          dateRange={dateRange}
           status={status}
           bank={bank}
           banks={banks}
           onSearchChange={setSearchTerm}
-          onPeriodChange={setPeriod}
-          onStatusChange={setStatus}
-          onBankChange={setBank}
+          onDateRangeChange={handleDateRangeChange}
+          onStatusChange={handleStatusChange}
+          onBankChange={handleBankChange}
           onClearFilters={handleClearFilters}
         />
 
@@ -366,17 +379,19 @@ export const PaymentsView = ({
           <LoadingState label="Cargando pagos..." />
         ) : (
           <>
-            {total > 0 ? (
-              <p className={`text-xs ${CRM_SURFACES.textMuted}`}>
-                Mostrando {payments.length} de {total}
-              </p>
-            ) : null}
             <PaymentsTable
               payments={payments}
               updatingId={updatingId}
               onApprove={handleApprove}
               onReject={handleReject}
               onOpenChat={onOpenClientChat}
+            />
+            <PaymentsPagination
+              page={page}
+              pageSize={PAGE_SIZE}
+              total={total}
+              isLoading={isRefreshing}
+              onPageChange={setPage}
             />
           </>
         )}
