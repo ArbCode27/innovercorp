@@ -206,15 +206,14 @@ export const CrmShell = () => {
                       "[CRM_SHELL] reinforce_assign_after_payment_failed",
                       assignError,
                     );
-                    await crm.loadData();
+                    void crm.loadData();
                   }
                 }}
                 onOpenClientChat={(conversationId: number) => {
-                  void (async () => {
-                    await crm.loadData();
-                    await crm.selectConversation(conversationId);
-                    setActiveView("my-conversations");
-                  })();
+                  // Navigate immediately; refresh inbox in background.
+                  setActiveView("my-conversations");
+                  void crm.selectConversation(conversationId);
+                  void crm.loadData();
                 }}
               />
             ) : null}

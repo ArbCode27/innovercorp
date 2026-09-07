@@ -13,10 +13,6 @@ import { formatPaymentField } from "../../_lib/payments";
 import type { Agent } from "../../_lib/types";
 import { CrmButton } from "../shared/crm-button";
 import { LoadingState } from "../shared/loading-state";
-import {
-  OpenClientChatDialog,
-  type OpenClientChatPrompt,
-} from "./open-client-chat-dialog";
 import { PaymentsFilters } from "./payments-filters";
 import { PaymentsStats } from "./payments-stats";
 import { PaymentsTable } from "./payments-table";
@@ -92,10 +88,6 @@ export const PaymentsView = ({
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
-  const [chatPrompt, setChatPrompt] = useState<OpenClientChatPrompt | null>(
-    null,
-  );
-  const [isChatPromptOpen, setIsChatPromptOpen] = useState(false);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -166,21 +158,40 @@ export const PaymentsView = ({
     setBank("all");
   };
 
-  const offerOpenClientChat = (
-    payment: CrmPayment,
-    conversationIdOverride?: number | null,
+  /** Local list/stats update — no full refetch after approve/reject. */
+  const applyLocalPaymentUpdate = (
+    previous: CrmPayment | undefined,
+    nextPayment: CrmPayment,
   ) => {
-    if (!onOpenClientChat) return;
-    const conversationId = Number(
-      conversationIdOverride ?? payment.conversation_id,
-    );
-    if (!Number.isFinite(conversationId) || conversationId <= 0) return;
+    const previousStatus = previous?.status;
+    const nextStatus = nextPayment.status;
 
-    setChatPrompt({
-      conversationId,
-      clientName: formatPaymentField(payment.client_name),
+    if (previousStatus && previousStatus !== nextStatus) {
+      setCounts((current) => ({
+        ...current,
+        [previousStatus]: Math.max(0, (current[previousStatus] || 0) - 1),
+        [nextStatus]: (current[nextStatus] || 0) + 1,
+      }));
+    }
+
+    const matchesStatusFilter =
+      status === "all" || status === nextStatus;
+
+    if (!matchesStatusFilter) {
+      setPayments((current) =>
+        current.filter((payment) => payment.id !== nextPayment.id),
+      );
+      setTotal((current) => Math.max(0, current - 1));
+      return;
+    }
+
+    setPayments((current) => {
+      const exists = current.some((payment) => payment.id === nextPayment.id);
+      if (!exists) return [nextPayment, ...current];
+      return current.map((payment) =>
+        payment.id === nextPayment.id ? nextPayment : payment,
+      );
     });
-    setIsChatPromptOpen(true);
   };
 
   const handlePaymentAction = async (
@@ -219,11 +230,7 @@ export const PaymentsView = ({
 
       if (!response.ok || !payload.ok || !payload.payment) {
         if (payload.payment) {
-          setPayments((current) =>
-            current.map((payment) =>
-              payment.id === paymentId ? payload.payment! : payment,
-            ),
-          );
+          applyLocalPaymentUpdate(paymentBeforeAction, payload.payment);
         }
         throw new Error(payload.error || "No se pudo actualizar el estado");
       }
@@ -238,7 +245,7 @@ export const PaymentsView = ({
           ? resolvedConversationId
           : null;
 
-      const approvedPayment: CrmPayment = {
+      const nextPayment: CrmPayment = {
         ...payload.payment,
         conversation_id:
           conversationId ?? payload.payment.conversation_id ?? null,
@@ -246,21 +253,27 @@ export const PaymentsView = ({
           payload.payment.client_name ||
           paymentBeforeAction?.client_name ||
           null,
+        phone_id:
+          payload.payment.phone_id || paymentBeforeAction?.phone_id || null,
+        latest_invoice_date:
+          payload.payment.latest_invoice_date ??
+          paymentBeforeAction?.latest_invoice_date ??
+          null,
       };
 
-      setPayments((current) =>
-        current.map((payment) =>
-          payment.id === paymentId ? approvedPayment : payment,
-        ),
-      );
-      await loadPayments("refresh");
+      applyLocalPaymentUpdate(paymentBeforeAction, nextPayment);
 
       if (conversationId) {
-        await onPaymentReviewed?.({
-          conversationId,
-          agentId: currentAgent.id,
-          action,
-          assigned: Boolean(payload.assigned),
+        // Background: reinforce assign + refresh inbox (don't block UI).
+        void Promise.resolve(
+          onPaymentReviewed?.({
+            conversationId,
+            agentId: currentAgent.id,
+            action,
+            assigned: Boolean(payload.assigned),
+          }),
+        ).catch((reviewError) => {
+          console.warn("[PAYMENTS] onPaymentReviewed_failed", reviewError);
         });
 
         if (!payload.assigned) {
@@ -271,9 +284,20 @@ export const PaymentsView = ({
       }
 
       if (action === "approve") {
-        offerOpenClientChat(approvedPayment, conversationId);
-      } else if (payload.assigned) {
-        toast.success("Pago rechazado y chat asignado a ti");
+        toast.success(
+          `Pago de ${formatPaymentField(nextPayment.client_name)} aprobado`,
+        );
+        if (conversationId && onOpenClientChat) {
+          onOpenClientChat(conversationId);
+        } else if (!conversationId) {
+          toast.info("Pago aprobado. No hay chat vinculado para abrir.");
+        }
+      } else {
+        toast.success(
+          payload.assigned
+            ? "Pago rechazado y chat asignado a ti"
+            : "Pago rechazado",
+        );
       }
     } catch (updateError) {
       setError(
@@ -294,15 +318,12 @@ export const PaymentsView = ({
     void handlePaymentAction(paymentId, "reject");
   };
 
-  const handleConfirmOpenChat = (prompt: OpenClientChatPrompt) => {
-    onOpenClientChat?.(prompt.conversationId);
-  };
-
   return (
     <div className={`crm-scrollbar min-h-0 flex-1 overflow-y-auto p-4 md:p-6`}>
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className={`text-xl font-semibold md:text-2xl ${CRM_SURFACES.textPrimary}`}>
+          <h2
+            className={`text-xl font-semibold md:text-2xl ${CRM_SURFACES.textPrimary}`}>
             Pagos
           </h2>
           <p className={`text-sm ${CRM_SURFACES.textMuted}`}>
@@ -364,16 +385,6 @@ export const PaymentsView = ({
           </>
         )}
       </div>
-
-      <OpenClientChatDialog
-        open={isChatPromptOpen}
-        prompt={chatPrompt}
-        onOpenChange={(open) => {
-          setIsChatPromptOpen(open);
-          if (!open) setChatPrompt(null);
-        }}
-        onConfirm={handleConfirmOpenChat}
-      />
     </div>
   );
 };

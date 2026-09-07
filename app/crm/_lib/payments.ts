@@ -113,6 +113,23 @@ export const canRejectPayment = (payment: { status: CrmPaymentStatus }) =>
   payment.status === "EN_PROCESO" ||
   payment.status === "ERROR";
 
+/** Digits-only WhatsApp destination for wa.me links. */
+export const normalizeWhatsAppPhoneDigits = (
+  phone: string | null | undefined,
+): string | null => {
+  const digits = String(phone || "").replace(/\D/g, "");
+  if (digits.length < 8 || digits.length > 15) return null;
+  return digits;
+};
+
+/** Public WhatsApp chat URL, or null when phone_id is missing/invalid. */
+export const buildWhatsAppMeUrl = (
+  phone: string | null | undefined,
+): string | null => {
+  const digits = normalizeWhatsAppPhoneDigits(phone);
+  return digits ? `https://wa.me/${digits}` : null;
+};
+
 export const formatPaymentDate = (value: string) => {
   const dateOnly = value.slice(0, 10);
   const [year, month, day] = dateOnly.split("-").map(Number);
