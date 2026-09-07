@@ -381,6 +381,7 @@ export const PaymentsView = ({
               updatingId={updatingId}
               onApprove={handleApprove}
               onReject={handleReject}
+              onOpenChat={onOpenClientChat}
             />
           </>
         )}
