@@ -287,11 +287,6 @@ export const PaymentsView = ({
         toast.success(
           `Pago de ${formatPaymentField(nextPayment.client_name)} aprobado`,
         );
-        if (conversationId && onOpenClientChat) {
-          onOpenClientChat(conversationId);
-        } else if (!conversationId) {
-          toast.info("Pago aprobado. No hay chat vinculado para abrir.");
-        }
       } else {
         toast.success(
           payload.assigned

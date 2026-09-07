@@ -161,7 +161,7 @@ export const PaymentsTable = ({
                         size="icon"
                         variant="ghost"
                         disabled={!hasCrmChat || !onOpenChat}
-                        className="size-8 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 dark:text-emerald-400 dark:hover:bg-emerald-950/50 dark:hover:text-emerald-300"
+                        className="size-8 cursor-pointer text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 disabled:cursor-not-allowed dark:text-emerald-400 dark:hover:bg-emerald-950/50 dark:hover:text-emerald-300"
                         title={
                           hasCrmChat
                             ? `Abrir chat de ${clientName}`
