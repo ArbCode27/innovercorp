@@ -17,8 +17,28 @@ export const assignConversationToAgent = async (
   agentName: string | null;
   conversationId: number;
 }> => {
-  const conversationId = input.conversationId;
-  const agentId = input.agentId;
+  const conversationId = Number(input.conversationId);
+  const agentId = Number(input.agentId);
+
+  if (!Number.isFinite(conversationId) || conversationId <= 0) {
+    console.warn(`${LOG_PREFIX} invalid_conversation_id`, {
+      conversationId: input.conversationId,
+      agentId: input.agentId,
+    });
+    return {
+      assigned: false,
+      agentName: null,
+      conversationId: conversationId || 0,
+    };
+  }
+
+  if (!Number.isFinite(agentId) || agentId <= 0) {
+    console.warn(`${LOG_PREFIX} invalid_agent_id`, {
+      conversationId,
+      agentId: input.agentId,
+    });
+    return { assigned: false, agentName: null, conversationId };
+  }
 
   const { data: agent, error: agentError } = await supabase
     .from("agents")
@@ -53,10 +73,10 @@ export const assignConversationToAgent = async (
     return { assigned: false, agentName, conversationId };
   }
 
-  const nextStatus =
-    conversation.status === "resuelto" ? "proceso" : conversation.status;
+  const currentStatus = String(conversation.status || "").trim().toLowerCase();
+  const nextStatus = currentStatus === "resuelto" ? "proceso" : conversation.status;
 
-  const { error: updateError } = await supabase
+  const { data: updated, error: updateError } = await supabase
     .from("conversations")
     .update({
       agent_id: agentId,
@@ -65,58 +85,61 @@ export const assignConversationToAgent = async (
       status: nextStatus,
       updated_at: now,
     })
-    .eq("id", conversationId);
+    .eq("id", conversationId)
+    .select("id, agent_id, human_mode")
+    .maybeSingle();
 
-  if (updateError) {
+  if (updateError || !updated) {
     console.warn(`${LOG_PREFIX} assign_failed`, {
       conversationId,
       agentId,
-      error: updateError.message,
+      error: updateError?.message || "no_row_returned",
     });
     return { assigned: false, agentName, conversationId };
   }
+
+  const persistedAgentId = Number(updated.agent_id);
+  const assignedOk = persistedAgentId === agentId;
 
   console.log(`${LOG_PREFIX} assigned`, {
     conversationId,
     agentId,
     agentName,
     previousAgentId: conversation.agent_id ?? null,
+    persistedAgentId,
+    humanMode: updated.human_mode,
     status: nextStatus,
+    assignedOk,
   });
 
-  return { assigned: true, agentName, conversationId };
+  return { assigned: assignedOk, agentName, conversationId };
 };
 
 /**
  * Prefer payment.conversation_id; else newest open conversation for the client.
+ * Coerces string/bigint ids from PostgREST.
  */
 export const resolveConversationIdForPayment = async (
   supabase: SupabaseClient,
   input: {
-    conversationId?: number | null;
-    clientId?: number | null;
+    conversationId?: number | string | null;
+    clientId?: number | string | null;
   },
 ): Promise<number | null> => {
-  if (
-    typeof input.conversationId === "number" &&
-    Number.isFinite(input.conversationId) &&
-    input.conversationId > 0
-  ) {
-    return input.conversationId;
+  const conversationId = Number(input.conversationId);
+  if (Number.isFinite(conversationId) && conversationId > 0) {
+    return conversationId;
   }
 
-  if (
-    typeof input.clientId !== "number" ||
-    !Number.isFinite(input.clientId) ||
-    input.clientId <= 0
-  ) {
+  const clientId = Number(input.clientId);
+  if (!Number.isFinite(clientId) || clientId <= 0) {
     return null;
   }
 
   const { data, error } = await supabase
     .from("conversations")
     .select("id")
-    .eq("client_id", input.clientId)
+    .eq("client_id", clientId)
     .neq("status", "resuelto")
     .order("updated_at", { ascending: false })
     .limit(1)
@@ -124,11 +147,12 @@ export const resolveConversationIdForPayment = async (
 
   if (error) {
     console.warn(`${LOG_PREFIX} resolve_by_client_failed`, {
-      clientId: input.clientId,
+      clientId,
       error: error.message,
     });
     return null;
   }
 
-  return data?.id ?? null;
+  const resolved = Number(data?.id);
+  return Number.isFinite(resolved) && resolved > 0 ? resolved : null;
 };

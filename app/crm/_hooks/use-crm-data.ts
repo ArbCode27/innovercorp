@@ -422,8 +422,9 @@ export const useCrmData = (agent: Agent | null) => {
   const myAssignedConversations = useMemo(() => {
     if (!agent) return [];
 
+    const agentId = Number(agent.id);
     return data.conversations.filter(
-      (conversation) => conversation.agent_id === agent.id,
+      (conversation) => Number(conversation.agent_id) === agentId,
     );
   }, [agent, data.conversations]);
 
@@ -1048,7 +1049,9 @@ export const useCrmData = (agent: Agent | null) => {
   };
 
   const assignAgent = async (conversationId: number, agentId: number) => {
-    const assignedAgent = data.agents.find((item) => item.id === agentId);
+    const assignedAgent = data.agents.find(
+      (item) => Number(item.id) === Number(agentId),
+    );
     await crmService.updateConversation(conversationId, {
       agent_id: agentId,
       human_mode: true,
@@ -1056,6 +1059,21 @@ export const useCrmData = (agent: Agent | null) => {
     });
     await loadData();
     toast.success("Conversación asignada");
+  };
+
+  /** Silent claim used after payment approve/reject (no toast). */
+  const claimConversationForAgent = async (
+    conversationId: number,
+    agentId: number,
+  ) => {
+    const assignedAgent =
+      data.agents.find((item) => Number(item.id) === Number(agentId)) || agent;
+    await crmService.updateConversation(conversationId, {
+      agent_id: agentId,
+      human_mode: true,
+      agent_control: assignedAgent?.name ?? null,
+    });
+    await loadData();
   };
 
   const createClient = async (input: CreateClientInput) => {
@@ -1382,6 +1400,7 @@ export const useCrmData = (agent: Agent | null) => {
     updateLabels,
     quickToggleLabel,
     assignAgent,
+    claimConversationForAgent,
     createClient,
     associateWisproToConversation,
     unlinkWisproFromClient,

@@ -195,6 +195,20 @@ export const CrmShell = () => {
             {activeView === "payments" ? (
               <PaymentsView
                 currentAgent={auth.agent}
+                onPaymentReviewed={async ({ conversationId, agentId }) => {
+                  try {
+                    await crm.claimConversationForAgent(
+                      conversationId,
+                      agentId,
+                    );
+                  } catch (assignError) {
+                    console.warn(
+                      "[CRM_SHELL] reinforce_assign_after_payment_failed",
+                      assignError,
+                    );
+                    await crm.loadData();
+                  }
+                }}
                 onOpenClientChat={(conversationId: number) => {
                   void (async () => {
                     await crm.loadData();

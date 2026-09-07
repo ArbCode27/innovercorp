@@ -19,11 +19,10 @@ import {
 } from "@/app/api/crm/_lib/wispro-api";
 import { matchInvoicesToPaymentAmount } from "@/app/api/crm/_lib/wispro-invoice-match";
 import { getCrmSettings } from "@/app/api/crm/_lib/crm-settings";
-import { applyPaymentApprovedLabels } from "@/app/api/crm/_lib/conversation-labels";
 import {
-  assignConversationToAgent,
-  resolveConversationIdForPayment,
-} from "@/app/api/crm/_lib/conversation-assign";
+  applyPaymentReviewOwnership,
+  patchPaymentReceiptMetadata,
+} from "@/app/api/crm/_lib/payment-review-ownership";
 import { buildPaymentSuccessMessage } from "@/app/crm/_lib/payment-success-message";
 
 type PaymentWithLatestInvoice = Awaited<
@@ -275,15 +274,31 @@ const notifyClientPaymentApproved = async (
   }
 
   const nextMetadata = {
-    ...(input.payment.receipt_metadata || {}),
     payment_loaded_notified_at: now,
     payment_loaded_notified_wa_message_id: waMessageId,
     payment_loaded_notified_to: recipientPhone,
   };
 
+  // Merge — do not replace whole receipt_metadata (preserves assign/label audit).
+  const { data: latest } = await supabase
+    .from("crm_payments")
+    .select("receipt_metadata")
+    .eq("id", input.payment.id)
+    .maybeSingle();
+
+  const currentMeta =
+    latest?.receipt_metadata && typeof latest.receipt_metadata === "object"
+      ? (latest.receipt_metadata as Record<string, unknown>)
+      : input.payment.receipt_metadata || {};
+
   await supabase
     .from("crm_payments")
-    .update({ receipt_metadata: nextMetadata })
+    .update({
+      receipt_metadata: {
+        ...currentMeta,
+        ...nextMetadata,
+      },
+    })
     .eq("id", input.payment.id);
 
   return { sent: true, skipped: null };
@@ -321,8 +336,11 @@ const listQuerySchema = z.object({
 const patchSchema = z.object({
   id: z.string().uuid(),
   action: z.enum(["approve", "reject"]),
-  /** Advisor approving/rejecting — used to assign the client chat on approve. */
-  agent_id: z.coerce.number().int().positive().optional(),
+  /** Required: advisor reviewing the payment (owns the client chat after review). */
+  agent_id: z.coerce
+    .number()
+    .int()
+    .positive("agent_id es requerido para aprobar o rechazar"),
 });
 
 export async function GET(req: NextRequest) {
@@ -401,7 +419,23 @@ export async function PATCH(req: NextRequest) {
 
     if (parsed.data.action === "reject") {
       const payment = await rejectCrmPayment(supabase, currentPayment.id);
-      return NextResponse.json({ ok: true, payment });
+      const ownership = await applyPaymentReviewOwnership(supabase, {
+        paymentId: currentPayment.id,
+        conversationId: payment?.conversation_id ?? currentPayment.conversation_id,
+        clientId: payment?.client_id ?? currentPayment.client_id,
+        agentId: parsed.data.agent_id,
+        action: "reject",
+      });
+
+      return NextResponse.json({
+        ok: true,
+        payment,
+        conversation_id: ownership.conversationId,
+        assigned: ownership.assigned,
+        assigned_agent_id: ownership.agentId,
+        assigned_agent_name: ownership.agentName,
+        assign_skip_reason: ownership.skipReason,
+      });
     }
 
     if (currentPayment.status === "RECIBIDO") {
@@ -528,109 +562,40 @@ export async function PATCH(req: NextRequest) {
         wisproPayment,
       });
 
-      const conversationId = await resolveConversationIdForPayment(supabase, {
+      const ownership = await applyPaymentReviewOwnership(supabase, {
+        paymentId: currentPayment.id,
         conversationId:
           payment?.conversation_id ?? currentPayment.conversation_id,
         clientId: payment?.client_id ?? currentPayment.client_id,
+        agentId: parsed.data.agent_id,
+        action: "approve",
       });
-
-      let labelMeta: Record<string, unknown> | null = null;
-      let assignMeta: Record<string, unknown> | null = null;
-
-      if (conversationId) {
-        try {
-          const labels = await applyPaymentApprovedLabels(
-            supabase,
-            conversationId,
-          );
-          labelMeta = {
-            pagado_api_applied: labels.pagadoApi.applied,
-            pagado_api_label_id: labels.pagadoApi.labelId,
-            verificar_pago_removed: labels.verificarPagoRemoved,
-          };
-        } catch (labelError) {
-          console.warn("[CRM_PAYMENTS] pagado_api_label_soft_failed", {
-            paymentId: currentPayment.id,
-            conversationId,
-            error:
-              labelError instanceof Error
-                ? labelError.message
-                : String(labelError),
-          });
-        }
-
-        const approvingAgentId = parsed.data.agent_id;
-        if (approvingAgentId) {
-          try {
-            const assigned = await assignConversationToAgent(supabase, {
-              conversationId,
-              agentId: approvingAgentId,
-            });
-            assignMeta = {
-              assigned: assigned.assigned,
-              agent_id: approvingAgentId,
-              agent_name: assigned.agentName,
-            };
-          } catch (assignError) {
-            console.warn("[CRM_PAYMENTS] assign_chat_soft_failed", {
-              paymentId: currentPayment.id,
-              conversationId,
-              agentId: approvingAgentId,
-              error:
-                assignError instanceof Error
-                  ? assignError.message
-                  : String(assignError),
-            });
-          }
-        } else {
-          console.warn("[CRM_PAYMENTS] approve_missing_agent_id", {
-            paymentId: currentPayment.id,
-            conversationId,
-          });
-        }
-      }
-
-      if (labelMeta || assignMeta) {
-        const baseMeta =
-          payment?.receipt_metadata || currentPayment.receipt_metadata || {};
-        await supabase
-          .from("crm_payments")
-          .update({
-            receipt_metadata: {
-              ...baseMeta,
-              ...(labelMeta ? { payment_approved_labels: labelMeta } : {}),
-              ...(assignMeta ? { payment_approved_assign: assignMeta } : {}),
-            },
-          })
-          .eq("id", currentPayment.id);
-      }
 
       try {
         await notifyClientPaymentApproved(supabase, {
           payment: payment || currentPayment,
-          conversationId: conversationId ?? currentPayment.conversation_id,
+          conversationId:
+            ownership.conversationId ?? currentPayment.conversation_id,
         });
       } catch (notificationError) {
-        const nextMetadata = {
-          ...(payment?.receipt_metadata || currentPayment.receipt_metadata || {}),
+        await patchPaymentReceiptMetadata(supabase, currentPayment.id, {
           payment_loaded_notification_error:
             notificationError instanceof Error
               ? notificationError.message
               : "No se pudo notificar por WhatsApp",
           payment_loaded_notification_error_at: new Date().toISOString(),
-        };
-        await supabase
-          .from("crm_payments")
-          .update({ receipt_metadata: nextMetadata })
-          .eq("id", currentPayment.id);
+        });
       }
 
       return NextResponse.json({
         ok: true,
         payment,
         wisproPayment,
-        conversation_id: conversationId,
-        assigned_agent_id: parsed.data.agent_id ?? null,
+        conversation_id: ownership.conversationId,
+        assigned: ownership.assigned,
+        assigned_agent_id: ownership.agentId,
+        assigned_agent_name: ownership.agentName,
+        assign_skip_reason: ownership.skipReason,
       });
     } catch (approvalError) {
       const message =

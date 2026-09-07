@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { RefreshCw } from "lucide-react";
+import { toast } from "sonner";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
 import type {
   CrmPayment,
@@ -59,14 +60,24 @@ const EMPTY_COUNTS: CrmPaymentStatusCounts = {
   ERROR: 0,
 };
 
+export type PaymentReviewedPayload = {
+  conversationId: number;
+  agentId: number;
+  action: "approve" | "reject";
+  assigned: boolean;
+};
+
 interface PaymentsViewProps {
   currentAgent?: Pick<Agent, "id" | "name"> | null;
   onOpenClientChat?: (conversationId: number) => void;
+  /** After approve/reject: refresh CRM inbox + reinforce assignment. */
+  onPaymentReviewed?: (payload: PaymentReviewedPayload) => void | Promise<void>;
 }
 
 export const PaymentsView = ({
   currentAgent,
   onOpenClientChat,
+  onPaymentReviewed,
 }: PaymentsViewProps) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -155,10 +166,15 @@ export const PaymentsView = ({
     setBank("all");
   };
 
-  const offerOpenClientChat = (payment: CrmPayment) => {
+  const offerOpenClientChat = (
+    payment: CrmPayment,
+    conversationIdOverride?: number | null,
+  ) => {
     if (!onOpenClientChat) return;
-    const conversationId = payment.conversation_id;
-    if (!conversationId || !Number.isFinite(conversationId)) return;
+    const conversationId = Number(
+      conversationIdOverride ?? payment.conversation_id,
+    );
+    if (!Number.isFinite(conversationId) || conversationId <= 0) return;
 
     setChatPrompt({
       conversationId,
@@ -171,6 +187,12 @@ export const PaymentsView = ({
     paymentId: string,
     action: "approve" | "reject",
   ) => {
+    if (!currentAgent?.id) {
+      setError("Debes iniciar sesión como asesor para gestionar pagos");
+      toast.error("Sesión de asesor requerida");
+      return;
+    }
+
     setUpdatingId(paymentId);
     setError(null);
     const paymentBeforeAction = payments.find((item) => item.id === paymentId);
@@ -182,13 +204,17 @@ export const PaymentsView = ({
         body: JSON.stringify({
           id: paymentId,
           action,
-          ...(currentAgent?.id ? { agent_id: currentAgent.id } : {}),
+          agent_id: currentAgent.id,
         }),
       });
       const payload = (await response.json()) as {
         ok?: boolean;
         error?: string;
         payment?: CrmPayment;
+        conversation_id?: number | null;
+        assigned?: boolean;
+        assigned_agent_id?: number | null;
+        assign_skip_reason?: string | null;
       };
 
       if (!response.ok || !payload.ok || !payload.payment) {
@@ -202,12 +228,20 @@ export const PaymentsView = ({
         throw new Error(payload.error || "No se pudo actualizar el estado");
       }
 
+      const resolvedConversationId = Number(
+        payload.conversation_id ??
+          payload.payment.conversation_id ??
+          paymentBeforeAction?.conversation_id,
+      );
+      const conversationId =
+        Number.isFinite(resolvedConversationId) && resolvedConversationId > 0
+          ? resolvedConversationId
+          : null;
+
       const approvedPayment: CrmPayment = {
         ...payload.payment,
         conversation_id:
-          payload.payment.conversation_id ??
-          paymentBeforeAction?.conversation_id ??
-          null,
+          conversationId ?? payload.payment.conversation_id ?? null,
         client_name:
           payload.payment.client_name ||
           paymentBeforeAction?.client_name ||
@@ -221,8 +255,25 @@ export const PaymentsView = ({
       );
       await loadPayments("refresh");
 
+      if (conversationId) {
+        await onPaymentReviewed?.({
+          conversationId,
+          agentId: currentAgent.id,
+          action,
+          assigned: Boolean(payload.assigned),
+        });
+
+        if (!payload.assigned) {
+          toast.warning(
+            "El pago se actualizó, pero no se pudo asignar el chat automáticamente",
+          );
+        }
+      }
+
       if (action === "approve") {
-        offerOpenClientChat(approvedPayment);
+        offerOpenClientChat(approvedPayment, conversationId);
+      } else if (payload.assigned) {
+        toast.success("Pago rechazado y chat asignado a ti");
       }
     } catch (updateError) {
       setError(

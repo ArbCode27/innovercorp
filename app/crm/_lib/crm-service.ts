@@ -185,10 +185,14 @@ export const crmService = {
       quickReplies: (quickReplies.data || []) as QuickReply[],
       conversations:
         currentAgent.role === "agent"
-          ? rawConversations.filter(
-              (conversation) =>
-                !conversation.agent_id || conversation.agent_id === currentAgent.id
-            )
+          ? rawConversations.filter((conversation) => {
+              const ownerId = Number(conversation.agent_id);
+              return (
+                !Number.isFinite(ownerId) ||
+                ownerId <= 0 ||
+                ownerId === Number(currentAgent.id)
+              );
+            })
           : rawConversations,
       agents: (agents.data || []) as Agent[],
       settings: crmSettings,
