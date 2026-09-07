@@ -70,7 +70,7 @@ export const PaymentsView = ({
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [dateRange, setDateRange] = useState<PaymentsDateRange>(DEFAULT_DATE_RANGE);
-  const [status, setStatus] = useState<CrmPaymentStatus | "all">("all");
+  const [status, setStatus] = useState<CrmPaymentStatus | "all">("EN_PROCESO");
   const [bank, setBank] = useState("all");
   const [page, setPage] = useState(1);
   const [payments, setPayments] = useState<CrmPayment[]>([]);
@@ -153,7 +153,7 @@ export const PaymentsView = ({
     setSearchTerm("");
     setDebouncedSearch("");
     setDateRange(DEFAULT_DATE_RANGE());
-    setStatus("all");
+    setStatus("EN_PROCESO");
     setBank("all");
     setPage(1);
   };

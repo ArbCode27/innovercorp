@@ -105,7 +105,7 @@ export const PaymentsFilters = ({
     searchTerm ||
       dateRange.from ||
       dateRange.to ||
-      status !== "all" ||
+      status !== "EN_PROCESO" ||
       bank !== "all",
   );
 
@@ -161,15 +161,18 @@ export const PaymentsFilters = ({
             <CrmButton
               type="button"
               variant="secondary"
-              className={`h-9 w-full justify-start gap-2 px-3 font-normal ${CRM_SURFACES.border} ${CRM_SURFACES.input}`}
+              className={`h-9 w-full cursor-pointer justify-start gap-2 px-3 font-normal ${CRM_SURFACES.border} ${CRM_SURFACES.input} ${CRM_SURFACES.textPrimary}`}
               aria-label="Filtrar por fecha o rango">
-              <CalendarIcon className="size-4 shrink-0" aria-hidden="true" />
+              <CalendarIcon
+                className="size-4 shrink-0 text-crm-accent-muted-foreground"
+                aria-hidden="true"
+              />
               <span className="truncate">{formatRangeLabel(dateRange)}</span>
             </CrmButton>
           </PopoverTrigger>
           <PopoverContent
             align="start"
-            className={`w-auto p-0 ${CRM_MENU}`}
+            className={`w-auto overflow-hidden rounded-2xl border p-0 shadow-lg ${CRM_SURFACES.border} ${CRM_MENU}`}
             sideOffset={8}>
             <Calendar
               mode="range"
@@ -189,6 +192,7 @@ export const PaymentsFilters = ({
                 type="button"
                 variant="ghost"
                 size="sm"
+                className="cursor-pointer text-crm-accent-muted-foreground hover:bg-crm-accent-muted hover:text-crm-accent-muted-foreground"
                 disabled={!dateRange.from && !dateRange.to}
                 onClick={() => {
                   onDateRangeChange({ from: null, to: null });
