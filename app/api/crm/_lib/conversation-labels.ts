@@ -1,11 +1,16 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-export type CrmAutoLabelKey = "verificar_pago" | "soporte" | "ia_error";
+export type CrmAutoLabelKey =
+  | "verificar_pago"
+  | "pagado_api"
+  | "soporte"
+  | "ia_error";
 
 const LOG_PREFIX = "[CRM_LABELS]";
 
 const LABEL_ENV_KEYS: Record<CrmAutoLabelKey, string> = {
   verificar_pago: "CRM_LABEL_VERIFICAR_PAGO_ID",
+  pagado_api: "CRM_LABEL_PAGADO_API_ID",
   soporte: "CRM_LABEL_SOPORTE_ID",
   ia_error: "CRM_LABEL_IA_ERROR_ID",
 };
@@ -13,6 +18,7 @@ const LABEL_ENV_KEYS: Record<CrmAutoLabelKey, string> = {
 /** Name fallbacks when env ID is not set (matched case-insensitive). */
 const LABEL_NAME_CANDIDATES: Record<CrmAutoLabelKey, string[]> = {
   verificar_pago: ["verificar pago", "verificar_pago", "verificacion de pago"],
+  pagado_api: ["pagado api", "pagado_api", "pago api"],
   soporte: ["soporte", "soporte tecnico", "soporte técnico", "falla tecnica"],
   ia_error: [
     "ia error",
@@ -77,6 +83,13 @@ export const resolveAutoLabelId = async (
   return resolveLabelIdByName(supabase, key);
 };
 
+const readConversationLabelIds = (value: unknown): number[] => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => Number(item))
+    .filter((id) => Number.isFinite(id) && id > 0);
+};
+
 /**
  * Appends a label to conversation.label_ids without duplicates.
  * Soft-fails (logs) if the label cannot be resolved or the update fails.
@@ -112,11 +125,7 @@ export const ensureConversationLabel = async (
     return { applied: false, labelId };
   }
 
-  const currentIds = Array.isArray(conversation.label_ids)
-    ? conversation.label_ids
-        .map((value) => Number(value))
-        .filter((value) => Number.isFinite(value) && value > 0)
-    : [];
+  const currentIds = readConversationLabelIds(conversation.label_ids);
 
   if (currentIds.includes(labelId)) {
     return { applied: true, labelId };
@@ -149,4 +158,94 @@ export const ensureConversationLabel = async (
   });
 
   return { applied: true, labelId };
+};
+
+/**
+ * Removes a resolved auto-label from conversation.label_ids if present.
+ * Soft-fails on missing label or update errors.
+ */
+export const removeConversationLabel = async (
+  supabase: SupabaseClient,
+  conversationId: number,
+  key: CrmAutoLabelKey,
+): Promise<{ removed: boolean; labelId: number | null }> => {
+  const labelId = await resolveAutoLabelId(supabase, key);
+  if (!labelId) {
+    return { removed: false, labelId: null };
+  }
+
+  const { data: conversation, error: readError } = await supabase
+    .from("conversations")
+    .select("id, label_ids")
+    .eq("id", conversationId)
+    .maybeSingle();
+
+  if (readError || !conversation) {
+    console.warn(`${LOG_PREFIX} conversation_read_failed_on_remove`, {
+      conversationId,
+      key,
+      labelId,
+      error: readError?.message || "not_found",
+    });
+    return { removed: false, labelId };
+  }
+
+  const currentIds = readConversationLabelIds(conversation.label_ids);
+  if (!currentIds.includes(labelId)) {
+    return { removed: false, labelId };
+  }
+
+  const nextIds = currentIds.filter((id) => id !== labelId);
+  const { error: updateError } = await supabase
+    .from("conversations")
+    .update({
+      label_ids: nextIds,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", conversationId);
+
+  if (updateError) {
+    console.warn(`${LOG_PREFIX} label_remove_failed`, {
+      conversationId,
+      key,
+      labelId,
+      error: updateError.message,
+    });
+    return { removed: false, labelId };
+  }
+
+  console.log(`${LOG_PREFIX} label_removed`, {
+    conversationId,
+    key,
+    labelId,
+    labelIds: nextIds,
+  });
+
+  return { removed: true, labelId };
+};
+
+/**
+ * After payment approval: apply PAGADO API and drop Verificar pago if present.
+ */
+export const applyPaymentApprovedLabels = async (
+  supabase: SupabaseClient,
+  conversationId: number,
+): Promise<{
+  pagadoApi: { applied: boolean; labelId: number | null };
+  verificarPagoRemoved: boolean;
+}> => {
+  const pagadoApi = await ensureConversationLabel(
+    supabase,
+    conversationId,
+    "pagado_api",
+  );
+  const removed = await removeConversationLabel(
+    supabase,
+    conversationId,
+    "verificar_pago",
+  );
+  return {
+    pagadoApi,
+    verificarPagoRemoved: removed.removed,
+  };
 };

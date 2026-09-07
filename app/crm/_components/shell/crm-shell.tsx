@@ -194,16 +194,13 @@ export const CrmShell = () => {
             ) : null}
             {activeView === "payments" ? (
               <PaymentsView
+                currentAgent={auth.agent}
                 onOpenClientChat={(conversationId: number) => {
-                  void crm.selectConversation(conversationId);
-                  const assignedToMe = crm.conversations.some(
-                    (conversation) =>
-                      conversation.id === conversationId &&
-                      conversation.agent_id === auth.agent?.id,
-                  );
-                  setActiveView(
-                    assignedToMe ? "my-conversations" : "conversations",
-                  );
+                  void (async () => {
+                    await crm.loadData();
+                    await crm.selectConversation(conversationId);
+                    setActiveView("my-conversations");
+                  })();
                 }}
               />
             ) : null}

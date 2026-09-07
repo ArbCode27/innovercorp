@@ -9,6 +9,7 @@ import type {
   CrmPaymentStatusCounts,
 } from "../../_lib/payments";
 import { formatPaymentField } from "../../_lib/payments";
+import type { Agent } from "../../_lib/types";
 import { CrmButton } from "../shared/crm-button";
 import { LoadingState } from "../shared/loading-state";
 import {
@@ -59,10 +60,14 @@ const EMPTY_COUNTS: CrmPaymentStatusCounts = {
 };
 
 interface PaymentsViewProps {
+  currentAgent?: Pick<Agent, "id" | "name"> | null;
   onOpenClientChat?: (conversationId: number) => void;
 }
 
-export const PaymentsView = ({ onOpenClientChat }: PaymentsViewProps) => {
+export const PaymentsView = ({
+  currentAgent,
+  onOpenClientChat,
+}: PaymentsViewProps) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [period, setPeriod] = useState<PaymentPeriod>("today");
@@ -174,7 +179,11 @@ export const PaymentsView = ({ onOpenClientChat }: PaymentsViewProps) => {
       const response = await fetch("/api/crm/payments", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: paymentId, action }),
+        body: JSON.stringify({
+          id: paymentId,
+          action,
+          ...(currentAgent?.id ? { agent_id: currentAgent.id } : {}),
+        }),
       });
       const payload = (await response.json()) as {
         ok?: boolean;

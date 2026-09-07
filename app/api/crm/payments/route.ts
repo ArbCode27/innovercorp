@@ -19,6 +19,11 @@ import {
 } from "@/app/api/crm/_lib/wispro-api";
 import { matchInvoicesToPaymentAmount } from "@/app/api/crm/_lib/wispro-invoice-match";
 import { getCrmSettings } from "@/app/api/crm/_lib/crm-settings";
+import { applyPaymentApprovedLabels } from "@/app/api/crm/_lib/conversation-labels";
+import {
+  assignConversationToAgent,
+  resolveConversationIdForPayment,
+} from "@/app/api/crm/_lib/conversation-assign";
 import { buildPaymentSuccessMessage } from "@/app/crm/_lib/payment-success-message";
 
 type PaymentWithLatestInvoice = Awaited<
@@ -316,6 +321,8 @@ const listQuerySchema = z.object({
 const patchSchema = z.object({
   id: z.string().uuid(),
   action: z.enum(["approve", "reject"]),
+  /** Advisor approving/rejecting — used to assign the client chat on approve. */
+  agent_id: z.coerce.number().int().positive().optional(),
 });
 
 export async function GET(req: NextRequest) {
@@ -521,10 +528,87 @@ export async function PATCH(req: NextRequest) {
         wisproPayment,
       });
 
+      const conversationId = await resolveConversationIdForPayment(supabase, {
+        conversationId:
+          payment?.conversation_id ?? currentPayment.conversation_id,
+        clientId: payment?.client_id ?? currentPayment.client_id,
+      });
+
+      let labelMeta: Record<string, unknown> | null = null;
+      let assignMeta: Record<string, unknown> | null = null;
+
+      if (conversationId) {
+        try {
+          const labels = await applyPaymentApprovedLabels(
+            supabase,
+            conversationId,
+          );
+          labelMeta = {
+            pagado_api_applied: labels.pagadoApi.applied,
+            pagado_api_label_id: labels.pagadoApi.labelId,
+            verificar_pago_removed: labels.verificarPagoRemoved,
+          };
+        } catch (labelError) {
+          console.warn("[CRM_PAYMENTS] pagado_api_label_soft_failed", {
+            paymentId: currentPayment.id,
+            conversationId,
+            error:
+              labelError instanceof Error
+                ? labelError.message
+                : String(labelError),
+          });
+        }
+
+        const approvingAgentId = parsed.data.agent_id;
+        if (approvingAgentId) {
+          try {
+            const assigned = await assignConversationToAgent(supabase, {
+              conversationId,
+              agentId: approvingAgentId,
+            });
+            assignMeta = {
+              assigned: assigned.assigned,
+              agent_id: approvingAgentId,
+              agent_name: assigned.agentName,
+            };
+          } catch (assignError) {
+            console.warn("[CRM_PAYMENTS] assign_chat_soft_failed", {
+              paymentId: currentPayment.id,
+              conversationId,
+              agentId: approvingAgentId,
+              error:
+                assignError instanceof Error
+                  ? assignError.message
+                  : String(assignError),
+            });
+          }
+        } else {
+          console.warn("[CRM_PAYMENTS] approve_missing_agent_id", {
+            paymentId: currentPayment.id,
+            conversationId,
+          });
+        }
+      }
+
+      if (labelMeta || assignMeta) {
+        const baseMeta =
+          payment?.receipt_metadata || currentPayment.receipt_metadata || {};
+        await supabase
+          .from("crm_payments")
+          .update({
+            receipt_metadata: {
+              ...baseMeta,
+              ...(labelMeta ? { payment_approved_labels: labelMeta } : {}),
+              ...(assignMeta ? { payment_approved_assign: assignMeta } : {}),
+            },
+          })
+          .eq("id", currentPayment.id);
+      }
+
       try {
         await notifyClientPaymentApproved(supabase, {
           payment: payment || currentPayment,
-          conversationId: currentPayment.conversation_id,
+          conversationId: conversationId ?? currentPayment.conversation_id,
         });
       } catch (notificationError) {
         const nextMetadata = {
@@ -541,7 +625,13 @@ export async function PATCH(req: NextRequest) {
           .eq("id", currentPayment.id);
       }
 
-      return NextResponse.json({ ok: true, payment, wisproPayment });
+      return NextResponse.json({
+        ok: true,
+        payment,
+        wisproPayment,
+        conversation_id: conversationId,
+        assigned_agent_id: parsed.data.agent_id ?? null,
+      });
     } catch (approvalError) {
       const message =
         approvalError instanceof Error
