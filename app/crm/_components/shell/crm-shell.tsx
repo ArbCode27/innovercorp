@@ -195,7 +195,16 @@ export const CrmShell = () => {
             {activeView === "payments" ? (
               <PaymentsView
                 currentAgent={auth.agent}
-                onPaymentReviewed={async ({ conversationId, agentId }) => {
+                onPaymentReviewed={async ({
+                  conversationId,
+                  agentId,
+                  assigned,
+                }) => {
+                  // API already assigned → patch inbox locally (Realtime will confirm).
+                  if (assigned) {
+                    crm.applyConversationClaimLocally(conversationId, agentId);
+                    return;
+                  }
                   try {
                     await crm.claimConversationForAgent(
                       conversationId,
@@ -206,14 +215,12 @@ export const CrmShell = () => {
                       "[CRM_SHELL] reinforce_assign_after_payment_failed",
                       assignError,
                     );
-                    void crm.loadData();
                   }
                 }}
                 onOpenClientChat={(conversationId: number) => {
-                  // Navigate immediately; refresh inbox in background.
+                  // Navigate immediately; inbox Realtime + select keep UI fresh.
                   setActiveView("my-conversations");
                   void crm.selectConversation(conversationId);
-                  void crm.loadData();
                 }}
               />
             ) : null}

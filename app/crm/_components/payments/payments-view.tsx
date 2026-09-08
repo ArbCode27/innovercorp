@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useTransition } from "react";
 import { RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
@@ -58,7 +58,7 @@ export type PaymentReviewedPayload = {
 interface PaymentsViewProps {
   currentAgent?: Pick<Agent, "id" | "name"> | null;
   onOpenClientChat?: (conversationId: number) => void;
-  /** After approve/reject: refresh CRM inbox + reinforce assignment. */
+  /** After approve/reject: sync inbox assignment locally (no full CRM reload). */
   onPaymentReviewed?: (payload: PaymentReviewedPayload) => void | Promise<void>;
 }
 
@@ -81,6 +81,7 @@ export const PaymentsView = ({
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [, startTransition] = useTransition();
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -208,6 +209,18 @@ export const PaymentsView = ({
     });
   };
 
+  /** After optimistic status change, only patch row fields — avoid double count/total. */
+  const reconcilePaymentRow = (nextPayment: CrmPayment) => {
+    setPayments((current) => {
+      if (!current.some((payment) => payment.id === nextPayment.id)) {
+        return current;
+      }
+      return current.map((payment) =>
+        payment.id === nextPayment.id ? { ...payment, ...nextPayment } : payment,
+      );
+    });
+  };
+
   const handlePaymentAction = async (
     paymentId: string,
     action: "approve" | "reject",
@@ -218,9 +231,32 @@ export const PaymentsView = ({
       return;
     }
 
+    const paymentBeforeAction = payments.find((item) => item.id === paymentId);
+    if (!paymentBeforeAction) {
+      toast.error("No se encontró el pago en la lista");
+      return;
+    }
+
+    const snapshot = {
+      payments,
+      counts,
+      total,
+    };
+
+    const optimisticStatus: CrmPaymentStatus =
+      action === "approve" ? "APROBADO" : "RECHAZADO";
+    const optimisticPayment: CrmPayment = {
+      ...paymentBeforeAction,
+      status: optimisticStatus,
+      error_message: null,
+      updated_at: new Date().toISOString(),
+    };
+
     setUpdatingId(paymentId);
     setError(null);
-    const paymentBeforeAction = payments.find((item) => item.id === paymentId);
+    startTransition(() => {
+      applyLocalPaymentUpdate(paymentBeforeAction, optimisticPayment);
+    });
 
     try {
       const response = await fetch("/api/crm/payments", {
@@ -243,16 +279,13 @@ export const PaymentsView = ({
       };
 
       if (!response.ok || !payload.ok || !payload.payment) {
-        if (payload.payment) {
-          applyLocalPaymentUpdate(paymentBeforeAction, payload.payment);
-        }
         throw new Error(payload.error || "No se pudo actualizar el estado");
       }
 
       const resolvedConversationId = Number(
         payload.conversation_id ??
           payload.payment.conversation_id ??
-          paymentBeforeAction?.conversation_id,
+          paymentBeforeAction.conversation_id,
       );
       const conversationId =
         Number.isFinite(resolvedConversationId) && resolvedConversationId > 0
@@ -265,17 +298,23 @@ export const PaymentsView = ({
           conversationId ?? payload.payment.conversation_id ?? null,
         client_name:
           payload.payment.client_name ||
-          paymentBeforeAction?.client_name ||
+          paymentBeforeAction.client_name ||
           null,
         phone_id:
-          payload.payment.phone_id || paymentBeforeAction?.phone_id || null,
+          payload.payment.phone_id || paymentBeforeAction.phone_id || null,
         latest_invoice_date:
           payload.payment.latest_invoice_date ??
-          paymentBeforeAction?.latest_invoice_date ??
+          paymentBeforeAction.latest_invoice_date ??
           null,
       };
 
-      applyLocalPaymentUpdate(paymentBeforeAction, nextPayment);
+      startTransition(() => {
+        if (nextPayment.status === optimisticStatus) {
+          reconcilePaymentRow(nextPayment);
+        } else {
+          applyLocalPaymentUpdate(optimisticPayment, nextPayment);
+        }
+      });
 
       if (conversationId) {
         void Promise.resolve(
@@ -308,11 +347,17 @@ export const PaymentsView = ({
         );
       }
     } catch (updateError) {
-      setError(
+      startTransition(() => {
+        setPayments(snapshot.payments);
+        setCounts(snapshot.counts);
+        setTotal(snapshot.total);
+      });
+      const message =
         updateError instanceof Error
           ? updateError.message
-          : "No se pudo actualizar el estado",
-      );
+          : "No se pudo actualizar el estado";
+      setError(message);
+      toast.error(message);
     } finally {
       setUpdatingId(null);
     }

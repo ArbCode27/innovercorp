@@ -1061,7 +1061,31 @@ export const useCrmData = (agent: Agent | null) => {
     toast.success("Conversación asignada");
   };
 
-  /** Silent claim used after payment approve/reject (no toast). */
+  /** Patch inbox assignment in memory — no full CRM reload. */
+  const applyConversationClaimLocally = (
+    conversationId: number,
+    agentId: number,
+  ) => {
+    const assignedAgent =
+      data.agents.find((item) => Number(item.id) === Number(agentId)) || agent;
+    const agentName = assignedAgent?.name ?? null;
+
+    setData((current) => ({
+      ...current,
+      conversations: current.conversations.map((conversation) =>
+        Number(conversation.id) === Number(conversationId)
+          ? {
+              ...conversation,
+              agent_id: agentId,
+              human_mode: true,
+              agent_control: agentName,
+            }
+          : conversation,
+      ),
+    }));
+  };
+
+  /** Silent claim after payment review — local patch only (Realtime also syncs). */
   const claimConversationForAgent = async (
     conversationId: number,
     agentId: number,
@@ -1073,7 +1097,7 @@ export const useCrmData = (agent: Agent | null) => {
       human_mode: true,
       agent_control: assignedAgent?.name ?? null,
     });
-    await loadData();
+    applyConversationClaimLocally(conversationId, agentId);
   };
 
   const createClient = async (input: CreateClientInput) => {
@@ -1401,6 +1425,7 @@ export const useCrmData = (agent: Agent | null) => {
     quickToggleLabel,
     assignAgent,
     claimConversationForAgent,
+    applyConversationClaimLocally,
     createClient,
     associateWisproToConversation,
     unlinkWisproFromClient,
