@@ -1,18 +1,14 @@
-import { NextRequest, NextResponse, after } from "next/server";
-// ⚠️ Si tu Next.js es 14.1–14.x (no 15+), `after` todavía es experimental:
-//    import { NextRequest, NextResponse, unstable_after as after } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getInitials, toJsonSafeText } from "@/app/crm/_lib/formatters";
 import { normalizeStorageMimeType } from "../_lib/media-mime";
-import { replyToConversationWithGemini } from "@/app/api/crm/ai/_lib/reply-to-conversation";
-import { sendGuaranteedClientReply } from "@/app/api/crm/ai/_lib/guaranteed-reply";
+import { enqueueGeminiConversationJob } from "@/app/api/crm/_lib/gemini-queue";
 import { refreshClientBillingFromWispro } from "@/app/api/crm/_lib/wispro-billing-refresh";
 
-// Fuerza runtime Node.js explícitamente: el handler usa Buffer y fetch a Graph API,
-// y `after()` se comporta de forma más predecible si esto está declarado a propósito.
+// Fuerza runtime Node.js explícitamente: el handler usa Buffer y fetch a Graph API.
 export const runtime = "nodejs";
-/** Allow Gemini retries + multimodal inside `after()` on Vercel. */
-export const maxDuration = 300;
+/** Media download + enqueue only (Gemini runs in /api/worker). */
+export const maxDuration = 60;
 
 const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN!;
 const GRAPH_API_VERSION = "v19.0";
@@ -1105,6 +1101,7 @@ export async function POST(req: NextRequest) {
       requestSummary.saved = !messageResult.ignored;
 
       // Gemini is the sole bot engine (Make removed).
+      // Inbound turns are enqueued; /api/worker processes Gemini asynchronously.
       // human_mode is enforced inside replyToConversationWithGemini via
       // resolveBotReplyPolicy (after-hours payments may still run).
       if (!messageResult.ignored && messageResult.conversationId) {
@@ -1118,101 +1115,26 @@ export async function POST(req: NextRequest) {
           const conversationIdForGemini = messageResult.conversationId;
           const dbMessageIdForGemini = messageResult.dbMessageId;
 
-          console.log(`${WEBHOOK_LOG_PREFIX} gemini_reply_scheduled`, {
+          console.log(`${WEBHOOK_LOG_PREFIX} gemini_reply_enqueued`, {
             messageId,
             conversationId: conversationIdForGemini,
             messageType,
             humanMode: messageResult.humanMode,
           });
 
-          // `after()` keeps the serverless invocation alive until Gemini finishes.
-          after(async () => {
-            try {
-              const result = await replyToConversationWithGemini(supabase, {
-                conversationId: conversationIdForGemini,
-                triggerMessageId: dbMessageIdForGemini,
-              });
-
-              if (result.ok) {
-                console.log(`${WEBHOOK_LOG_PREFIX} gemini_reply_ok`, {
-                  messageId,
-                  conversationId: conversationIdForGemini,
-                  messageType,
-                  action: result.action ?? null,
-                  reason: result.reason,
-                  dbMessageId: result.messageId ?? null,
-                  willReplyToClient: true,
-                });
-                return;
-              }
-
-              if (result.skipped) {
-                console.warn(
-                  `${WEBHOOK_LOG_PREFIX} gemini_reply_skipped`,
-                  {
-                    messageId,
-                    conversationId: conversationIdForGemini,
-                    messageType,
-                    reason: result.reason,
-                    humanMode: messageResult.humanMode,
-                    willReplyToClient: false,
-                  },
-                );
-                return;
-              }
-
-              console.error(
-                `${WEBHOOK_LOG_PREFIX} gemini_reply_no_response`,
-                {
-                  messageId,
-                  conversationId: conversationIdForGemini,
-                  messageType,
-                  reason: result.reason,
-                },
-              );
-
-              // Safety net if reply path returned failure without fallback.
-              const fallback = await sendGuaranteedClientReply(supabase, {
-                conversationId: conversationIdForGemini,
-                triggerMessageId: dbMessageIdForGemini,
-                customerPhone: normalizedFrom,
-                errorMessage: result.reason,
-              });
-
-              console.log(`${WEBHOOK_LOG_PREFIX} gemini_fallback_result`, {
-                messageId,
-                conversationId: conversationIdForGemini,
-                ok: fallback.ok,
-                reason: fallback.reason,
-                willReplyToClient: fallback.ok,
-              });
-            } catch (error) {
-              const errorMessage =
-                error instanceof Error ? error.message : "unknown_error";
-
-              console.error(`${WEBHOOK_LOG_PREFIX} gemini_reply_failed`, {
-                messageId,
-                conversationId: conversationIdForGemini,
-                messageType,
-                error: errorMessage,
-              });
-
-              const fallback = await sendGuaranteedClientReply(supabase, {
-                conversationId: conversationIdForGemini,
-                triggerMessageId: dbMessageIdForGemini,
-                customerPhone: normalizedFrom,
-                errorMessage,
-              });
-
-              console.log(`${WEBHOOK_LOG_PREFIX} gemini_fallback_result`, {
-                messageId,
-                conversationId: conversationIdForGemini,
-                ok: fallback.ok,
-                reason: fallback.reason,
-                willReplyToClient: fallback.ok,
-              });
-            }
+          const enqueued = await enqueueGeminiConversationJob(supabase, {
+            conversationId: conversationIdForGemini,
+            triggerMessageId: dbMessageIdForGemini,
+            customerMessage: content.trim() || preview.trim() || null,
           });
+
+          if (!enqueued.ok) {
+            console.error(`${WEBHOOK_LOG_PREFIX} gemini_enqueue_failed`, {
+              messageId,
+              conversationId: conversationIdForGemini,
+              jobId: enqueued.jobId,
+            });
+          }
         } else {
           console.warn(`${WEBHOOK_LOG_PREFIX} gemini_media_deferred`, {
             messageId,
