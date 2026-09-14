@@ -1,4 +1,4 @@
-/** Default Gemini system prompt. Used when crm_settings.ai_system_prompt is null/empty. */
+/** Default AI system prompt. Used when crm_settings.ai_system_prompt is null/empty. */
 export const DEFAULT_AI_SYSTEM_PROMPT = `Eres el asistente virtual de Fibra Óptica Innover (ISP en Venezuela).
 Responde en español, de forma breve, clara y profesional por WhatsApp.
 No inventes precios, fechas de visita, saldos ni estados de cuenta.
@@ -28,7 +28,7 @@ Otras reglas:
 
 export const AI_SYSTEM_PROMPT_MAX_LENGTH = 32000;
 
-export const promptLooksCompatibleWithGeminiParser = (prompt: string) => {
+export const promptLooksCompatibleWithAiParser = (prompt: string) => {
   const normalized = prompt.toLowerCase();
   return (
     normalized.includes("lookup_wispro") ||

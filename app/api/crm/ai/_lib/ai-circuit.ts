@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { isTransientGeminiError } from "./gemini-retry";
+import { isTransientAiError } from "./ai-retry";
 
-const LOG_PREFIX = "[GROQ_CIRCUIT]";
+const LOG_PREFIX = "[AI_AGENT]";
 const FAILURE_WINDOW_MS = 2 * 60 * 1000;
 const FAILURE_THRESHOLD = 5;
 const OPEN_MS = 4 * 60 * 1000;
@@ -37,13 +37,13 @@ export const isCapacityFailureMessage = (message: string | null | undefined) => 
   );
 };
 
-export const recordGeminiCircuitSuccess = () => {
+export const recordAiCircuitSuccess = () => {
   memory.failures = [];
   memory.openUntil = null;
 };
 
-export const recordGeminiCircuitFailure = (error: unknown) => {
-  if (!isTransientGeminiError(error)) return { opened: false };
+export const recordAiCircuitFailure = (error: unknown) => {
+  if (!isTransientAiError(error)) return { opened: false };
 
   const now = Date.now();
   pruneFailures(now);
@@ -61,9 +61,9 @@ export const recordGeminiCircuitFailure = (error: unknown) => {
   return { opened: false };
 };
 
-export const recordGeminiCircuitFailureMessage = (
+export const recordAiCircuitFailureMessage = (
   message: string | null | undefined,
-) => recordGeminiCircuitFailure(new Error(String(message || "unknown_error")));
+) => recordAiCircuitFailure(new Error(String(message || "unknown_error")));
 
 const isMemoryOpen = (now = Date.now()) => {
   if (memory.openUntil && now < memory.openUntil) return true;
@@ -100,7 +100,7 @@ const countRecentCapacityRuns = async (supabase: SupabaseClient) => {
   }).length;
 };
 
-export const getGeminiCircuitState = async (supabase?: SupabaseClient) => {
+export const getAiCircuitState = async (supabase?: SupabaseClient) => {
   if (isMemoryOpen()) {
     return {
       open: true,

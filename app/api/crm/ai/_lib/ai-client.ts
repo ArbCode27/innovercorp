@@ -2,10 +2,10 @@ import {
   DEFAULT_GROQ_MODEL,
   DEFAULT_GROQ_VISION_MODEL,
   DEFAULT_GROQ_WHISPER_MODEL,
-} from "@/app/crm/_lib/gemini-models";
-import { GEMINI_TOOL_DECLARATIONS } from "./gemini-tools";
+} from "@/app/crm/_lib/ai-models";
+import { AI_TOOL_DECLARATIONS } from "./ai-tools";
 
-export class GeminiApiError extends Error {
+export class AiApiError extends Error {
   status: number | null;
   statusText: string | null;
 
@@ -16,19 +16,16 @@ export class GeminiApiError extends Error {
   ) {
     const statusPrefix =
       status != null
-        ? `Groq ${status}${statusText ? ` ${statusText}` : ""}: `
-        : "Groq: ";
+        ? `AI ${status}${statusText ? ` ${statusText}` : ""}: `
+        : "AI: ";
     super(`${statusPrefix}${message}`);
-    this.name = "GeminiApiError";
+    this.name = "AiApiError";
     this.status = status ?? null;
     this.statusText = statusText ?? null;
   }
 }
 
-/** @deprecated Alias kept for call sites; errors are from Groq. */
-export type GroqApiError = GeminiApiError;
-
-export type GeminiContentPart =
+export type AiContentPart =
   | { text: string }
   | {
       inlineData: {
@@ -51,22 +48,22 @@ export type GeminiContentPart =
       };
     };
 
-export type GeminiContent = {
+export type AiContent = {
   role: "user" | "model";
-  parts: GeminiContentPart[];
+  parts: AiContentPart[];
 };
 
-export type GeminiFunctionCall = {
+export type AiFunctionCall = {
   name: string;
   args: Record<string, unknown>;
   id: string;
 };
 
-export type GeminiGenerateResult = {
+export type AiGenerateResult = {
   text: string;
   raw: unknown;
-  functionCalls: GeminiFunctionCall[];
-  modelContent: GeminiContent | null;
+  functionCalls: AiFunctionCall[];
+  modelContent: AiContent | null;
 };
 
 type OpenAiToolCall = {
@@ -83,30 +80,26 @@ type OpenAiMessage = {
   name?: string;
 };
 
-const LOG_PREFIX = "[GROQ]";
+const LOG_PREFIX = "[AI_AGENT]";
 const GROQ_CHAT_URL = "https://api.groq.com/openai/v1/chat/completions";
 const GROQ_TRANSCRIBE_URL =
   "https://api.groq.com/openai/v1/audio/transcriptions";
 const DEFAULT_MODEL = DEFAULT_GROQ_MODEL;
 
-export const getGeminiApiKey = () => {
-  const key =
-    process.env.GROQ_API_KEY?.trim() ||
-    process.env.GEMINI_API_KEY?.trim() ||
-    "";
-
+export const getAiApiKey = () => {
+  const key = process.env.GROQ_API_KEY?.trim() || "";
   return key || null;
 };
 
-export const getGroqApiKey = getGeminiApiKey;
+export const getGroqApiKey = getAiApiKey;
 
 const toOpenAiTools = (allowedToolNames?: string[] | null) => {
   const declarations =
     allowedToolNames && allowedToolNames.length
-      ? GEMINI_TOOL_DECLARATIONS.filter((tool) =>
+      ? AI_TOOL_DECLARATIONS.filter((tool) =>
           allowedToolNames.includes(tool.name),
         )
-      : GEMINI_TOOL_DECLARATIONS;
+      : AI_TOOL_DECLARATIONS;
 
   return declarations.map((tool) => ({
     type: "function" as const,
@@ -132,7 +125,7 @@ const parseToolArgs = (raw: string): Record<string, unknown> => {
 
 const contentsToOpenAiMessages = (
   systemPrompt: string,
-  contents: GeminiContent[],
+  contents: AiContent[],
 ): OpenAiMessage[] => {
   const messages: OpenAiMessage[] = [
     { role: "system", content: systemPrompt },
@@ -142,18 +135,18 @@ const contentsToOpenAiMessages = (
 
   for (const content of contents) {
     const functionCalls = content.parts.filter(
-      (part): part is Extract<GeminiContentPart, { functionCall: unknown }> =>
+      (part): part is Extract<AiContentPart, { functionCall: unknown }> =>
         "functionCall" in part && Boolean(part.functionCall),
     );
     const functionResponses = content.parts.filter(
       (
         part,
-      ): part is Extract<GeminiContentPart, { functionResponse: unknown }> =>
+      ): part is Extract<AiContentPart, { functionResponse: unknown }> =>
         "functionResponse" in part && Boolean(part.functionResponse),
     );
     const textParts = content.parts
       .filter(
-        (part): part is Extract<GeminiContentPart, { text: string }> =>
+        (part): part is Extract<AiContentPart, { text: string }> =>
           "text" in part && typeof part.text === "string",
       )
       .map((part) => part.text.trim())
@@ -213,20 +206,20 @@ const contentsToOpenAiMessages = (
   return messages;
 };
 
-export const generateGeminiWithTools = async (input: {
+export const generateAiWithTools = async (input: {
   systemPrompt: string;
-  contents: GeminiContent[];
+  contents: AiContent[];
   model?: string;
   timeoutMs?: number;
   enableTools?: boolean;
   allowedToolNames?: string[] | null;
-}): Promise<GeminiGenerateResult> => {
+}): Promise<AiGenerateResult> => {
   const apiKey = getGroqApiKey();
   if (!apiKey) {
     console.error(`${LOG_PREFIX} missing_api_key`, {
       hint: "Configura GROQ_API_KEY en .env / Vercel y redeploy",
     });
-    throw new Error("GROQ_API_KEY no está configurada en el servidor");
+    throw new Error("API key de IA no está configurada en el servidor");
   }
 
   const model = (input.model || DEFAULT_MODEL).trim() || DEFAULT_MODEL;
@@ -290,7 +283,7 @@ export const generateGeminiWithTools = async (input: {
       ? message.tool_calls
       : [];
 
-    const functionCalls: GeminiFunctionCall[] = toolCalls
+    const functionCalls: AiFunctionCall[] = toolCalls
       .filter((call) => call?.type === "function" && call.function?.name)
       .map((call) => ({
         id: String(call.id || crypto.randomUUID()),
@@ -298,7 +291,7 @@ export const generateGeminiWithTools = async (input: {
         args: parseToolArgs(String(call.function.arguments || "{}")),
       }));
 
-    const modelContent: GeminiContent | null = functionCalls.length
+    const modelContent: AiContent | null = functionCalls.length
       ? {
           role: "model",
           parts: [
@@ -328,7 +321,7 @@ export const generateGeminiWithTools = async (input: {
     if (!response.ok) {
       const errMessage =
         raw?.error?.message ||
-        `Groq respondió con estado ${response.status}`;
+        `El proveedor de IA respondió con estado ${response.status}`;
       const statusText =
         typeof raw?.error?.type === "string"
           ? raw.error.type
@@ -341,7 +334,7 @@ export const generateGeminiWithTools = async (input: {
         statusText,
         message: errMessage,
       });
-      throw new GeminiApiError(errMessage, response.status, statusText);
+      throw new AiApiError(errMessage, response.status, statusText);
     }
 
     if (!functionCalls.length && !text) {
@@ -350,7 +343,7 @@ export const generateGeminiWithTools = async (input: {
         finishReason: choice?.finish_reason ?? null,
         raw,
       });
-      throw new Error("Groq no devolvió texto ni tool calls");
+      throw new Error("La IA no devolvió texto ni tool calls");
     }
 
     return { text, raw, functionCalls, modelContent };
@@ -370,7 +363,7 @@ export const generateGeminiWithTools = async (input: {
 
     if (isAbort) {
       throw new Error(
-        `Groq timeout: no respondió en ${timeoutMs}ms (modelo ${model})`,
+        `AI timeout: no respondió en ${timeoutMs}ms (modelo ${model})`,
       );
     }
 
@@ -380,20 +373,20 @@ export const generateGeminiWithTools = async (input: {
   }
 };
 
-export const generateGeminiText = async (input: {
+export const generateAiText = async (input: {
   systemPrompt: string;
-  contents: GeminiContent[];
+  contents: AiContent[];
   model?: string;
   timeoutMs?: number;
 }): Promise<{ text: string; raw: unknown }> => {
-  const result = await generateGeminiWithTools({
+  const result = await generateAiWithTools({
     ...input,
     enableTools: false,
     timeoutMs: input.timeoutMs ?? 15000,
   });
 
   if (!result.text) {
-    throw new Error("Groq no devolvió texto útil");
+    throw new Error("La IA no devolvió texto útil");
   }
 
   return { text: result.text, raw: result.raw };
@@ -532,15 +525,15 @@ export const describeImageWithGroq = async (input: {
   }
 };
 
-export type GeminiReplyDecision = {
+export type AiReplyDecision = {
   action: "reply" | "handoff";
   message: string;
   reason?: string;
 };
 
-export const parseGeminiReplyDecision = (
+export const parseAiReplyDecision = (
   rawText: string,
-): GeminiReplyDecision => {
+): AiReplyDecision => {
   const trimmed = rawText.trim();
   const jsonMatch = trimmed.match(/\{[\s\S]*\}/);
   const candidate = jsonMatch?.[0] || trimmed;

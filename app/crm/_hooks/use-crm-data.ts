@@ -45,7 +45,7 @@ import type {
   WisproSearchResult,
 } from "../_lib/types";
 import { DEFAULT_BOT_ENGINE } from "../_lib/bot-engine";
-import { DEFAULT_GEMINI_MODEL } from "../_lib/gemini-models";
+import { DEFAULT_AI_MODEL } from "../_lib/ai-models";
 
 // ── Supabase client para Realtime ─────────────────────────
 const supabase = createClient(
@@ -63,7 +63,7 @@ const emptyData: CrmData = {
   settings: {
     id: 1,
     bot_engine: DEFAULT_BOT_ENGINE,
-    gemini_model: DEFAULT_GEMINI_MODEL,
+    ai_model: DEFAULT_AI_MODEL,
     ai_system_prompt: null,
     payment_success_message: null,
     ai_recovery_messages: undefined,
@@ -868,7 +868,7 @@ export const useCrmData = (agent: Agent | null) => {
       setData((current) => ({ ...current, settings }));
       toast.success(
         normalized
-          ? "Prompt de Gemini actualizado"
+          ? "Prompt de IA actualizado"
           : "Prompt restaurado al predeterminado",
       );
     } catch (error) {

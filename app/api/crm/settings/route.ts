@@ -55,7 +55,7 @@ const afterHoursPaymentsSchema = z.object({
 const updateSchema = z
   .object({
     agent_id: z.coerce.number().int().positive("agent_id es requerido"),
-    gemini_model: z.string().trim().min(1).max(120).optional(),
+    ai_model: z.string().trim().min(1).max(120).optional(),
     ai_system_prompt: z
       .string()
       .max(
@@ -78,7 +78,7 @@ const updateSchema = z
   })
   .refine(
     (value) =>
-      value.gemini_model !== undefined ||
+      value.ai_model !== undefined ||
       value.ai_system_prompt !== undefined ||
       value.payment_success_message !== undefined ||
       value.ai_recovery_messages !== undefined ||
@@ -178,7 +178,7 @@ export async function PATCH(req: NextRequest) {
       : undefined;
 
     const settings = await updateCrmSettings(supabase, {
-      gemini_model: payload.data.gemini_model,
+      ai_model: payload.data.ai_model,
       ai_system_prompt:
         typeof payload.data.ai_system_prompt === "string"
           ? payload.data.ai_system_prompt.trim() || null

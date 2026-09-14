@@ -2,12 +2,12 @@ import { NextRequest, NextResponse, after } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getInitials, toJsonSafeText } from "@/app/crm/_lib/formatters";
 import { normalizeStorageMimeType } from "../_lib/media-mime";
-import { replyToConversationWithGemini } from "@/app/api/crm/ai/_lib/reply-to-conversation";
+import { replyToConversationWithAi } from "@/app/api/crm/ai/_lib/reply-to-conversation";
 import { refreshClientBillingFromWispro } from "@/app/api/crm/_lib/wispro-billing-refresh";
 
 // Fuerza runtime Node.js explícitamente: el handler usa Buffer y fetch a Graph API.
 export const runtime = "nodejs";
-/** Media download + Gemini reply via after() (no queue/worker). */
+/** Media download + AI reply via after() (no queue/worker). */
 export const maxDuration = 60;
 
 const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN!;
@@ -813,7 +813,7 @@ const upsertIncomingMessage = async (
       preview,
     });
 
-    // Re-evaluate debt + service before Gemini / CRM agents read the client.
+    // Re-evaluate debt + service before AI / CRM agents read the client.
     // Soft-fail + TTL: never blocks inbound message persistence.
     const wisproId = String(client.wispro_id || "").trim();
     if (wisproId) {
@@ -1100,56 +1100,56 @@ export async function POST(req: NextRequest) {
       requestSummary.ignored = messageResult.ignored;
       requestSummary.saved = !messageResult.ignored;
 
-      // Gemini is the sole bot engine (Make removed).
+      // AI is the sole bot engine (Make removed).
       // Reply runs after the webhook responds so Meta gets 200 quickly.
-      // human_mode is enforced inside replyToConversationWithGemini via
+      // human_mode is enforced inside replyToConversationWithAi via
       // resolveBotReplyPolicy (after-hours payments may still run).
       if (!messageResult.ignored && messageResult.conversationId) {
         // Text + image/audio (multimodal). Video/document remain deferred.
-        const geminiEligible =
+        const aiEligible =
           messageType === "text" ||
           messageType === "image" ||
           messageType === "audio";
 
-        if (geminiEligible) {
-          const conversationIdForGemini = messageResult.conversationId;
-          const dbMessageIdForGemini = messageResult.dbMessageId;
+        if (aiEligible) {
+          const conversationIdForAi = messageResult.conversationId;
+          const dbMessageIdForAi = messageResult.dbMessageId;
 
-          console.log(`${WEBHOOK_LOG_PREFIX} gemini_reply_scheduled`, {
+          console.log(`${WEBHOOK_LOG_PREFIX} ai_reply_scheduled`, {
             messageId,
-            conversationId: conversationIdForGemini,
+            conversationId: conversationIdForAi,
             messageType,
             humanMode: messageResult.humanMode,
           });
 
           after(async () => {
             try {
-              const result = await replyToConversationWithGemini(supabase, {
-                conversationId: conversationIdForGemini,
-                triggerMessageId: dbMessageIdForGemini,
+              const result = await replyToConversationWithAi(supabase, {
+                conversationId: conversationIdForAi,
+                triggerMessageId: dbMessageIdForAi,
               });
 
-              console.log(`${WEBHOOK_LOG_PREFIX} gemini_reply_finished`, {
+              console.log(`${WEBHOOK_LOG_PREFIX} ai_reply_finished`, {
                 messageId,
-                conversationId: conversationIdForGemini,
+                conversationId: conversationIdForAi,
                 ok: result.ok,
                 skipped: Boolean(result.skipped),
                 reason: result.reason,
               });
             } catch (error) {
-              console.error(`${WEBHOOK_LOG_PREFIX} gemini_reply_failed`, {
+              console.error(`${WEBHOOK_LOG_PREFIX} ai_reply_failed`, {
                 messageId,
-                conversationId: conversationIdForGemini,
+                conversationId: conversationIdForAi,
                 error: error instanceof Error ? error.message : String(error),
               });
             }
           });
         } else {
-          console.warn(`${WEBHOOK_LOG_PREFIX} gemini_media_deferred`, {
+          console.warn(`${WEBHOOK_LOG_PREFIX} ai_media_deferred`, {
             messageId,
             conversationId: messageResult.conversationId,
             messageType,
-            reason: "gemini_multimodal_v1_image_audio_only",
+            reason: "ai_multimodal_v1_image_audio_only",
             willReplyToClient: false,
           });
         }

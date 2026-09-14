@@ -1,16 +1,16 @@
 import {
-  generateGeminiWithTools,
-  GeminiApiError,
-  type GeminiContent,
-  type GeminiGenerateResult,
-} from "./gemini";
+  generateAiWithTools,
+  AiApiError,
+  type AiContent,
+  type AiGenerateResult,
+} from "./ai-client";
 
-const LOG_PREFIX = "[GROQ_RETRY]";
+const LOG_PREFIX = "[AI_AGENT]";
 
 const PERMANENT_STATUS = new Set([400, 401, 403, 404]);
 
 const readErrorText = (error: unknown) => {
-  if (error instanceof GeminiApiError) {
+  if (error instanceof AiApiError) {
     return `${error.status ?? ""} ${error.statusText ?? ""} ${error.message}`.toLowerCase();
   }
   if (error instanceof Error) {
@@ -19,8 +19,8 @@ const readErrorText = (error: unknown) => {
   return String(error || "").toLowerCase();
 };
 
-export const isPermanentGeminiError = (error: unknown): boolean => {
-  if (error instanceof GeminiApiError && error.status != null) {
+export const isPermanentAiError = (error: unknown): boolean => {
+  if (error instanceof AiApiError && error.status != null) {
     if (PERMANENT_STATUS.has(error.status)) return true;
   }
 
@@ -35,15 +35,16 @@ export const isPermanentGeminiError = (error: unknown): boolean => {
     text.includes("api key not valid") ||
     text.includes("invalid_api_key") ||
     text.includes("model_not_found") ||
+    /\bai 40[0143]\b/.test(text) ||
     /\bgroq 40[0143]\b/.test(text) ||
     /\bgemini 40[0143]\b/.test(text)
   );
 };
 
-export const isRetryableGeminiError = (error: unknown): boolean => {
-  if (isPermanentGeminiError(error)) return false;
+export const isRetryableAiError = (error: unknown): boolean => {
+  if (isPermanentAiError(error)) return false;
 
-  if (error instanceof GeminiApiError) {
+  if (error instanceof AiApiError) {
     if (error.status != null) {
       if (error.status === 429) return true;
       if (error.status >= 500 && error.status <= 599) return true;
@@ -90,17 +91,17 @@ export const isRetryableGeminiError = (error: unknown): boolean => {
 };
 
 /** Transient capacity/network errors that should soft-hold before human handoff. */
-export const isTransientGeminiError = (error: unknown): boolean =>
-  isRetryableGeminiError(error);
+export const isTransientAiError = (error: unknown): boolean =>
+  isRetryableAiError(error);
 
-export const isTransientGeminiErrorMessage = (
+export const isTransientAiErrorMessage = (
   message: string | null | undefined,
-) => isRetryableGeminiError(new Error(String(message || "")));
+) => isRetryableAiError(new Error(String(message || "")));
 
 const resolveBackoffMs = (error: unknown, attempt: number, baseMs: number) => {
   const message =
     error instanceof Error ? error.message.toLowerCase() : "";
-  const status = error instanceof GeminiApiError ? error.status : null;
+  const status = error instanceof AiApiError ? error.status : null;
   const isCapacity =
     status === 429 ||
     status === 503 ||
@@ -120,11 +121,11 @@ const sleep = (ms: number) =>
   });
 
 /**
- * Retries Groq chat completions on transient failures (timeouts, 5xx, rate limits).
+ * Retries AI chat completions on transient failures (timeouts, 5xx, rate limits).
  */
-export const generateGeminiWithRetry = async (input: {
+export const generateAiWithRetry = async (input: {
   systemPrompt: string;
-  contents: GeminiContent[];
+  contents: AiContent[];
   model?: string;
   enableTools?: boolean;
   allowedToolNames?: string[] | null;
@@ -132,7 +133,7 @@ export const generateGeminiWithRetry = async (input: {
   timeoutsMs: number[];
   backoffMs?: number;
   logContext?: Record<string, unknown>;
-}): Promise<GeminiGenerateResult> => {
+}): Promise<AiGenerateResult> => {
   const timeouts = input.timeoutsMs.filter((value) => value > 0);
   if (!timeouts.length) {
     throw new Error("timeoutsMs vacío");
@@ -156,12 +157,12 @@ export const generateGeminiWithRetry = async (input: {
           previousError:
             lastError instanceof Error ? lastError.message : "unknown_error",
           previousStatus:
-            lastError instanceof GeminiApiError ? lastError.status : null,
+            lastError instanceof AiApiError ? lastError.status : null,
         });
         await sleep(waitMs);
       }
 
-      return await generateGeminiWithTools({
+      return await generateAiWithTools({
         systemPrompt: input.systemPrompt,
         contents: input.contents,
         model: input.model,
@@ -171,15 +172,15 @@ export const generateGeminiWithRetry = async (input: {
       });
     } catch (error) {
       lastError = error;
-      const retryable = isRetryableGeminiError(error);
+      const retryable = isRetryableAiError(error);
       console.warn(`${LOG_PREFIX} attempt_failed`, {
         attempt: attempt + 1,
         maxAttempts: timeouts.length,
         timeoutMs,
         retryable,
-        httpStatus: error instanceof GeminiApiError ? error.status : null,
+        httpStatus: error instanceof AiApiError ? error.status : null,
         statusText:
-          error instanceof GeminiApiError ? error.statusText : null,
+          error instanceof AiApiError ? error.statusText : null,
         model: input.model ?? null,
         error: error instanceof Error ? error.message : "unknown_error",
         ...input.logContext,
@@ -193,13 +194,13 @@ export const generateGeminiWithRetry = async (input: {
 
   throw lastError instanceof Error
     ? lastError
-    : new Error("Groq falló tras reintentos");
+    : new Error("La IA falló tras reintentos");
 };
 
 /** Removes inlineData parts so a degraded retry is text-only (faster). */
 export const stripInlineMediaFromContents = (
-  contents: GeminiContent[],
-): GeminiContent[] =>
+  contents: AiContent[],
+): AiContent[] =>
   contents.map((content) => ({
     role: content.role,
     parts: content.parts

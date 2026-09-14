@@ -42,12 +42,12 @@ export type CrmView =
 
 export type ConversationFilter = "all" | "unread" | "bot" | "human";
 
-export type BotEngine = "gemini";
+export type BotEngine = "ai";
 
 export interface CrmSettings {
   id: number;
   bot_engine: BotEngine;
-  gemini_model: string;
+  ai_model: string;
   ai_system_prompt: string | null;
   payment_success_message: string | null;
   ai_recovery_messages?: import("./ai-recovery-messages").AiRecoveryMessages;

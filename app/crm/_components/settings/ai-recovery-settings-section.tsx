@@ -112,7 +112,7 @@ export const AiRecoverySettingsSection = ({
             Mensajes de recuperación de Nova
           </h3>
           <p className={`mt-1 text-sm ${CRM_SURFACES.textMuted}`}>
-            Se usan cuando Gemini tarda o satura. Los mensajes de cédula,
+            Se usan cuando la IA tarda o satura. Los mensajes de cédula,
             comprobante o pedido de asesor siguen siendo específicos.
           </p>
         </div>

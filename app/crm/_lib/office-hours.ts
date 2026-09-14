@@ -213,7 +213,7 @@ export type OfficeHoursSnapshot = {
   weeklySummary: string;
   nextOpenLabel: string | null;
   closesAtLabel: string | null;
-  /** Prompt block injected on every Gemini run. */
+  /** Prompt block injected on every AI run. */
   promptBlock: string;
   /** Client-facing notice when the office is closed; null if open or disabled. */
   clientNotice: string | null;

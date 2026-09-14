@@ -92,8 +92,8 @@ export const submitPaymentReceiptArgsSchema = z.object({
   comment: z.string().trim().max(300).optional().nullable(),
 });
 
-/** Gemini functionDeclarations for the CRM agent. */
-export const GEMINI_TOOL_DECLARATIONS = [
+/** AI tool declarations for the CRM agent. */
+export const AI_TOOL_DECLARATIONS = [
   {
     name: LOOKUP_WISPRO_TOOL,
     description:
@@ -200,7 +200,7 @@ export const GEMINI_TOOL_DECLARATIONS = [
   },
 ] as const;
 
-export const GEMINI_TOOLS_CONTRACT_PROMPT = `Herramientas disponibles (obligatorio respetar):
+export const AI_TOOLS_CONTRACT_PROMPT = `Herramientas disponibles (obligatorio respetar):
 1) lookup_wispro_by_cedula — cédula o RIF del abonado (solo números; el sistema prueba prefijos V/E/J/G). Trae debt_usd, debt_bs, bcv_rate, account_status y service_suspended. Si hay 1 solo match, vincula automáticamente al chat (linked=true).
 2) get_bcv_rate — solo si preguntan la tasa BCV del día sin consultar saldo (fuente rates.dolarvzla.com/bcv).
 3) link_wispro_client — SOLO si lookup devolvió varios matches y el cliente confirmó cuál. No la uses si linked=true.

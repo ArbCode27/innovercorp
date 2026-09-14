@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AgentHistoryMessage } from "./context-builder";
 
-const LOG_PREFIX = "[AI_TURN]";
+const LOG_PREFIX = "[AI_AGENT]";
 
 export const TEXT_DEBOUNCE_MS = 4500;
 export const MEDIA_DEBOUNCE_MS = 7000;

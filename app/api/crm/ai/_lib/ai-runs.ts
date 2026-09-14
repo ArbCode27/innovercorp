@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { InboundIntent } from "./inbound-intent";
 
-const LOG_PREFIX = "[AI_RUNS]";
+const LOG_PREFIX = "[AI_AGENT]";
 
 export type AiRunStatus =
   | "started"

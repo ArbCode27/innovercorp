@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-const LOG_PREFIX = "[AI_TOOL_AUDIT]";
+const LOG_PREFIX = "[AI_AGENT]";
 
 export const auditToolInvocation = async (
   supabase: SupabaseClient,

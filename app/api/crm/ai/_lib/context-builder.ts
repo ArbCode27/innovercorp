@@ -1,7 +1,7 @@
-import type { GeminiContent, GeminiContentPart } from "./gemini";
-import { describeImageWithGroq, transcribeAudioWithGroq } from "./gemini";
+import type { AiContent, AiContentPart } from "./ai-client";
+import { describeImageWithGroq, transcribeAudioWithGroq } from "./ai-client";
 
-const LOG_PREFIX = "[AI_MEDIA]";
+const LOG_PREFIX = "[AI_AGENT]";
 
 const IMAGE_MAX_BYTES = 6 * 1024 * 1024;
 const AUDIO_MAX_BYTES = 12 * 1024 * 1024;
@@ -70,8 +70,8 @@ export const formatMessageTextForHistory = (message: AgentHistoryMessage) => {
       ? message.metadata.transcript.trim()
       : "";
   const summary =
-    typeof message.metadata?.gemini_media_summary === "string"
-      ? message.metadata.gemini_media_summary.trim()
+    typeof message.metadata?.media_summary === "string"
+      ? message.metadata.media_summary.trim()
       : typeof message.metadata?.media_summary === "string"
         ? message.metadata.media_summary.trim()
         : "";
@@ -191,7 +191,7 @@ const downloadMediaBytes = async (
 
 /**
  * gpt-oss-20b is text-only: convert recent image/audio into text via
- * Groq vision / Whisper, then inject into the user turn.
+ * vision / Whisper, then inject into the user turn.
  */
 const enrichMediaAsText = async (
   message: AgentHistoryMessage,
@@ -274,7 +274,7 @@ export const buildAgentContents = async (input: {
   messages: AgentHistoryMessage[];
   triggerMessageId?: number | null;
 }): Promise<{
-  contents: GeminiContent[];
+  contents: AiContent[];
   attachedMediaIds: number[];
 }> => {
   const inlineTargets = selectMessagesForInlineMedia(
@@ -292,7 +292,7 @@ export const buildAgentContents = async (input: {
     }),
   );
 
-  const contents: GeminiContent[] = [];
+  const contents: AiContent[] = [];
 
   for (const message of input.messages) {
     const baseText = formatMessageTextForHistory(message);
@@ -302,7 +302,7 @@ export const buildAgentContents = async (input: {
     if (!text && !inlineTargetIds.has(message.id)) continue;
 
     const role = isUserMessage(message) ? ("user" as const) : ("model" as const);
-    const parts: GeminiContentPart[] = [];
+    const parts: AiContentPart[] = [];
 
     if (text) {
       parts.push({ text });
@@ -335,7 +335,7 @@ export const buildAgentContents = async (input: {
   };
 };
 
-export const GEMINI_MEDIA_CONTRACT_PROMPT = `Media (imagen/audio):
+export const AI_MEDIA_CONTRACT_PROMPT = `Media (imagen/audio):
 - Las imágenes llegan como texto "[Imagen] análisis: ..." (visión previa). Úsalo como si vieras el comprobante/cédula.
 - Los audios llegan como "[Audio] transcripción: ...". Responde como si fuera texto del cliente.
 - Usa caption + análisis juntos cuando existan.

@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getSupabaseAdmin } from "../../_lib/supabase-admin";
-import { replyToConversationWithGemini } from "../_lib/reply-to-conversation";
+import { replyToConversationWithAi } from "../_lib/reply-to-conversation";
 
-const LOG_PREFIX = "[CRM_AI_REPLY_ROUTE]";
+const LOG_PREFIX = "[AI_AGENT]";
 
 const payloadSchema = z.object({
   conversation_id: z.coerce.number().int().positive(),
@@ -40,13 +40,13 @@ export async function POST(req: NextRequest) {
     }
 
     const supabase = getSupabaseAdmin();
-    const result = await replyToConversationWithGemini(supabase, {
+    const result = await replyToConversationWithAi(supabase, {
       conversationId: payload.data.conversation_id,
       triggerMessageId: payload.data.message_id ?? null,
     });
 
     if (!result.ok) {
-      console.error(`${LOG_PREFIX} gemini_no_reply`, {
+      console.error(`${LOG_PREFIX} no_reply`, {
         conversationId: payload.data.conversation_id,
         messageId: payload.data.message_id ?? null,
         skipped: result.skipped ?? false,
@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
         willReplyToClient: false,
       });
     } else {
-      console.log(`${LOG_PREFIX} gemini_ok`, {
+      console.log(`${LOG_PREFIX} ok`, {
         conversationId: payload.data.conversation_id,
         action: result.action ?? null,
         reason: result.reason,

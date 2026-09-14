@@ -4,7 +4,7 @@ import {
   LINK_WISPRO_TOOL,
   LOOKUP_WISPRO_TOOL,
   SUBMIT_PAYMENT_RECEIPT_TOOL,
-} from "./gemini-tools";
+} from "./ai-tools";
 
 /** Tool names Nova must never echo to WhatsApp customers. */
 export const CUSTOMER_VISIBLE_TOOL_NAMES = [
@@ -93,7 +93,7 @@ const TOOL_PSEUDO_CALL_PATTERN = new RegExp(
 );
 
 /**
- * Detects when Gemini dumps tools, system-prompt quotes, or meta-reasoning
+ * Detects when the AI dumps tools, system-prompt quotes, or meta-reasoning
  * into customer-facing WhatsApp text.
  */
 export const detectInternalLeakInCustomerReply = (

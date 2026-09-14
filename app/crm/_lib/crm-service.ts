@@ -26,7 +26,7 @@ import {
   EMPTY_AI_RECOVERY_MESSAGES,
   parseAiRecoveryMessages,
 } from "./ai-recovery-messages";
-import { DEFAULT_GEMINI_MODEL } from "./gemini-models";
+import { DEFAULT_AI_MODEL } from "./ai-models";
 import { DEFAULT_BOT_ENGINE, normalizeBotEngine } from "./bot-engine";
 import {
   DEFAULT_AFTER_HOURS_PAYMENTS,
@@ -105,7 +105,7 @@ export const crmService = {
       throwIfError(result.error)
     );
 
-    // Settings table may not exist until migration; soft-fail to Gemini default.
+    // Settings table may not exist until migration; soft-fail to AI default.
     if (settings.error) {
       console.warn("[crm_settings] load_failed", settings.error.message);
     }
@@ -126,11 +126,12 @@ export const crmService = {
       ? {
           id: Number(settingsRow.id) || 1,
           bot_engine: normalizeBotEngine(settingsRow.bot_engine),
-          gemini_model:
-            typeof settingsRow.gemini_model === "string" &&
-            settingsRow.gemini_model.trim()
-              ? settingsRow.gemini_model.trim()
-              : DEFAULT_GEMINI_MODEL,
+          ai_model:
+            typeof (settingsRow.ai_model ?? settingsRow.gemini_model) ===
+              "string" &&
+            String(settingsRow.ai_model ?? settingsRow.gemini_model).trim()
+              ? String(settingsRow.ai_model ?? settingsRow.gemini_model).trim()
+              : DEFAULT_AI_MODEL,
           ai_system_prompt:
             typeof settingsRow.ai_system_prompt === "string"
               ? settingsRow.ai_system_prompt
@@ -167,7 +168,7 @@ export const crmService = {
       : {
           id: 1,
           bot_engine: DEFAULT_BOT_ENGINE,
-          gemini_model: DEFAULT_GEMINI_MODEL,
+          ai_model: DEFAULT_AI_MODEL,
           ai_system_prompt: null,
           payment_success_message: null,
           ai_recovery_messages: { ...EMPTY_AI_RECOVERY_MESSAGES },
@@ -202,7 +203,7 @@ export const crmService = {
   async updateCrmSettings(
     agentId: number,
     patch: {
-      gemini_model?: string;
+      ai_model?: string;
       ai_system_prompt?: string | null;
       payment_success_message?: string | null;
       ai_recovery_messages?: import("./ai-recovery-messages").AiRecoveryMessages;

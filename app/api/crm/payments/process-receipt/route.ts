@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse, after } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
-import { replyToConversationWithGemini } from "@/app/api/crm/ai/_lib/reply-to-conversation";
+import { replyToConversationWithAi } from "@/app/api/crm/ai/_lib/reply-to-conversation";
 import { intakeCrmReceipt } from "@/app/api/crm/_lib/crm-payments";
 import { resolveLinkedClientIdentity } from "@/app/crm/_lib/client-profile-utils";
 
@@ -271,7 +271,7 @@ export async function POST(req: NextRequest) {
         alreadyProcessed: true,
         messageId: message.id,
         paymentId: intake.payment?.id ?? null,
-        engine: "gemini",
+        engine: "ai",
       });
     }
 
@@ -280,7 +280,7 @@ export async function POST(req: NextRequest) {
       payment_receipt_requested: true,
       payment_receipt_requested_at: new Date().toISOString(),
       payment_receipt_requested_by: agentId,
-      payment_receipt_engine: "gemini",
+      payment_receipt_engine: "ai",
       crm_payment_id: intake.payment?.id ?? null,
     };
 
@@ -300,17 +300,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Run Gemini after response so the UI stays snappy; forceRun allows human_mode chats.
+    // Run AI after response so the UI stays snappy; forceRun allows human_mode chats.
     after(async () => {
       try {
-        const result = await replyToConversationWithGemini(supabase, {
+        const result = await replyToConversationWithAi(supabase, {
           conversationId,
           triggerMessageId: message.id,
           forceRun: true,
           paymentRequestedByAgentId: agentId,
         });
 
-        console.log("[PROCESS_RECEIPT] gemini_finished", {
+        console.log("[PROCESS_RECEIPT] ai_finished", {
           conversationId,
           messageId: message.id,
           ok: result.ok,
@@ -318,7 +318,7 @@ export async function POST(req: NextRequest) {
           action: result.action ?? null,
         });
       } catch (error) {
-        console.error("[PROCESS_RECEIPT] gemini_failed", {
+        console.error("[PROCESS_RECEIPT] ai_failed", {
           conversationId,
           messageId: message.id,
           error: error instanceof Error ? error.message : "unknown_error",
@@ -331,7 +331,7 @@ export async function POST(req: NextRequest) {
       alreadyProcessed: false,
       messageId: message.id,
       paymentId: intake.payment?.id ?? null,
-      engine: "gemini",
+      engine: "ai",
       scheduled: true,
     });
   } catch (error) {

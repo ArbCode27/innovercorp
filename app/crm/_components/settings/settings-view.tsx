@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   AI_SYSTEM_PROMPT_MAX_LENGTH,
   DEFAULT_AI_SYSTEM_PROMPT,
-  promptLooksCompatibleWithGeminiParser,
+  promptLooksCompatibleWithAiParser,
 } from "../../_lib/ai-default-prompt";
 import {
   buildPaymentSuccessMessage,
@@ -14,7 +14,7 @@ import {
   PAYMENT_SUCCESS_MESSAGE_MAX_LENGTH,
 } from "../../_lib/payment-success-message";
 import type { Agent, CrmSettings } from "../../_lib/types";
-import { DEFAULT_GEMINI_MODEL } from "../../_lib/gemini-models";
+import { DEFAULT_AI_MODEL } from "../../_lib/ai-models";
 import type {
   AfterHoursPaymentsConfig,
   OfficeHoursConfig,
@@ -98,7 +98,7 @@ export const SettingsView = ({
     paymentCharacterCount > PAYMENT_SUCCESS_MESSAGE_MAX_LENGTH;
   const showParserWarning =
     draftPrompt.trim().length > 0 &&
-    !promptLooksCompatibleWithGeminiParser(draftPrompt);
+    !promptLooksCompatibleWithAiParser(draftPrompt);
   const isUsingDefaultPaymentMessage = !savedPaymentMessage;
   const isPaymentMessageDirty = useMemo(() => {
     const normalizedDraft = draftPaymentMessage.trim();
@@ -224,7 +224,7 @@ export const SettingsView = ({
             Ajustes del CRM
           </h2>
           <p className={`mt-1 text-sm ${CRM_SURFACES.textMuted}`}>
-            Gemini, apariencia, horarios de oficina y pagos fuera de jornada
+            IA, apariencia, horarios de oficina y pagos fuera de jornada
           </p>
         </div>
       </div>
@@ -262,12 +262,12 @@ export const SettingsView = ({
                 </p>
                 <p className={`mt-1 text-sm ${CRM_SURFACES.textMuted}`}>
                   Motor único del CRM. Responde desde este servidor con la API
-                  de Groq (`openai/gpt-oss-20b`).
+                  configurada (`GROQ_API_KEY`).
                 </p>
                 <p className={`mt-3 text-xs ${CRM_SURFACES.textMuted}`}>
                   Modelo:{" "}
                   <span className={CRM_SURFACES.textSecondary}>
-                    {settings.gemini_model || DEFAULT_GEMINI_MODEL}
+                    {settings.ai_model || DEFAULT_AI_MODEL}
                   </span>
                 </p>
                 <p className={`mt-1 text-xs ${CRM_SURFACES.textMuted}`}>

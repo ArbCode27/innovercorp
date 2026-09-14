@@ -2,11 +2,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { DEFAULT_AI_SYSTEM_PROMPT } from "@/app/crm/_lib/ai-default-prompt";
 import { parseClientEnvoicing, resolveLinkedClientIdentity } from "@/app/crm/_lib/client-profile-utils";
 import {
-  DEFAULT_GEMINI_FALLBACK_MODEL,
-  DEFAULT_GEMINI_MODEL,
-  isRetiredGeminiModel,
-  normalizeGeminiModelId,
-} from "@/app/crm/_lib/gemini-models";
+  DEFAULT_AI_FALLBACK_MODEL,
+  DEFAULT_AI_MODEL,
+  isRetiredAiModel,
+  normalizeAiModelId,
+} from "@/app/crm/_lib/ai-models";
 import {
   defaultAdvisorHandoffMessage,
   resolveOfficeHoursSnapshot,
@@ -18,17 +18,17 @@ import {
 } from "@/app/api/crm/_lib/bot-reply-policy";
 import {
   buildAgentContents,
-  GEMINI_MEDIA_CONTRACT_PROMPT,
+  AI_MEDIA_CONTRACT_PROMPT,
   type AgentHistoryMessage,
 } from "./context-builder";
-import type { GeminiContent, GeminiContentPart } from "./gemini";
+import type { AiContent, AiContentPart } from "./ai-client";
 import {
-  generateGeminiWithRetry,
-  isPermanentGeminiError,
-  isRetryableGeminiError,
+  generateAiWithRetry,
+  isPermanentAiError,
+  isRetryableAiError,
   stripInlineMediaFromContents,
-} from "./gemini-retry";
-import { GEMINI_TOOLS_CONTRACT_PROMPT } from "./gemini-tools";
+} from "./ai-retry";
+import { AI_TOOLS_CONTRACT_PROMPT } from "./ai-tools";
 import {
   executeAgentTool,
   type AgentRunContext,
@@ -42,18 +42,16 @@ import {
 const LOG_PREFIX = "[AI_AGENT]";
 const MAX_TOOL_STEPS = 6;
 
-const resolveGeminiFallbackModel = (primaryModel: string) => {
-  const requested = normalizeGeminiModelId(
-    process.env.GROQ_FALLBACK_MODEL ||
-      process.env.GEMINI_FALLBACK_MODEL ||
-      DEFAULT_GEMINI_FALLBACK_MODEL,
+const resolveAiFallbackModel = (primaryModel: string) => {
+  const requested = normalizeAiModelId(
+    process.env.GROQ_FALLBACK_MODEL || DEFAULT_AI_FALLBACK_MODEL,
   );
-  const primary = normalizeGeminiModelId(primaryModel);
+  const primary = normalizeAiModelId(primaryModel);
 
   if (!requested || requested === primary) return null;
-  if (isRetiredGeminiModel(requested)) {
-    const safe = normalizeGeminiModelId(DEFAULT_GEMINI_MODEL);
-    if (safe && safe !== primary && !isRetiredGeminiModel(safe)) {
+  if (isRetiredAiModel(requested)) {
+    const safe = normalizeAiModelId(DEFAULT_AI_MODEL);
+    if (safe && safe !== primary && !isRetiredAiModel(safe)) {
       console.warn(`${LOG_PREFIX} fallback_model_retired`, {
         requested,
         using: safe,
@@ -168,7 +166,7 @@ const createAgentContext = (input: {
 const resolveSafeCustomerReply = async (input: {
   candidate: string;
   systemPrompt: string;
-  contents: GeminiContent[];
+  contents: AiContent[];
   model: string;
   timeoutsMs: number[];
   logContext: Record<string, unknown>;
@@ -185,7 +183,7 @@ const resolveSafeCustomerReply = async (input: {
     preview: input.candidate.slice(0, 160),
   });
 
-  const sanitized = await generateGeminiWithRetry({
+  const sanitized = await generateAiWithRetry({
     systemPrompt: `${input.systemPrompt}\n\n${CUSTOMER_REPLY_SANITIZE_INSTRUCTION}`,
     contents: [
       ...input.contents,
@@ -233,14 +231,14 @@ const resolveSafeCustomerReply = async (input: {
 
 const runAgentLoop = async (input: {
   systemPrompt: string;
-  contents: GeminiContent[];
+  contents: AiContent[];
   model: string;
   ctx: AgentRunContext;
   timeoutsMs: number[];
   degraded: boolean;
   allowedToolNames?: string[] | null;
 }): Promise<AgentDecision> => {
-  const workingContents: GeminiContent[] = input.contents.map((content) => ({
+  const workingContents: AiContent[] = input.contents.map((content) => ({
     role: content.role,
     parts: [...content.parts],
   }));
@@ -253,7 +251,7 @@ const runAgentLoop = async (input: {
   };
 
   for (let step = 0; step < MAX_TOOL_STEPS; step += 1) {
-    const generated = await generateGeminiWithRetry({
+    const generated = await generateAiWithRetry({
       systemPrompt: input.systemPrompt,
       contents: workingContents,
       model: input.model,
@@ -287,7 +285,7 @@ const runAgentLoop = async (input: {
         });
       }
 
-      const responseParts: GeminiContentPart[] = [];
+      const responseParts: AiContentPart[] = [];
       let stopAgent = false;
 
       for (const call of generated.functionCalls) {
@@ -372,7 +370,7 @@ const runAgentLoop = async (input: {
     };
   }
 
-  const fallback = await generateGeminiWithRetry({
+  const fallback = await generateAiWithRetry({
     systemPrompt: `${input.systemPrompt}\n\n${CUSTOMER_REPLY_SANITIZE_INSTRUCTION}\nNo uses más tools. Responde ahora al cliente en texto claro.`,
     contents: workingContents,
     model: input.model,
@@ -405,7 +403,7 @@ const runAgentLoop = async (input: {
   };
 };
 
-export const runGeminiAgent = async (input: {
+export const runAiAgent = async (input: {
   supabase: SupabaseClient;
   conversationId: number;
   customerPhone: string | null;
@@ -442,9 +440,9 @@ export const runGeminiAgent = async (input: {
       ? "La oficina está CERRADA ahora. Si el cliente pide un asesor, soporte humano o no puedes resolver: informa el horario inyectado y la próxima apertura. No prometas atención “en breve”. Los pagos/comprobantes sí puedes registrarlos."
       : null,
     officeHours.enabled && officeHours.closed && replyMode === "full" ? "" : null,
-    GEMINI_TOOLS_CONTRACT_PROMPT,
+    AI_TOOLS_CONTRACT_PROMPT,
     "",
-    GEMINI_MEDIA_CONTRACT_PROMPT,
+    AI_MEDIA_CONTRACT_PROMPT,
     "",
     officeHours.promptBlock,
     "",
@@ -462,8 +460,8 @@ export const runGeminiAgent = async (input: {
   const primaryTimeouts = hasInlineMedia ? [25000, 35000] : [18000, 25000];
   const degradedTimeouts = [18000, 25000];
   const primaryModel =
-    normalizeGeminiModelId(input.model || "") || DEFAULT_GEMINI_MODEL;
-  const fallbackModel = resolveGeminiFallbackModel(primaryModel);
+    normalizeAiModelId(input.model || "") || DEFAULT_AI_MODEL;
+  const fallbackModel = resolveAiFallbackModel(primaryModel);
 
   console.log(`${LOG_PREFIX} started`, {
     conversationId: input.conversationId,
@@ -482,7 +480,7 @@ export const runGeminiAgent = async (input: {
 
   const runWithModel = async (
     model: string,
-    options?: { degraded?: boolean; contentsOverride?: GeminiContent[] },
+    options?: { degraded?: boolean; contentsOverride?: AiContent[] },
   ) => {
     const ctx = createAgentContext({
       supabase: input.supabase,
@@ -517,7 +515,7 @@ export const runGeminiAgent = async (input: {
     let lastError: unknown = primaryError;
 
     // Multimodal path: retry without inline media on the same model.
-    if (hasInlineMedia && isRetryableGeminiError(primaryError)) {
+    if (hasInlineMedia && isRetryableAiError(primaryError)) {
       console.warn(`${LOG_PREFIX} degraded_retry`, {
         conversationId: input.conversationId,
         runId,
@@ -545,7 +543,7 @@ export const runGeminiAgent = async (input: {
     }
 
     // Capacity/outage: try a different model before giving up to the caller.
-    if (fallbackModel && isRetryableGeminiError(lastError)) {
+    if (fallbackModel && isRetryableAiError(lastError)) {
       console.warn(`${LOG_PREFIX} model_fallback_used`, {
         conversationId: input.conversationId,
         runId,
@@ -570,8 +568,8 @@ export const runGeminiAgent = async (input: {
         };
       } catch (fallbackError) {
         if (
-          isPermanentGeminiError(fallbackError) &&
-          isRetryableGeminiError(lastError)
+          isPermanentAiError(fallbackError) &&
+          isRetryableAiError(lastError)
         ) {
           console.warn(`${LOG_PREFIX} fallback_model_permanent_error`, {
             conversationId: input.conversationId,

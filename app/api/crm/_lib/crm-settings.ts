@@ -18,7 +18,7 @@ import {
   parseAiRecoveryMessages,
   type AiRecoveryMessages,
 } from "@/app/crm/_lib/ai-recovery-messages";
-import { DEFAULT_GEMINI_MODEL, isRetiredGeminiModel } from "@/app/crm/_lib/gemini-models";
+import { DEFAULT_AI_MODEL, isRetiredAiModel } from "@/app/crm/_lib/ai-models";
 import {
   DEFAULT_CRM_ACCENT,
   parseCrmAccentId,
@@ -28,7 +28,7 @@ import {
 export type CrmSettings = {
   id: number;
   bot_engine: BotEngine;
-  gemini_model: string;
+  ai_model: string;
   ai_system_prompt: string | null;
   payment_success_message: string | null;
   ai_recovery_messages: AiRecoveryMessages;
@@ -40,19 +40,19 @@ export type CrmSettings = {
 };
 
 
-const resolveStoredGeminiModel = (value: unknown) => {
+const resolveStoredAiModel = (value: unknown) => {
   const model =
     typeof value === "string" && value.trim()
       ? value.trim()
-      : DEFAULT_GEMINI_MODEL;
-  if (isRetiredGeminiModel(model)) return DEFAULT_GEMINI_MODEL;
+      : DEFAULT_AI_MODEL;
+  if (isRetiredAiModel(model)) return DEFAULT_AI_MODEL;
   return model;
 };
 
 const DEFAULT_SETTINGS: CrmSettings = {
   id: 1,
   bot_engine: DEFAULT_BOT_ENGINE,
-  gemini_model: DEFAULT_GEMINI_MODEL,
+  ai_model: DEFAULT_AI_MODEL,
   ai_system_prompt: null,
   payment_success_message: null,
   ai_recovery_messages: { ...EMPTY_AI_RECOVERY_MESSAGES },
@@ -84,7 +84,7 @@ const mapSettingsRow = (row: Record<string, unknown> | null): CrmSettings => {
   return {
     id: Number(row.id) || 1,
     bot_engine: normalizeBotEngine(row.bot_engine),
-    gemini_model: resolveStoredGeminiModel(row.gemini_model),
+    ai_model: resolveStoredAiModel(row.ai_model ?? row.gemini_model),
     ai_system_prompt:
       typeof row.ai_system_prompt === "string" ? row.ai_system_prompt : null,
     payment_success_message:
@@ -116,7 +116,7 @@ export const getCrmSettings = async (
     .maybeSingle();
 
   if (error) {
-    // Table may not exist yet before migration; fail soft to Gemini defaults.
+    // Table may not exist yet before migration; fail soft to AI defaults.
     console.error("[crm_settings] load_failed", error.message);
     return {
       ...DEFAULT_SETTINGS,
@@ -131,7 +131,7 @@ export const getCrmSettings = async (
         {
           id: 1,
           bot_engine: DEFAULT_BOT_ENGINE,
-          gemini_model: DEFAULT_GEMINI_MODEL,
+          ai_model: DEFAULT_AI_MODEL,
           updated_at: new Date().toISOString(),
         },
         { onConflict: "id" },
@@ -154,7 +154,7 @@ export const updateCrmSettings = async (
   supabase: SupabaseClient,
   payload: {
     bot_engine?: BotEngine;
-    gemini_model?: string;
+    ai_model?: string;
     ai_system_prompt?: string | null;
     payment_success_message?: string | null;
     ai_recovery_messages?: AiRecoveryMessages;
@@ -175,7 +175,7 @@ export const updateCrmSettings = async (
   const next = {
     id: 1,
     bot_engine: payload.bot_engine ?? current.bot_engine,
-    gemini_model: payload.gemini_model?.trim() || current.gemini_model,
+    ai_model: payload.ai_model?.trim() || current.ai_model,
     ai_system_prompt:
       payload.ai_system_prompt === undefined
         ? current.ai_system_prompt

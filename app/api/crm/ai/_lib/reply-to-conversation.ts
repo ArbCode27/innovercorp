@@ -5,13 +5,13 @@ import { resolveOfficeHoursSnapshot } from "@/app/crm/_lib/office-hours";
 import { getCrmSettings } from "../../_lib/crm-settings";
 import { finishAiRun, markAiRunAckSent, startAiRun, type AiRunHandle } from "./ai-runs";
 import type { AgentHistoryMessage } from "./context-builder";
-import { runGeminiAgent, type AgentClientSnapshot } from "./agent-runner";
+import { runAiAgent, type AgentClientSnapshot } from "./agent-runner";
 import {
-  getGeminiCircuitState,
+  getAiCircuitState,
   isCapacityFailureMessage,
-  recordGeminiCircuitFailureMessage,
-  recordGeminiCircuitSuccess,
-} from "./gemini-circuit";
+  recordAiCircuitFailureMessage,
+  recordAiCircuitSuccess,
+} from "./ai-circuit";
 import {
   sendGuaranteedClientReply,
   sendProcessingAck,
@@ -33,7 +33,7 @@ import {
   sleepMs,
 } from "./turn-coordinator";
 
-const LOG_PREFIX = "[CRM_AI_REPLY]";
+const LOG_PREFIX = "[AI_AGENT]";
 const GRAPH_API_VERSION = "v19.0";
 const HISTORY_LIMIT = 24;
 const ACK_DELAY_MS = 5000;
@@ -57,7 +57,7 @@ const getServerEnv = (key: string) => {
   return value;
 };
 
-const logGeminiNoReply = (
+const logAiNoReply = (
   kind: "skipped" | "failed",
   details: Record<string, unknown>,
 ) => {
@@ -67,11 +67,11 @@ const logGeminiNoReply = (
   };
 
   if (kind === "failed") {
-    console.error(`${LOG_PREFIX} gemini_no_reply`, payload);
+    console.error(`${LOG_PREFIX} no_reply`, payload);
     return;
   }
 
-  console.warn(`${LOG_PREFIX} gemini_no_reply`, payload);
+  console.warn(`${LOG_PREFIX} no_reply`, payload);
 };
 
 const resolveRecipient = (
@@ -141,7 +141,7 @@ const mapFallbackResult = (
   return {
     ok: false,
     skipped: fallback.skipped,
-    reason: fallback.reason || "fallback_failed_after_gemini_error",
+    reason: fallback.reason || "fallback_failed_after_api_error",
     runId,
   };
 };
@@ -228,14 +228,14 @@ export type AiReplyResult = {
   runId?: string;
 };
 
-export const replyToConversationWithGemini = async (
+export const replyToConversationWithAi = async (
   supabase: SupabaseClient,
   input: {
     conversationId: number;
     triggerMessageId?: number | null;
     /**
      * Agent-initiated runs (e.g. process payment receipt) may bypass human_mode
-     * so Gemini can still extract/submit while an advisor owns the chat.
+     * so the AI can still extract/submit while an advisor owns the chat.
      */
     forceRun?: boolean;
     paymentRequestedByAgentId?: number | null;
@@ -296,7 +296,7 @@ export const replyToConversationWithGemini = async (
         skipped: true,
         reason: "conversation_not_found",
       } as const;
-      logGeminiNoReply("skipped", { ...baseContext, ...result });
+      logAiNoReply("skipped", { ...baseContext, ...result });
       return result;
     }
 
@@ -306,7 +306,7 @@ export const replyToConversationWithGemini = async (
         skipped: true,
         reason: "conversation_resolved",
       } as const;
-      logGeminiNoReply("skipped", {
+      logAiNoReply("skipped", {
         ...baseContext,
         ...result,
         status: conversation.status,
@@ -316,7 +316,7 @@ export const replyToConversationWithGemini = async (
 
     const settings = await getCrmSettings(supabase);
     recoveryMessages = settings.ai_recovery_messages;
-    modelName = settings.gemini_model;
+    modelName = settings.ai_model;
     officeHoursSnapshot = resolveOfficeHoursSnapshot(
       new Date(),
       settings.office_hours,
@@ -343,7 +343,7 @@ export const replyToConversationWithGemini = async (
         skipped: true,
         reason: replyPolicy.reason,
       } as const;
-      logGeminiNoReply("skipped", {
+      logAiNoReply("skipped", {
         ...baseContext,
         ...result,
         humanMode: Boolean(conversation.human_mode),
@@ -394,7 +394,7 @@ export const replyToConversationWithGemini = async (
         skipped: true,
         reason: "no_inbound_content",
       } as const;
-      logGeminiNoReply("skipped", {
+      logAiNoReply("skipped", {
         ...baseContext,
         ...result,
         historyCount: chronological.length,
@@ -426,7 +426,7 @@ export const replyToConversationWithGemini = async (
           skipped: true,
           reason: "turn_superseded",
         } as const;
-        logGeminiNoReply("skipped", {
+        logAiNoReply("skipped", {
           ...baseContext,
           ...result,
           latestInboundId: latestAfterWait.id,
@@ -457,7 +457,7 @@ export const replyToConversationWithGemini = async (
         skipped: true,
         reason: lockClaim.reason || "turn_locked",
       } as const;
-      logGeminiNoReply("skipped", { ...baseContext, ...result });
+      logAiNoReply("skipped", { ...baseContext, ...result });
       return result;
     }
 
@@ -490,7 +490,7 @@ export const replyToConversationWithGemini = async (
         skipped: true,
         reason: "turn_stale_before_send",
       } as const;
-      logGeminiNoReply("skipped", { ...baseContext, ...result });
+      logAiNoReply("skipped", { ...baseContext, ...result });
       return result;
     };
 
@@ -523,7 +523,7 @@ export const replyToConversationWithGemini = async (
         } satisfies AiReplyResult;
       }
 
-      recordGeminiCircuitFailureMessage(errorMessage);
+      recordAiCircuitFailureMessage(errorMessage);
       const staleFallback = await skipIfStaleBeforeSend();
       if (staleFallback) return staleFallback;
       const fallback = await sendGuaranteedClientReply(supabase, {
@@ -551,12 +551,12 @@ export const replyToConversationWithGemini = async (
       return mapFallbackResult(fallback);
     };
 
-    const circuit = await getGeminiCircuitState(supabase);
+    const circuit = await getAiCircuitState(supabase);
     runHandle = await startAiRun(supabase, {
       conversationId: conversation.id,
       triggerMessageId: effectiveTriggerId,
       intent,
-      model: settings.gemini_model,
+      model: settings.ai_model,
       circuitOpen: circuit.open && !forceRun,
       metadata: {
         forceRun,
@@ -617,7 +617,7 @@ export const replyToConversationWithGemini = async (
     console.log(`${LOG_PREFIX} generating`, {
       ...baseContext,
       effectiveTriggerId,
-      model: settings.gemini_model,
+      model: settings.ai_model,
       replyMode: replyPolicy.mode,
       historyCount: chronological.length,
       linkedWispro: Boolean(client?.wispro_id),
@@ -645,7 +645,7 @@ export const replyToConversationWithGemini = async (
     let decision;
     let ackSent = false;
     try {
-      decision = await runGeminiAgent({
+      decision = await runAiAgent({
         supabase,
         conversationId: conversation.id,
         customerPhone: conversation.customer_phone,
@@ -654,20 +654,20 @@ export const replyToConversationWithGemini = async (
         triggerMessageId: effectiveTriggerId,
         paymentRequestedByAgentId: input.paymentRequestedByAgentId ?? null,
         businessPrompt: settings.ai_system_prompt,
-        model: settings.gemini_model,
+        model: settings.ai_model,
         replyMode: replyPolicy.mode,
         allowedToolNames: replyPolicy.allowedTools,
         officeHours: officeHoursSnapshot,
       });
-    } catch (geminiError) {
+    } catch (aiError) {
       delayedAck?.cancel();
       const ack = delayedAck ? await delayedAck.wait() : { sent: false };
       ackSent = ack.sent;
 
       const message =
-        geminiError instanceof Error
-          ? geminiError.message
-          : "gemini_request_failed";
+        aiError instanceof Error
+          ? aiError.message
+          : "ai_request_failed";
 
       if (message === "empty_history") {
         await closeRun("skipped", { error: "empty_history", metadata: { intent } });
@@ -676,14 +676,14 @@ export const replyToConversationWithGemini = async (
           skipped: true,
           reason: "empty_history",
         } as const;
-        logGeminiNoReply("skipped", { ...baseContext, ...result });
+        logAiNoReply("skipped", { ...baseContext, ...result });
         return result;
       }
 
-      logGeminiNoReply("failed", {
+      logAiNoReply("failed", {
         ...baseContext,
-        reason: "gemini_api_error",
-        model: settings.gemini_model,
+        reason: "ai_api_error",
+        model: settings.ai_model,
         error: message,
         ackSent,
       });
@@ -696,7 +696,7 @@ export const replyToConversationWithGemini = async (
     const ack = delayedAck ? await delayedAck.wait() : { sent: false };
     ackSent = ack.sent;
 
-    console.log(`${LOG_PREFIX} gemini_decision`, {
+    console.log(`${LOG_PREFIX} decision`, {
       ...baseContext,
       action: decision.action,
       message: decision.message,
@@ -755,9 +755,9 @@ export const replyToConversationWithGemini = async (
       } as const;
       await closeRun("skipped", {
         error: result.reason,
-        metadata: { intent, geminiRunId: decision.runId },
+        metadata: { intent, aiRunId: decision.runId },
       });
-      logGeminiNoReply("skipped", {
+      logAiNoReply("skipped", {
         ...baseContext,
         ...result,
         decisionAction: decision.action,
@@ -776,14 +776,14 @@ export const replyToConversationWithGemini = async (
         });
         await closeRun("handoff", {
           error: errorMessage,
-          metadata: { intent, geminiRunId: decision.runId },
+          metadata: { intent, aiRunId: decision.runId },
         });
         return mapFallbackResult(fallback, decision.runId);
       };
 
       const handoffTextRaw = decision.message.trim();
       if (!handoffTextRaw) {
-        logGeminiNoReply("failed", {
+        logAiNoReply("failed", {
           ...baseContext,
           reason: "handoff_empty_message",
           action: "handoff",
@@ -809,7 +809,7 @@ export const replyToConversationWithGemini = async (
 
       const to = resolveRecipient(freshConversation, client);
       if (!to) {
-        logGeminiNoReply("failed", {
+        logAiNoReply("failed", {
           ...baseContext,
           reason: "handoff_missing_recipient_phone",
           action: "handoff",
@@ -833,7 +833,7 @@ export const replyToConversationWithGemini = async (
             status: "sent",
             created_at: now,
             metadata: {
-              engine: "gemini",
+              engine: "ai",
               action: "handoff",
               reason: decision.reason || null,
               run_id: decision.runId,
@@ -846,7 +846,7 @@ export const replyToConversationWithGemini = async (
 
         if (saveError) throw saveError;
 
-        recordGeminiCircuitSuccess();
+        recordAiCircuitSuccess();
 
         await supabase
           .from("conversations")
@@ -859,7 +859,7 @@ export const replyToConversationWithGemini = async (
           .eq("id", conversation.id);
 
         await closeRun("handoff", {
-          metadata: { intent, geminiRunId: decision.runId },
+          metadata: { intent, aiRunId: decision.runId },
         });
 
         console.log(`${LOG_PREFIX} handoff_sent`, {
@@ -880,7 +880,7 @@ export const replyToConversationWithGemini = async (
       } catch (error) {
         const errorMessage =
           error instanceof Error ? error.message : "handoff_whatsapp_send_failed";
-        logGeminiNoReply("failed", {
+        logAiNoReply("failed", {
           ...baseContext,
           reason: "handoff_whatsapp_send_failed",
           action: "handoff",
@@ -893,7 +893,7 @@ export const replyToConversationWithGemini = async (
 
     const replyTextRaw = decision.message.trim();
     if (!replyTextRaw) {
-      logGeminiNoReply("failed", {
+      logAiNoReply("failed", {
         ...baseContext,
         reason: "empty_model_reply",
         runId: decision.runId,
@@ -929,9 +929,9 @@ export const replyToConversationWithGemini = async (
       } as const;
       await closeRun("failed", {
         error: result.reason,
-        metadata: { intent, geminiRunId: decision.runId },
+        metadata: { intent, aiRunId: decision.runId },
       });
-      logGeminiNoReply("failed", {
+      logAiNoReply("failed", {
         ...baseContext,
         ...result,
         customerPhone: freshConversation.customer_phone,
@@ -945,7 +945,7 @@ export const replyToConversationWithGemini = async (
     try {
       waMessageId = await sendWhatsAppText(to, replyText);
     } catch (sendError) {
-      logGeminiNoReply("failed", {
+      logAiNoReply("failed", {
         ...baseContext,
         reason: "whatsapp_send_failed",
         to,
@@ -970,7 +970,7 @@ export const replyToConversationWithGemini = async (
         status: "sent",
         created_at: now,
         metadata: {
-          engine: "gemini",
+          engine: "ai",
           action: "reply",
           reason: decision.reason || null,
           run_id: decision.runId,
@@ -982,7 +982,7 @@ export const replyToConversationWithGemini = async (
       .single();
 
     if (saveError) {
-      logGeminiNoReply("failed", {
+      logAiNoReply("failed", {
         ...baseContext,
         reason: "message_persist_failed",
         error: saveError.message,
@@ -992,7 +992,7 @@ export const replyToConversationWithGemini = async (
       throw saveError;
     }
 
-    recordGeminiCircuitSuccess();
+    recordAiCircuitSuccess();
 
     await supabase
       .from("conversations")
@@ -1004,7 +1004,7 @@ export const replyToConversationWithGemini = async (
       .eq("id", conversation.id);
 
     await closeRun("replied", {
-      metadata: { intent, geminiRunId: decision.runId, ackSent },
+      metadata: { intent, aiRunId: decision.runId, ackSent },
     });
 
     console.log(`${LOG_PREFIX} reply_sent`, {
@@ -1026,7 +1026,7 @@ export const replyToConversationWithGemini = async (
     const errorMessage =
       error instanceof Error ? error.message : "unknown_error";
 
-    logGeminiNoReply("failed", {
+    logAiNoReply("failed", {
       ...baseContext,
       reason: "unexpected_error",
       error: errorMessage,
@@ -1046,7 +1046,7 @@ export const replyToConversationWithGemini = async (
           reason: "turn_stale_before_send",
         };
       }
-      recordGeminiCircuitFailureMessage(errorMessage);
+      recordAiCircuitFailureMessage(errorMessage);
       const fallback = await sendGuaranteedClientReply(supabase, {
         conversationId: conversation.id,
         triggerMessageId: effectiveTriggerId,

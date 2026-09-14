@@ -35,7 +35,7 @@ import {
   linkWisproArgsSchema,
   lookupWisproArgsSchema,
   submitPaymentReceiptArgsSchema,
-} from "./gemini-tools";
+} from "./ai-tools";
 import {
   isUnsafeCustomerReply,
   SAFE_INTERNAL_LEAK_CUSTOMER_REPLY,
@@ -1278,7 +1278,7 @@ export const executeAgentTool = async (
     error: result.ok ? null : String(result.response.error || "tool_failed"),
   });
 
-  console.log(`[AI_TOOL] ${result.ok ? "ok" : "fail"}`, {
+  console.log(`[AI_AGENT] tool_${result.ok ? "ok" : "fail"}`, {
     conversationId: ctx.conversationId,
     runId: ctx.runId,
     toolName: result.name,

@@ -344,6 +344,9 @@ const patchSchema = z.object({
 });
 
 export async function GET(req: NextRequest) {
+  const startedAt = Date.now();
+  let listFilters: z.infer<typeof listQuerySchema> | null = null;
+
   try {
     const parsed = listQuerySchema.safeParse(
       Object.fromEntries(req.nextUrl.searchParams.entries()),
@@ -356,9 +359,25 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    listFilters = parsed.data;
     const supabase = getServiceClient();
-    const result = await listCrmPayments(supabase, parsed.data);
+    const result = await listCrmPayments(supabase, listFilters);
     const payments = await enrichPaymentsWithLatestInvoiceDate(result.payments);
+    const durationMs = Date.now() - startedAt;
+
+    console.log("[CRM_PAYMENTS] list_ok", {
+      count: payments.length,
+      total: result.total,
+      limit: result.limit,
+      offset: result.offset,
+      from: listFilters.from ?? null,
+      to: listFilters.to ?? null,
+      status: listFilters.status ?? null,
+      bank: listFilters.bank ?? null,
+      q: listFilters.q ? "[redacted]" : null,
+      hasQuery: Boolean(listFilters.q?.trim()),
+      durationMs,
+    });
 
     return NextResponse.json({
       ok: true,
@@ -373,7 +392,15 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    console.error("[CRM_PAYMENTS_API] list_failed", error);
+    console.error("[CRM_PAYMENTS] list_failed", {
+      error: error instanceof Error ? error.message : String(error),
+      from: listFilters?.from ?? null,
+      to: listFilters?.to ?? null,
+      status: listFilters?.status ?? null,
+      bank: listFilters?.bank ?? null,
+      hasQuery: Boolean(listFilters?.q?.trim()),
+      durationMs: Date.now() - startedAt,
+    });
     return NextResponse.json(
       {
         error:

@@ -11,13 +11,13 @@ import {
 } from "@/app/crm/_lib/office-hours";
 import { getCrmSettings } from "@/app/api/crm/_lib/crm-settings";
 import type { AgentHistoryMessage } from "./context-builder";
-import { isTransientGeminiErrorMessage } from "./gemini-retry";
+import { isTransientAiErrorMessage } from "./ai-retry";
 import {
   classifyInboundIntent,
   type InboundIntent,
 } from "./inbound-intent";
 
-const LOG_PREFIX = "[AI_FALLBACK]";
+const LOG_PREFIX = "[AI_AGENT]";
 const GRAPH_API_VERSION = "v19.0";
 /** Soft holds allowed in the window before hard human handoff. */
 const SOFT_FAIL_LIMIT = 2;
@@ -248,7 +248,7 @@ const resolveHoursSnapshot = async (
 };
 
 /**
- * Early deterministic ack so the client is not left in silence while Gemini runs.
+ * Early deterministic ack so the client is not left in silence while the AI runs.
  */
 export const sendProcessingAck = async (
   supabase: SupabaseClient,
@@ -319,7 +319,7 @@ export const sendProcessingAck = async (
         status: "sent",
         created_at: now,
         metadata: {
-          engine: "gemini",
+          engine: "ai",
           action: "ack",
           reason: "ai_processing_ack",
           ai_ack: true,
@@ -371,7 +371,7 @@ export const sendProcessingAck = async (
 };
 
 /**
- * Recovery path after Gemini failures.
+ * Recovery path after AI failures.
  * Transient errors: soft hold (bot stays active) until SOFT_FAIL_LIMIT, then hard handoff.
  */
 export const sendGuaranteedClientReply = async (
@@ -447,7 +447,7 @@ export const sendGuaranteedClientReply = async (
     supabase,
     input.conversationId,
   );
-  const isTransient = isTransientGeminiErrorMessage(input.errorMessage);
+  const isTransient = isTransientAiErrorMessage(input.errorMessage);
   const useSoft =
     !input.forceHardHandoff &&
     intent !== "human_request" &&
@@ -504,7 +504,7 @@ export const sendGuaranteedClientReply = async (
         status: "sent",
         created_at: now,
         metadata: {
-          engine: "gemini",
+          engine: "ai",
           action: recovery === "soft" ? "soft_hold" : "handoff",
           reason:
             recovery === "soft" ? "ai_soft_hold" : "ai_guaranteed_fallback",

@@ -1,17 +1,17 @@
-/** Sole AI engine for the CRM bot. Make was removed. */
-export type BotEngine = "gemini";
+/** Sole AI engine for the CRM bot. */
+export type BotEngine = "ai";
 
-export const BOT_ENGINES = ["gemini"] as const;
+export const BOT_ENGINES = ["ai"] as const;
 
-export const DEFAULT_BOT_ENGINE: BotEngine = "gemini";
+export const DEFAULT_BOT_ENGINE: BotEngine = "ai";
 
 export const BOT_ENGINE_LABELS: Record<BotEngine, string> = {
-  gemini: "Groq",
+  ai: "IA",
 };
 
 export const isBotEngine = (value: unknown): value is BotEngine =>
-  value === "gemini";
+  value === "ai";
 
-/** Legacy DB values like "make" normalize to the sole engine (Groq). */
+/** Legacy DB values like "make" / "gemini" normalize to the sole engine. */
 export const normalizeBotEngine = (_value?: unknown): BotEngine =>
   DEFAULT_BOT_ENGINE;
