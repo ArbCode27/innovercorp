@@ -258,11 +258,11 @@ export const SettingsView = ({
               <div className="min-w-0">
                 <p
                   className={`text-sm font-medium ${CRM_SURFACES.textPrimary}`}>
-                  Gemini
+                  Groq
                 </p>
                 <p className={`mt-1 text-sm ${CRM_SURFACES.textMuted}`}>
-                  Motor único del CRM. Responde desde este servidor con Google
-                  AI Studio.
+                  Motor único del CRM. Responde desde este servidor con la API
+                  de Groq (`openai/gpt-oss-20b`).
                 </p>
                 <p className={`mt-3 text-xs ${CRM_SURFACES.textMuted}`}>
                   Modelo:{" "}
@@ -271,7 +271,7 @@ export const SettingsView = ({
                   </span>
                 </p>
                 <p className={`mt-1 text-xs ${CRM_SURFACES.textMuted}`}>
-                  Requiere `GEMINI_API_KEY` en el servidor.
+                  Requiere `GROQ_API_KEY` en el servidor.
                 </p>
               </div>
             </div>
@@ -299,7 +299,7 @@ export const SettingsView = ({
             <div>
               <h3
                 className={`text-base font-semibold ${CRM_SURFACES.textPrimary}`}>
-                Prompt del agente Gemini
+                Prompt del agente IA
               </h3>
               <p className={`mt-1 text-sm ${CRM_SURFACES.textMuted}`}>
                 Instrucciones de sistema para el asistente.
@@ -329,7 +329,7 @@ export const SettingsView = ({
           </div>
 
           <label htmlFor="crm-ai-system-prompt" className="sr-only">
-            Prompt del sistema para Gemini
+            Prompt del sistema para el agente IA
           </label>
           <Textarea
             id="crm-ai-system-prompt"

@@ -5,7 +5,7 @@ import {
   type GeminiGenerateResult,
 } from "./gemini";
 
-const LOG_PREFIX = "[GEMINI_RETRY]";
+const LOG_PREFIX = "[GROQ_RETRY]";
 
 const PERMANENT_STATUS = new Set([400, 401, 403, 404]);
 
@@ -33,6 +33,9 @@ export const isPermanentGeminiError = (error: unknown): boolean => {
     text.includes("permission_denied") ||
     text.includes("invalid api key") ||
     text.includes("api key not valid") ||
+    text.includes("invalid_api_key") ||
+    text.includes("model_not_found") ||
+    /\bgroq 40[0143]\b/.test(text) ||
     /\bgemini 40[0143]\b/.test(text)
   );
 };
@@ -48,7 +51,9 @@ export const isRetryableGeminiError = (error: unknown): boolean => {
     const statusText = String(error.statusText || "").toLowerCase();
     if (
       statusText.includes("unavailable") ||
-      statusText.includes("resource_exhausted")
+      statusText.includes("resource_exhausted") ||
+      statusText.includes("rate_limit") ||
+      statusText.includes("overloaded")
     ) {
       return true;
     }
@@ -69,6 +74,7 @@ export const isRetryableGeminiError = (error: unknown): boolean => {
     message.includes("etimedout") ||
     message.includes("429") ||
     message.includes("rate limit") ||
+    message.includes("rate_limit") ||
     message.includes("resource exhausted") ||
     message.includes("resource_exhausted") ||
     message.includes("503") ||
@@ -114,7 +120,7 @@ const sleep = (ms: number) =>
   });
 
 /**
- * Retries Gemini generateContent on transient failures (timeouts, 5xx, rate limits).
+ * Retries Groq chat completions on transient failures (timeouts, 5xx, rate limits).
  */
 export const generateGeminiWithRetry = async (input: {
   systemPrompt: string;
@@ -187,7 +193,7 @@ export const generateGeminiWithRetry = async (input: {
 
   throw lastError instanceof Error
     ? lastError
-    : new Error("Gemini falló tras reintentos");
+    : new Error("Groq falló tras reintentos");
 };
 
 /** Removes inlineData parts so a degraded retry is text-only (faster). */

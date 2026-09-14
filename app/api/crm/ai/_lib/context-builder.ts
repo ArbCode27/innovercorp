@@ -1,4 +1,5 @@
 import type { GeminiContent, GeminiContentPart } from "./gemini";
+import { describeImageWithGroq, transcribeAudioWithGroq } from "./gemini";
 
 const LOG_PREFIX = "[AI_MEDIA]";
 
@@ -71,7 +72,9 @@ export const formatMessageTextForHistory = (message: AgentHistoryMessage) => {
   const summary =
     typeof message.metadata?.gemini_media_summary === "string"
       ? message.metadata.gemini_media_summary.trim()
-      : "";
+      : typeof message.metadata?.media_summary === "string"
+        ? message.metadata.media_summary.trim()
+        : "";
 
   if (mediaType === "image") {
     const bits = ["[Imagen]"];
@@ -110,9 +113,9 @@ export const formatMessageTextForHistory = (message: AgentHistoryMessage) => {
   return content;
 };
 
-const downloadAsInlineData = async (
+const downloadMediaBytes = async (
   message: AgentHistoryMessage,
-): Promise<Extract<GeminiContentPart, { inlineData: unknown }> | null> => {
+): Promise<{ buffer: Buffer; mimeType: string } | null> => {
   const mediaType = (message.media_type || "").toLowerCase();
   const mimeType = resolveMimeForMedia(message);
   const maxBytes = mediaType === "audio" ? AUDIO_MAX_BYTES : IMAGE_MAX_BYTES;
@@ -169,19 +172,14 @@ const downloadAsInlineData = async (
     const resolvedMime =
       normalizeMime(response.headers.get("content-type")) || mimeType;
 
-    console.log(`${LOG_PREFIX} attached`, {
+    console.log(`${LOG_PREFIX} downloaded`, {
       messageId: message.id,
       mediaType,
       mimeType: resolvedMime,
       bytes: buffer.byteLength,
     });
 
-    return {
-      inlineData: {
-        mimeType: resolvedMime,
-        data: buffer.toString("base64"),
-      },
-    };
+    return { buffer, mimeType: resolvedMime };
   } catch (error) {
     console.warn(`${LOG_PREFIX} download_error`, {
       messageId: message.id,
@@ -189,6 +187,47 @@ const downloadAsInlineData = async (
     });
     return null;
   }
+};
+
+/**
+ * gpt-oss-20b is text-only: convert recent image/audio into text via
+ * Groq vision / Whisper, then inject into the user turn.
+ */
+const enrichMediaAsText = async (
+  message: AgentHistoryMessage,
+): Promise<string | null> => {
+  const mediaType = (message.media_type || "").toLowerCase();
+  const downloaded = await downloadMediaBytes(message);
+  if (!downloaded) return null;
+
+  if (mediaType === "audio") {
+    const transcript = await transcribeAudioWithGroq({
+      bytes: downloaded.buffer,
+      mimeType: downloaded.mimeType,
+    });
+    if (!transcript) return null;
+    console.log(`${LOG_PREFIX} whisper_ok`, {
+      messageId: message.id,
+      preview: transcript.slice(0, 120),
+    });
+    return `[Audio] transcripción: ${transcript}`;
+  }
+
+  if (mediaType === "image") {
+    const analysis = await describeImageWithGroq({
+      base64: downloaded.buffer.toString("base64"),
+      mimeType: downloaded.mimeType,
+      caption: message.caption,
+    });
+    if (!analysis) return null;
+    console.log(`${LOG_PREFIX} vision_ok`, {
+      messageId: message.id,
+      preview: analysis.slice(0, 120),
+    });
+    return `[Imagen] análisis: ${analysis}`;
+  }
+
+  return null;
 };
 
 const selectMessagesForInlineMedia = (
@@ -211,7 +250,6 @@ const selectMessagesForInlineMedia = (
     return Math.abs(anchorTime - createdAt) <= RECENT_WINDOW_MS;
   });
 
-  // Prefer trigger first, then newest.
   candidates.sort((left, right) => {
     if (triggerMessageId) {
       if (left.id === triggerMessageId) return -1;
@@ -230,7 +268,7 @@ const selectMessagesForInlineMedia = (
 };
 
 /**
- * Builds Gemini contents: text history + inline image/audio for the recent turn.
+ * Builds agent contents: text history + media enriched as text (Whisper/vision).
  */
 export const buildAgentContents = async (input: {
   messages: AgentHistoryMessage[];
@@ -245,23 +283,23 @@ export const buildAgentContents = async (input: {
   );
   const inlineTargetIds = new Set(inlineTargets.map((message) => message.id));
 
-  const inlinePartsByMessageId = new Map<
-    number,
-    Extract<GeminiContentPart, { inlineData: unknown }>
-  >();
+  const mediaTextByMessageId = new Map<number, string>();
 
   await Promise.all(
     inlineTargets.map(async (message) => {
-      const part = await downloadAsInlineData(message);
-      if (part) inlinePartsByMessageId.set(message.id, part);
+      const enriched = await enrichMediaAsText(message);
+      if (enriched) mediaTextByMessageId.set(message.id, enriched);
     }),
   );
 
   const contents: GeminiContent[] = [];
 
   for (const message of input.messages) {
-    const text = formatMessageTextForHistory(message);
-    if (!text && !inlinePartsByMessageId.has(message.id)) continue;
+    const baseText = formatMessageTextForHistory(message);
+    const mediaText = mediaTextByMessageId.get(message.id);
+    const text = [baseText, mediaText].filter(Boolean).join("\n").trim();
+
+    if (!text && !inlineTargetIds.has(message.id)) continue;
 
     const role = isUserMessage(message) ? ("user" as const) : ("model" as const);
     const parts: GeminiContentPart[] = [];
@@ -272,22 +310,15 @@ export const buildAgentContents = async (input: {
       parts.push({
         text:
           message.media_type === "audio"
-            ? "[Audio] nota de voz del cliente"
-            : "[Imagen] imagen del cliente",
+            ? "[Audio] nota de voz del cliente (no se pudo transcribir)"
+            : "[Imagen] imagen del cliente (no se pudo analizar)",
       });
-    }
-
-    const inlinePart = inlinePartsByMessageId.get(message.id);
-    if (inlinePart) {
-      parts.push(inlinePart);
     }
 
     if (!parts.length) continue;
 
     const previous = contents[contents.length - 1];
     if (previous && previous.role === role) {
-      // Merge consecutive same-role turns (Gemini prefers alternating roles,
-      // but coalescing user bursts with media is acceptable as one user turn).
       previous.parts.push(...parts);
     } else {
       contents.push({ role, parts });
@@ -300,18 +331,18 @@ export const buildAgentContents = async (input: {
 
   return {
     contents,
-    attachedMediaIds: [...inlinePartsByMessageId.keys()],
+    attachedMediaIds: [...mediaTextByMessageId.keys()],
   };
 };
 
 export const GEMINI_MEDIA_CONTRACT_PROMPT = `Media (imagen/audio):
-- Si el usuario envía una imagen, analízala (comprobante, cédula, falla técnica, captura) y actúa.
-- Si envía audio, interpreta el contenido y responde como si fuera texto.
-- Usa caption + media juntos cuando existan.
-- Si ves una cédula legible en imagen, puedes usar lookup_wispro_by_cedula.
+- Las imágenes llegan como texto "[Imagen] análisis: ..." (visión previa). Úsalo como si vieras el comprobante/cédula.
+- Los audios llegan como "[Audio] transcripción: ...". Responde como si fuera texto del cliente.
+- Usa caption + análisis juntos cuando existan.
+- Si el análisis trae cédula legible, puedes usar lookup_wispro_by_cedula.
 - Si parece comprobante de pago:
-  1) Extrae amount, transaction_code y bank solo si son legibles.
+  1) Extrae amount, transaction_code y bank solo si aparecen en el análisis.
   2) Si NO tienes cédula del abonado: PÍDELA. No uses escalate_to_human todavía.
   3) Con cédula: lookup_wispro_by_cedula y luego submit_payment_receipt (link opcional).
   4) Tras submit, el sistema hace handoff; confirma según el resultado. NUNCA digas que el pago está aprobado.
-- No digas que no puedes ver imágenes o audios: en este sistema sí los recibes.`;
+- No digas que no puedes ver imágenes o audios: en este sistema sí los recibes (como texto enriquecido).`;

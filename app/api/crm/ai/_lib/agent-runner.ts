@@ -44,7 +44,9 @@ const MAX_TOOL_STEPS = 6;
 
 const resolveGeminiFallbackModel = (primaryModel: string) => {
   const requested = normalizeGeminiModelId(
-    process.env.GEMINI_FALLBACK_MODEL || DEFAULT_GEMINI_FALLBACK_MODEL,
+    process.env.GROQ_FALLBACK_MODEL ||
+      process.env.GEMINI_FALLBACK_MODEL ||
+      DEFAULT_GEMINI_FALLBACK_MODEL,
   );
   const primary = normalizeGeminiModelId(primaryModel);
 
@@ -277,6 +279,7 @@ const runAgentLoop = async (input: {
           role: "model",
           parts: generated.functionCalls.map((call) => ({
             functionCall: {
+              id: call.id,
               name: call.name,
               args: call.args,
             },
@@ -295,6 +298,7 @@ const runAgentLoop = async (input: {
         );
         responseParts.push({
           functionResponse: {
+            id: call.id,
             name: toolResult.name,
             response: toolResult.response,
           },

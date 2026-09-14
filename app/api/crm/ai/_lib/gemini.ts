@@ -1,4 +1,8 @@
-import { DEFAULT_GEMINI_MODEL } from "@/app/crm/_lib/gemini-models";
+import {
+  DEFAULT_GROQ_MODEL,
+  DEFAULT_GROQ_VISION_MODEL,
+  DEFAULT_GROQ_WHISPER_MODEL,
+} from "@/app/crm/_lib/gemini-models";
 import { GEMINI_TOOL_DECLARATIONS } from "./gemini-tools";
 
 export class GeminiApiError extends Error {
@@ -12,14 +16,17 @@ export class GeminiApiError extends Error {
   ) {
     const statusPrefix =
       status != null
-        ? `Gemini ${status}${statusText ? ` ${statusText}` : ""}: `
-        : "Gemini: ";
+        ? `Groq ${status}${statusText ? ` ${statusText}` : ""}: `
+        : "Groq: ";
     super(`${statusPrefix}${message}`);
     this.name = "GeminiApiError";
     this.status = status ?? null;
     this.statusText = statusText ?? null;
   }
 }
+
+/** @deprecated Alias kept for call sites; errors are from Groq. */
+export type GroqApiError = GeminiApiError;
 
 export type GeminiContentPart =
   | { text: string }
@@ -33,12 +40,14 @@ export type GeminiContentPart =
       functionCall: {
         name: string;
         args?: Record<string, unknown>;
+        id?: string;
       };
     }
   | {
       functionResponse: {
         name: string;
         response: Record<string, unknown>;
+        id?: string;
       };
     };
 
@@ -50,6 +59,7 @@ export type GeminiContent = {
 export type GeminiFunctionCall = {
   name: string;
   args: Record<string, unknown>;
+  id: string;
 };
 
 export type GeminiGenerateResult = {
@@ -59,69 +69,148 @@ export type GeminiGenerateResult = {
   modelContent: GeminiContent | null;
 };
 
-const LOG_PREFIX = "[GEMINI]";
-const DEFAULT_MODEL = DEFAULT_GEMINI_MODEL;
+type OpenAiToolCall = {
+  id: string;
+  type: "function";
+  function: { name: string; arguments: string };
+};
+
+type OpenAiMessage = {
+  role: "system" | "user" | "assistant" | "tool";
+  content?: string | null | Array<Record<string, unknown>>;
+  tool_calls?: OpenAiToolCall[];
+  tool_call_id?: string;
+  name?: string;
+};
+
+const LOG_PREFIX = "[GROQ]";
+const GROQ_CHAT_URL = "https://api.groq.com/openai/v1/chat/completions";
+const GROQ_TRANSCRIBE_URL =
+  "https://api.groq.com/openai/v1/audio/transcriptions";
+const DEFAULT_MODEL = DEFAULT_GROQ_MODEL;
 
 export const getGeminiApiKey = () => {
   const key =
+    process.env.GROQ_API_KEY?.trim() ||
     process.env.GEMINI_API_KEY?.trim() ||
-    process.env.GOOGLE_AI_API_KEY?.trim() ||
-    process.env.GOOGLE_GENERATIVE_AI_API_KEY?.trim() ||
     "";
 
   return key || null;
 };
 
-const extractFunctionCalls = (raw: unknown): GeminiFunctionCall[] => {
-  const parts =
-    (raw as { candidates?: Array<{ content?: { parts?: unknown[] } }> })
-      ?.candidates?.[0]?.content?.parts || [];
+export const getGroqApiKey = getGeminiApiKey;
 
-  const calls: GeminiFunctionCall[] = [];
+const toOpenAiTools = (allowedToolNames?: string[] | null) => {
+  const declarations =
+    allowedToolNames && allowedToolNames.length
+      ? GEMINI_TOOL_DECLARATIONS.filter((tool) =>
+          allowedToolNames.includes(tool.name),
+        )
+      : GEMINI_TOOL_DECLARATIONS;
 
-  for (const part of parts) {
-    if (!part || typeof part !== "object") continue;
-    const functionCall = (part as { functionCall?: unknown }).functionCall;
-    if (!functionCall || typeof functionCall !== "object") continue;
-
-    const name = String(
-      (functionCall as { name?: unknown }).name || "",
-    ).trim();
-    if (!name) continue;
-
-    const argsRaw = (functionCall as { args?: unknown }).args;
-    const args =
-      argsRaw && typeof argsRaw === "object" && !Array.isArray(argsRaw)
-        ? (argsRaw as Record<string, unknown>)
-        : {};
-
-    calls.push({ name, args });
-  }
-
-  return calls;
+  return declarations.map((tool) => ({
+    type: "function" as const,
+    function: {
+      name: tool.name,
+      description: tool.description,
+      parameters: tool.parameters,
+    },
+  }));
 };
 
-const extractText = (raw: unknown) =>
-  String(
-    (raw as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> })
-      ?.candidates?.[0]?.content?.parts
-      ?.map((part) => part?.text || "")
-      .join("") || "",
-  ).trim();
+const parseToolArgs = (raw: string): Record<string, unknown> => {
+  try {
+    const parsed = JSON.parse(raw || "{}");
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    // ignore
+  }
+  return {};
+};
 
-const extractModelContent = (raw: unknown): GeminiContent | null => {
-  const content = (
-    raw as { candidates?: Array<{ content?: { role?: string; parts?: unknown[] } }> }
-  )?.candidates?.[0]?.content;
+const contentsToOpenAiMessages = (
+  systemPrompt: string,
+  contents: GeminiContent[],
+): OpenAiMessage[] => {
+  const messages: OpenAiMessage[] = [
+    { role: "system", content: systemPrompt },
+  ];
 
-  if (!content?.parts || !Array.isArray(content.parts) || !content.parts.length) {
-    return null;
+  let pendingToolCallIds: string[] = [];
+
+  for (const content of contents) {
+    const functionCalls = content.parts.filter(
+      (part): part is Extract<GeminiContentPart, { functionCall: unknown }> =>
+        "functionCall" in part && Boolean(part.functionCall),
+    );
+    const functionResponses = content.parts.filter(
+      (
+        part,
+      ): part is Extract<GeminiContentPart, { functionResponse: unknown }> =>
+        "functionResponse" in part && Boolean(part.functionResponse),
+    );
+    const textParts = content.parts
+      .filter(
+        (part): part is Extract<GeminiContentPart, { text: string }> =>
+          "text" in part && typeof part.text === "string",
+      )
+      .map((part) => part.text.trim())
+      .filter(Boolean);
+
+    if (functionCalls.length) {
+      const toolCalls: OpenAiToolCall[] = functionCalls.map((part, index) => {
+        const id =
+          part.functionCall.id ||
+          pendingToolCallIds[index] ||
+          `call_${content.role}_${index}_${part.functionCall.name}`;
+        return {
+          id,
+          type: "function",
+          function: {
+            name: part.functionCall.name,
+            arguments: JSON.stringify(part.functionCall.args || {}),
+          },
+        };
+      });
+      pendingToolCallIds = toolCalls.map((call) => call.id);
+      messages.push({
+        role: "assistant",
+        content: textParts.join("\n") || null,
+        tool_calls: toolCalls,
+      });
+      continue;
+    }
+
+    if (functionResponses.length) {
+      for (let index = 0; index < functionResponses.length; index += 1) {
+        const part = functionResponses[index];
+        const id =
+          part.functionResponse.id ||
+          pendingToolCallIds[index] ||
+          `call_tool_${index}_${part.functionResponse.name}`;
+        messages.push({
+          role: "tool",
+          tool_call_id: id,
+          name: part.functionResponse.name,
+          content: JSON.stringify(part.functionResponse.response || {}),
+        });
+      }
+      pendingToolCallIds = [];
+      continue;
+    }
+
+    const text = textParts.join("\n").trim();
+    if (!text) continue;
+
+    messages.push({
+      role: content.role === "model" ? "assistant" : "user",
+      content: text,
+    });
   }
 
-  return {
-    role: "model",
-    parts: content.parts as GeminiContentPart[],
-  };
+  return messages;
 };
 
 export const generateGeminiWithTools = async (input: {
@@ -130,15 +219,14 @@ export const generateGeminiWithTools = async (input: {
   model?: string;
   timeoutMs?: number;
   enableTools?: boolean;
-  /** When set, only these tool names are exposed to Gemini. */
   allowedToolNames?: string[] | null;
 }): Promise<GeminiGenerateResult> => {
-  const apiKey = getGeminiApiKey();
+  const apiKey = getGroqApiKey();
   if (!apiKey) {
     console.error(`${LOG_PREFIX} missing_api_key`, {
-      hint: "Configura GEMINI_API_KEY en .env y reinicia el servidor",
+      hint: "Configura GROQ_API_KEY en .env / Vercel y redeploy",
     });
-    throw new Error("GEMINI_API_KEY no está configurada en el servidor");
+    throw new Error("GROQ_API_KEY no está configurada en el servidor");
   }
 
   const model = (input.model || DEFAULT_MODEL).trim() || DEFAULT_MODEL;
@@ -146,65 +234,87 @@ export const generateGeminiWithTools = async (input: {
   const timeoutMs = input.timeoutMs ?? 25000;
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   const enableTools = input.enableTools ?? true;
-
-  const toolDeclarations =
-    input.allowedToolNames && input.allowedToolNames.length
-      ? GEMINI_TOOL_DECLARATIONS.filter((tool) =>
-          input.allowedToolNames!.includes(tool.name),
-        )
-      : GEMINI_TOOL_DECLARATIONS;
+  const tools = enableTools ? toOpenAiTools(input.allowedToolNames) : [];
+  const messages = contentsToOpenAiMessages(input.systemPrompt, input.contents);
 
   console.log(`${LOG_PREFIX} request_started`, {
     model,
-    contentsCount: input.contents.length,
+    messagesCount: messages.length,
     timeoutMs,
     enableTools,
-    toolsCount: enableTools ? toolDeclarations.length : 0,
+    toolsCount: tools.length,
     apiKeyPresent: true,
     apiKeyPrefix: `${apiKey.slice(0, 6)}...`,
   });
 
   try {
     const body: Record<string, unknown> = {
-      systemInstruction: {
-        parts: [{ text: input.systemPrompt }],
-      },
-      contents: input.contents,
-      generationConfig: {
-        temperature: 0.4,
-        maxOutputTokens: 4096,
-      },
+      model,
+      messages,
+      temperature: 0.4,
+      max_tokens: 4096,
     };
 
-    if (enableTools && toolDeclarations.length > 0) {
-      body.tools = [
-        {
-          functionDeclarations: toolDeclarations,
-        },
-      ];
-      body.toolConfig = {
-        functionCallingConfig: {
-          mode: "AUTO",
-        },
-      };
+    if (tools.length) {
+      body.tools = tools;
+      body.tool_choice = "auto";
     }
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
-        model,
-      )}:generateContent?key=${encodeURIComponent(apiKey)}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        signal: controller.signal,
-        body: JSON.stringify(body),
+    const response = await fetch(GROQ_CHAT_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
       },
-    );
+      signal: controller.signal,
+      body: JSON.stringify(body),
+    });
 
     const raw = await response.json();
-    const functionCalls = extractFunctionCalls(raw);
-    const text = extractText(raw);
-    const modelContent = extractModelContent(raw);
+    const choice = (
+      raw as {
+        choices?: Array<{
+          message?: {
+            content?: string | null;
+            tool_calls?: OpenAiToolCall[];
+          };
+          finish_reason?: string | null;
+        }>;
+        error?: { message?: string; type?: string; code?: string };
+      }
+    )?.choices?.[0];
+
+    const message = choice?.message;
+    const text = String(message?.content || "").trim();
+    const toolCalls = Array.isArray(message?.tool_calls)
+      ? message.tool_calls
+      : [];
+
+    const functionCalls: GeminiFunctionCall[] = toolCalls
+      .filter((call) => call?.type === "function" && call.function?.name)
+      .map((call) => ({
+        id: String(call.id || crypto.randomUUID()),
+        name: String(call.function.name).trim(),
+        args: parseToolArgs(String(call.function.arguments || "{}")),
+      }));
+
+    const modelContent: GeminiContent | null = functionCalls.length
+      ? {
+          role: "model",
+          parts: [
+            ...(text ? [{ text }] : []),
+            ...functionCalls.map((call) => ({
+              functionCall: {
+                id: call.id,
+                name: call.name,
+                args: call.args,
+              },
+            })),
+          ],
+        }
+      : text
+        ? { role: "model", parts: [{ text }] }
+        : null;
 
     console.log(`${LOG_PREFIX} raw_response`, {
       model,
@@ -212,32 +322,35 @@ export const generateGeminiWithTools = async (input: {
       status: response.status,
       functionCallCount: functionCalls.length,
       hasText: Boolean(text),
-      finishReason: raw?.candidates?.[0]?.finishReason ?? null,
+      finishReason: choice?.finish_reason ?? null,
     });
 
     if (!response.ok) {
-      const message =
+      const errMessage =
         raw?.error?.message ||
-        `Gemini respondió con estado ${response.status}`;
+        `Groq respondió con estado ${response.status}`;
       const statusText =
-        typeof raw?.error?.status === "string" ? raw.error.status : null;
+        typeof raw?.error?.type === "string"
+          ? raw.error.type
+          : typeof raw?.error?.code === "string"
+            ? raw.error.code
+            : null;
       console.error(`${LOG_PREFIX} api_error`, {
         model,
         status: response.status,
-        code: raw?.error?.code ?? null,
         statusText,
-        message,
+        message: errMessage,
       });
-      throw new GeminiApiError(message, response.status, statusText);
+      throw new GeminiApiError(errMessage, response.status, statusText);
     }
 
     if (!functionCalls.length && !text) {
       console.error(`${LOG_PREFIX} empty_response`, {
         model,
-        finishReason: raw?.candidates?.[0]?.finishReason ?? null,
-        candidates: raw?.candidates ?? null,
+        finishReason: choice?.finish_reason ?? null,
+        raw,
       });
-      throw new Error("Gemini no devolvió texto ni function calls");
+      throw new Error("Groq no devolvió texto ni tool calls");
     }
 
     return { text, raw, functionCalls, modelContent };
@@ -257,7 +370,7 @@ export const generateGeminiWithTools = async (input: {
 
     if (isAbort) {
       throw new Error(
-        `Gemini timeout: no respondió en ${timeoutMs}ms (modelo ${model})`,
+        `Groq timeout: no respondió en ${timeoutMs}ms (modelo ${model})`,
       );
     }
 
@@ -267,7 +380,6 @@ export const generateGeminiWithTools = async (input: {
   }
 };
 
-/** @deprecated Prefer generateGeminiWithTools for the agent path. */
 export const generateGeminiText = async (input: {
   systemPrompt: string;
   contents: GeminiContent[];
@@ -281,10 +393,143 @@ export const generateGeminiText = async (input: {
   });
 
   if (!result.text) {
-    throw new Error("Gemini no devolvió texto útil");
+    throw new Error("Groq no devolvió texto útil");
   }
 
   return { text: result.text, raw: result.raw };
+};
+
+export const transcribeAudioWithGroq = async (input: {
+  bytes: Buffer;
+  mimeType: string;
+  fileName?: string;
+  timeoutMs?: number;
+}): Promise<string | null> => {
+  const apiKey = getGroqApiKey();
+  if (!apiKey) return null;
+
+  const model =
+    process.env.GROQ_WHISPER_MODEL?.trim() || DEFAULT_GROQ_WHISPER_MODEL;
+  const controller = new AbortController();
+  const timeoutMs = input.timeoutMs ?? 30000;
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const form = new FormData();
+    const blob = new Blob([new Uint8Array(input.bytes)], {
+      type: input.mimeType,
+    });
+    form.append(
+      "file",
+      blob,
+      input.fileName || `audio.${input.mimeType.split("/")[1] || "ogg"}`,
+    );
+    form.append("model", model);
+    form.append("language", "es");
+    form.append("response_format", "json");
+
+    const response = await fetch(GROQ_TRANSCRIBE_URL, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}` },
+      signal: controller.signal,
+      body: form,
+    });
+
+    const raw = await response.json();
+    if (!response.ok) {
+      console.warn(`${LOG_PREFIX} whisper_failed`, {
+        status: response.status,
+        message: raw?.error?.message || null,
+      });
+      return null;
+    }
+
+    const text = String(raw?.text || "").trim();
+    return text || null;
+  } catch (error) {
+    console.warn(`${LOG_PREFIX} whisper_error`, {
+      error: error instanceof Error ? error.message : "unknown_error",
+    });
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+};
+
+export const describeImageWithGroq = async (input: {
+  base64: string;
+  mimeType: string;
+  caption?: string | null;
+  timeoutMs?: number;
+}): Promise<string | null> => {
+  const apiKey = getGroqApiKey();
+  if (!apiKey) return null;
+
+  const model =
+    process.env.GROQ_VISION_MODEL?.trim() || DEFAULT_GROQ_VISION_MODEL;
+  const controller = new AbortController();
+  const timeoutMs = input.timeoutMs ?? 25000;
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const dataUrl = `data:${input.mimeType};base64,${input.base64}`;
+    const caption = input.caption?.trim();
+    const response = await fetch(GROQ_CHAT_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      signal: controller.signal,
+      body: JSON.stringify({
+        model,
+        temperature: 0.2,
+        max_tokens: 800,
+        messages: [
+          {
+            role: "system",
+            content:
+              "Eres un extractor visual para un ISP. Describe en español, breve y factual. Si es comprobante de pago, extrae amount, transaction_code (referencia) y bank si son legibles. Si es cédula/RIF, extrae solo los dígitos. No inventes datos ilegibles.",
+          },
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: caption
+                  ? `Caption del cliente: ${caption}\nAnaliza la imagen.`
+                  : "Analiza la imagen adjunta.",
+              },
+              {
+                type: "image_url",
+                image_url: { url: dataUrl },
+              },
+            ],
+          },
+        ],
+      }),
+    });
+
+    const raw = await response.json();
+    if (!response.ok) {
+      console.warn(`${LOG_PREFIX} vision_failed`, {
+        status: response.status,
+        model,
+        message: raw?.error?.message || null,
+      });
+      return null;
+    }
+
+    const text = String(raw?.choices?.[0]?.message?.content || "").trim();
+    return text || null;
+  } catch (error) {
+    console.warn(`${LOG_PREFIX} vision_error`, {
+      error: error instanceof Error ? error.message : "unknown_error",
+    });
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
 };
 
 export type GeminiReplyDecision = {

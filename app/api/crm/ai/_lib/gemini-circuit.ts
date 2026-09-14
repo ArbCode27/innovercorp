@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { isTransientGeminiError } from "./gemini-retry";
 
-const LOG_PREFIX = "[GEMINI_CIRCUIT]";
+const LOG_PREFIX = "[GROQ_CIRCUIT]";
 const FAILURE_WINDOW_MS = 2 * 60 * 1000;
 const FAILURE_THRESHOLD = 5;
 const OPEN_MS = 4 * 60 * 1000;
