@@ -742,41 +742,9 @@ const handleSubmitPaymentReceipt = async (
     };
   }
 
-  const persistPartial = () =>
-    persistReceiptToCrm(ctx, {
-      receiptMessage,
-      bank,
-      transactionCode,
-      comment,
-      status: "RECIBIDO",
-      extraMetadata: { extraction_incomplete: true },
-    });
+  const savePendingReceipt = async (nextPending: PendingReceipt) => {
+    if (!receiptMessage?.id) return false;
 
-  if (receiptMessage?.id && (!amount || !transactionCode || !bank)) {
-    await persistPartial();
-  }
-
-  if (!amount || !transactionCode || !bank) {
-    return {
-      name: SUBMIT_PAYMENT_RECEIPT_TOOL,
-      ok: false,
-      response: {
-        ok: false,
-        error: "Faltan amount, transaction_code o bank",
-        hint: "Extrae los datos del comprobante o pídelos. No hagas handoff.",
-        crm_payment_saved: Boolean(receiptMessage?.id),
-      },
-    };
-  }
-
-  // Persist pending extraction so a later turn (after cedula) can reuse it.
-  if (receiptMessage?.id) {
-    const nextPending: PendingReceipt = {
-      amount,
-      transaction_code: transactionCode,
-      bank,
-      comment,
-    };
     const { error: pendingError } = await ctx.supabase
       .from("messages")
       .update({
@@ -789,14 +757,45 @@ const handleSubmitPaymentReceipt = async (
       .eq("id", receiptMessage.id);
 
     if (pendingError) {
-      console.warn("[AI_PAYMENT] pending_receipt_save_failed", {
+      console.warn("[AI_AGENT] pending_receipt_save_failed", {
         messageId: receiptMessage.id,
         error: pendingError.message,
       });
-    } else {
-      existingMetadata.pending_receipt = nextPending;
+      return false;
     }
+
+    existingMetadata.pending_receipt = nextPending;
+    return true;
+  };
+
+  // Incomplete extraction: only stash on message metadata — never write crm_payments / POST.
+  if (!amount || !transactionCode || !bank) {
+    const pendingSaved = await savePendingReceipt({
+      amount,
+      transaction_code: transactionCode,
+      bank,
+      comment,
+    });
+    return {
+      name: SUBMIT_PAYMENT_RECEIPT_TOOL,
+      ok: false,
+      response: {
+        ok: false,
+        error: "Faltan amount, transaction_code o bank",
+        hint: "Extrae los datos del comprobante o pídelos. No hagas handoff.",
+        crm_payment_saved: false,
+        pending_receipt_saved: pendingSaved,
+      },
+    };
   }
+
+  // Stash complete extraction for a later turn (e.g. after cedula) without CRM insert yet.
+  await savePendingReceipt({
+    amount,
+    transaction_code: transactionCode,
+    bank,
+    comment,
+  });
 
   const amountBs = parseBolivaresAmount(amount);
   if (!amountBs) {
@@ -807,6 +806,7 @@ const handleSubmitPaymentReceipt = async (
         ok: false,
         error: "Monto inválido en bolívares",
         hint: "Verifica que el monto del comprobante sea legible y reintenta.",
+        crm_payment_saved: false,
       },
     };
   }
@@ -832,6 +832,7 @@ const handleSubmitPaymentReceipt = async (
         ok: false,
         error: message,
         hint: "No se pudo convertir el monto de Bs a USD. Reintenta en unos segundos.",
+        crm_payment_saved: false,
       },
     };
   }
@@ -845,25 +846,10 @@ const handleSubmitPaymentReceipt = async (
         ok: false,
         error: "No se pudo convertir el monto de Bs a USD",
         hint: "Verifica el monto y la tasa BCV del día.",
+        crm_payment_saved: false,
       },
     };
   }
-
-  await persistReceiptToCrm(ctx, {
-    receiptMessage,
-    amount: amountUsd,
-    bank,
-    transactionCode,
-    comment,
-    status: "RECIBIDO",
-    extraMetadata: {
-      pending_receipt: true,
-      amount_bs: amountBs,
-      amount_usd: amountUsd,
-      bcv_rate: bcvRate,
-      bcv_as_of: bcvAsOf,
-    },
-  });
 
   const matchResult = resolvePaymentMatch(ctx, parsed.data.wispro_id);
   if (!matchResult.ok) {
@@ -874,10 +860,11 @@ const handleSubmitPaymentReceipt = async (
         ok: false,
         error: matchResult.error,
         pending_receipt_saved: Boolean(receiptMessage?.id),
+        crm_payment_saved: false,
         needs_cedula: ctx.lastLookupByWisproId.size === 0,
         hint:
           ctx.lastLookupByWisproId.size === 0
-            ? "Datos del comprobante guardados. Pide la cédula del abonado y luego lookup + submit. NO escalate."
+            ? "Datos del comprobante listos en el chat. Pide la cédula del abonado y luego lookup + submit. NO escalate."
             : matchResult.error,
       },
     };
@@ -900,6 +887,7 @@ const handleSubmitPaymentReceipt = async (
         should_handoff: true,
         label_applied: label.applied,
         label_id: label.labelId,
+        crm_payment_saved: false,
       },
       stopAgent: true,
       shouldHandoff: true,
@@ -924,6 +912,8 @@ const handleSubmitPaymentReceipt = async (
         error: "Falta cédula",
         hint: "Pide la cédula y haz lookup_wispro_by_cedula. No hagas handoff.",
         needs_cedula: true,
+        crm_payment_saved: false,
+        pending_receipt_saved: Boolean(receiptMessage?.id),
       },
     };
   }
@@ -938,6 +928,7 @@ const handleSubmitPaymentReceipt = async (
     phone_id: phoneId,
   };
 
+  // Single CRM write + Innover POST only when all required fields are present.
   const persisted = await persistReceiptToCrm(ctx, {
     receiptMessage,
     clientName: payload.name,
@@ -959,6 +950,19 @@ const handleSubmitPaymentReceipt = async (
     },
   });
 
+  if (!persisted.ok || (!persisted.payment && !persisted.duplicate)) {
+    return {
+      name: SUBMIT_PAYMENT_RECEIPT_TOOL,
+      ok: false,
+      response: {
+        ok: false,
+        error: "No se pudo guardar el pago en CRM",
+        hint: "Reintenta submit_payment_receipt. No digas que el pago quedó registrado.",
+        crm_payment_saved: false,
+      },
+    };
+  }
+
   let innoverStatus: number | null = null;
   let innoverBody: unknown = null;
   let innoverError: string | null = null;
@@ -974,7 +978,7 @@ const handleSubmitPaymentReceipt = async (
         : error instanceof Error
           ? error.message
           : "No se pudo registrar el pago en Innover";
-    console.warn("[AI_PAYMENT] innover_soft_fail", {
+    console.warn("[AI_AGENT] innover_soft_fail", {
       messageId: receiptMessage?.id ?? null,
       error: innoverError,
     });
