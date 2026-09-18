@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  buildMapsUrl,
+  extractMapsFromText,
   extractMapsUrl,
   parseCoordsFromMapsUrl,
   withMapsInDescription,
@@ -20,9 +20,15 @@ describe("maps-link", () => {
     expect(parseCoordsFromMapsUrl("https://maps.google.com/?q=10.12,-64.68")).toEqual(
       { latitude: 10.12, longitude: -64.68 },
     );
-    expect(buildMapsUrl({ latitude: 10.12, longitude: -64.68 })).toBe(
-      "https://maps.google.com/?q=10.12,-64.68",
-    );
+    expect(parseCoordsFromMapsUrl("Maps: 10.1492927,-66.8469102")).toEqual({
+      latitude: 10.1492927,
+      longitude: -66.8469102,
+    });
+    expect(extractMapsFromText("Google Maps: 10.1492927,-66.8469102")).toEqual({
+      mapsUrl: "https://maps.google.com/?q=10.1492927,-66.8469102",
+      latitude: 10.1492927,
+      longitude: -66.8469102,
+    });
   });
 
   it("appends Maps once to a Wispro description", () => {

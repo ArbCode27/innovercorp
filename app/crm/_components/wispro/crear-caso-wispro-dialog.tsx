@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ChevronDown, TicketPlus, Wand2 } from "lucide-react";
+import { ChevronDown, TicketPlus } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -36,12 +36,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { CRM_DIALOG, CRM_SURFACES } from "../../_lib/crm-theme";
 import { CrmButton } from "../shared/crm-button";
-import {
-  humanizeReporteKey,
-  parseReporte,
-  reporteToPlainDescription,
-  suggestCategoryId,
-} from "@/lib/parseReporte";
+import { humanizeReporteKey, suggestCategoryId } from "@/lib/parseReporte";
+import { casoFieldsFromReporte } from "@/lib/caso-from-reporte";
 import type {
   ResultadoCaso,
   WisproCategory,
@@ -56,7 +52,7 @@ import {
 } from "../../_lib/wispro-caso-schema";
 import type { z } from "zod";
 import { collectCasoContextFromMessages } from "@/lib/caso-chat-context";
-import { buildMapsUrl, extractMapsUrl, parseCoordsFromMapsUrl } from "@/lib/maps-link";
+import { buildMapsUrl, parseCoordsFromMapsUrl } from "@/lib/maps-link";
 import type { Message } from "../../_lib/types";
 import { wisproCasoClient } from "../../_lib/wispro-caso-client";
 import { EmployeePicker } from "./employee-picker";
@@ -91,9 +87,28 @@ const findLatestAiReport = (messages: Array<{ type?: string; content?: string | 
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const content = String(messages[index]?.content || "");
     if (messages[index]?.type !== "out") continue;
-    if (/reporte técnico|[•\-\*]\s*\*?\*?motivo/i.test(content)) return content;
+    if (
+      /reporte t[eé]cnico|acci[oó]n requerida|google maps|[•\-\*]\s*\*?\*?motivo/i.test(
+        content,
+      )
+    ) {
+      return content;
+    }
   }
   return "";
+};
+
+const gpsFromCoords = (latitude: number | null, longitude: number | null) => {
+  if (latitude == null || longitude == null) return null;
+  return {
+    street: "",
+    number: "",
+    city: "",
+    state: "",
+    countryCode: "VE",
+    latitude,
+    longitude,
+  };
 };
 
 type FormValues = z.input<typeof createCasoSchema>;
@@ -146,6 +161,8 @@ export const CrearCasoWisproDialog = ({
     tecnico: true,
   });
   const lastPayloadRef = useRef<z.output<typeof createCasoSchema> | null>(null);
+  const autoFilledKeyRef = useRef<string | null>(null);
+  const latestReport = findLatestAiReport(messages);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(createCasoSchema),
@@ -212,31 +229,33 @@ export const CrearCasoWisproDialog = ({
   };
 
   useEffect(() => {
-    if (!open) return;
-    const seed = findLatestAiReport(messages);
-    const chatCtx = collectCasoContextFromMessages(messages, seed);
-    setReporte(seed);
-    setParsed(seed ? parseReporte(seed) : {});
+    if (!open) {
+      autoFilledKeyRef.current = null;
+      return;
+    }
+    const fillKey = `${conversationId ?? "none"}:${crmClientId ?? "none"}:${latestReport}`;
+    if (autoFilledKeyRef.current === fillKey) return;
+    autoFilledKeyRef.current = fillKey;
+
+    const fromReporte = casoFieldsFromReporte(latestReport);
+    const chatCtx = collectCasoContextFromMessages(messages, latestReport);
+    setReporte(latestReport);
+    setParsed(fromReporte.parsed);
     setSuggestedCategory(false);
     setResult(null);
     setConfirmOpen(false);
     setChatImages(chatCtx.images);
     void loadCatalog(false);
-    const gpsFromChat =
-      chatCtx.latitude != null && chatCtx.longitude != null
-        ? {
-            street: "",
-            number: "",
-            city: "",
-            state: "",
-            countryCode: "VE",
-            latitude: chatCtx.latitude,
-            longitude: chatCtx.longitude,
-          }
-        : null;
+
+    const mapsUrlValue = fromReporte.mapsUrl || chatCtx.mapsUrl || "";
+    const latitude = fromReporte.latitude ?? chatCtx.latitude;
+    const longitude = fromReporte.longitude ?? chatCtx.longitude;
+    const addressText = fromReporte.addressText || chatCtx.addressText || "";
+
     form.reset({
       ...form.getValues(),
       clientId: wisproClientId || "",
+      categoryId: "",
       startAt: defaults.startAt,
       endAt: defaults.endAt,
       generateOrder: true,
@@ -245,14 +264,28 @@ export const CrearCasoWisproDialog = ({
       crmClientId,
       clientName: clientName || "",
       clientPhone: clientPhone || "",
-      mapsUrl: chatCtx.mapsUrl || "",
-      addressText: chatCtx.addressText || "",
+      title: fromReporte.title,
+      description: fromReporte.description,
+      cause: fromReporte.cause || "",
+      orderDescription: fromReporte.orderDescription || "",
+      mapsUrl: mapsUrlValue,
+      addressText,
       facadeMediaUrl: chatCtx.facade?.mediaUrl || "",
       facadeMessageId: chatCtx.facade?.messageId,
-      gps: gpsFromChat,
+      gps: gpsFromCoords(latitude, longitude),
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, wisproClientId, conversationId, crmClientId]);
+  }, [open, wisproClientId, conversationId, crmClientId, latestReport]);
+
+  useEffect(() => {
+    if (!open || !categories.length || !Object.keys(parsed).length) return;
+    if (form.getValues("categoryId")) return;
+    const suggested = suggestCategoryId(parsed, categories);
+    if (!suggested) return;
+    form.setValue("categoryId", suggested, { shouldDirty: false });
+    setSuggestedCategory(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, categories, parsed]);
 
   useEffect(() => {
     if (!open || !wisproClientId) return;
@@ -337,61 +370,6 @@ export const CrearCasoWisproDialog = ({
         .join(" ");
       if (address) {
         form.setValue("addressText", address, { shouldDirty: false });
-      }
-    }
-  };
-
-  const handleExtract = () => {
-    const nextParsed = parseReporte(reporte);
-    setParsed(nextParsed);
-    const dirty = form.formState.dirtyFields;
-
-    if (!dirty.title) {
-      const titleValue = (nextParsed.motivo || "").slice(0, 80);
-      form.setValue("title", titleValue, { shouldDirty: false, shouldValidate: true });
-    }
-    if (!dirty.description) {
-      form.setValue("description", reporteToPlainDescription(reporte), {
-        shouldDirty: false,
-        shouldValidate: true,
-      });
-    }
-    if (!dirty.orderDescription) {
-      const orderText = [nextParsed.posible_causa, nextParsed.zona_opt]
-        .filter(Boolean)
-        .join(" · ");
-      if (orderText) {
-        form.setValue("orderDescription", orderText, { shouldDirty: false });
-      }
-    }
-    if (!dirty.categoryId) {
-      const suggested = suggestCategoryId(nextParsed, categories);
-      if (suggested) {
-        form.setValue("categoryId", suggested, { shouldDirty: false });
-        setSuggestedCategory(true);
-      }
-    }
-    if (!dirty.cause && nextParsed.posible_causa) {
-      form.setValue("cause", nextParsed.posible_causa, { shouldDirty: false });
-    }
-    const reporteMaps = extractMapsUrl(reporte);
-    if (reporteMaps && !form.getValues("mapsUrl")) {
-      form.setValue("mapsUrl", reporteMaps, { shouldDirty: false });
-      const coords = parseCoordsFromMapsUrl(reporteMaps);
-      if (coords && !form.getValues("gps")) {
-        form.setValue(
-          "gps",
-          {
-            street: "",
-            number: "",
-            city: "",
-            state: "",
-            countryCode: "VE",
-            latitude: coords.latitude,
-            longitude: coords.longitude,
-          },
-          { shouldDirty: false },
-        );
       }
     }
   };
@@ -531,43 +509,36 @@ export const CrearCasoWisproDialog = ({
                   "Completá título, descripción y categoría antes de crear",
                 ),
             )}>
-            <section className="space-y-3">
-              <h3 className={`text-sm font-semibold ${CRM_SURFACES.textPrimary}`}>
-                Resumen del agente IA
-              </h3>
-              <Textarea
-                value={reporte}
-                onChange={(event) => setReporte(event.target.value)}
-                className={`min-h-64 font-mono text-xs ${CRM_SURFACES.input}`}
-                placeholder="Pegá el reporte técnico que generó Nova..."
-              />
-              <CrmButton type="button" variant="secondary" onClick={handleExtract}>
-                <Wand2 className="size-4" />
-                Extraer datos
-              </CrmButton>
-              <div className="flex flex-wrap gap-1.5">
-                {Object.keys(parsed).length ? (
-                  Object.entries(parsed).map(([key, value]) => (
-                    <Badge key={key} variant="secondary" className="max-w-full font-normal">
-                      <span className="font-medium">{humanizeReporteKey(key)}:</span>{" "}
-                      <span className="truncate">{value}</span>
-                    </Badge>
-                  ))
-                ) : (
-                  <p className={`text-xs ${CRM_SURFACES.textMuted}`}>
-                    Todavía no se detectaron campos. Extraé datos o completalos a mano.
-                  </p>
-                )}
-              </div>
-            </section>
-
-            <section className="space-y-3">
+            <div className="space-y-2 lg:col-span-2">
+              {reporte.trim() ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {Object.keys(parsed).length ? (
+                    Object.entries(parsed).map(([key, value]) => (
+                      <Badge key={key} variant="secondary" className="max-w-full font-normal">
+                        <span className="font-medium">{humanizeReporteKey(key)}:</span>{" "}
+                        <span className="truncate">{value}</span>
+                      </Badge>
+                    ))
+                  ) : (
+                    <p className={`text-xs ${CRM_SURFACES.textMuted}`}>
+                      Hay un resumen de Nova, pero no se detectaron campos etiquetados.
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p className={`text-xs ${CRM_SURFACES.textMuted}`}>
+                  No hay un reporte técnico de Nova en este chat. Completá título, descripción y
+                  categoría a mano.
+                </p>
+              )}
               {catalogError ? (
                 <p className="rounded-2xl border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-500/40 dark:bg-red-950/40 dark:text-red-100">
                   {catalogError}. El botón de crear queda deshabilitado hasta refrescar el catálogo.
                 </p>
               ) : null}
+            </div>
 
+            <section className="space-y-3">
               <CollapsibleBlock
                 title="Cliente y contrato"
                 open={openSections.cliente}
@@ -708,7 +679,9 @@ export const CrearCasoWisproDialog = ({
                   </Select>
                 </div>
               </CollapsibleBlock>
+            </section>
 
+            <section className="space-y-3">
               <CollapsibleBlock
                 title="Orden"
                 open={openSections.orden}

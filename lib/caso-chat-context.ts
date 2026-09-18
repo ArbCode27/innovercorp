@@ -1,4 +1,4 @@
-import { buildMapsUrl, extractMapsUrl, parseCoordsFromMapsUrl } from "./maps-link";
+import { buildMapsUrl, extractMapsFromText } from "./maps-link";
 
 export type CasoChatMessage = {
   id?: number;
@@ -47,25 +47,25 @@ export const collectCasoContextFromMessages = (
   extraText = "",
 ): CasoChatContext => {
   const images: CasoChatImage[] = [];
-  let mapsUrl: string | null = extractMapsUrl(extraText);
-  let latitude: number | null = parseCoordsFromMapsUrl(mapsUrl)?.latitude ?? null;
-  let longitude: number | null = parseCoordsFromMapsUrl(mapsUrl)?.longitude ?? null;
+  const extraMaps = extractMapsFromText(extraText);
+  let mapsUrl: string | null = extraMaps.mapsUrl;
+  let latitude: number | null = extraMaps.latitude;
+  let longitude: number | null = extraMaps.longitude;
   let addressText: string | null = null;
   const now = Date.now();
 
   for (const message of messages) {
     const blob = [message.content, message.caption].filter(Boolean).join(" ");
-    const foundUrl = extractMapsUrl(blob);
-    if (foundUrl && !mapsUrl) {
-      mapsUrl = foundUrl;
-      const coords = parseCoordsFromMapsUrl(foundUrl);
-      if (coords) {
-        latitude = coords.latitude;
-        longitude = coords.longitude;
-      }
+    const found = extractMapsFromText(blob);
+    if (found.mapsUrl && !mapsUrl) {
+      mapsUrl = found.mapsUrl;
+      latitude = found.latitude ?? latitude;
+      longitude = found.longitude ?? longitude;
     }
 
     if (
+      latitude == null &&
+      longitude == null &&
       isInbound(message) &&
       message.latitude != null &&
       message.longitude != null &&

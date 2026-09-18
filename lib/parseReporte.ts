@@ -62,7 +62,7 @@ export const suggestCategoryId = (
   categories: Array<{ id: string; name: string }>,
 ): string | null => {
   const haystack = stripAccents(
-    `${parsed.motivo || ""} ${parsed.posible_causa || ""}`.toLowerCase(),
+    `${parsed.motivo || ""} ${parsed.posible_causa || ""} ${parsed.accion_requerida || ""}`.toLowerCase(),
   );
   if (!haystack.trim() || !categories.length) return null;
 

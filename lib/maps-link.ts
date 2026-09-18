@@ -59,6 +59,30 @@ export const normalizeMapsUrl = (value: string | null | undefined) => {
   return trimmed;
 };
 
+export const extractMapsFromText = (value: string | null | undefined) => {
+  const text = String(value || "");
+  const url = extractMapsUrl(text);
+  if (url) {
+    const coords = parseCoordsFromMapsUrl(url);
+    return {
+      mapsUrl: url,
+      latitude: coords?.latitude ?? null,
+      longitude: coords?.longitude ?? null,
+    };
+  }
+
+  const coords = parseCoordsFromMapsUrl(text);
+  if (!coords) {
+    return { mapsUrl: null, latitude: null, longitude: null };
+  }
+
+  return {
+    mapsUrl: buildMapsUrl(coords),
+    latitude: coords.latitude,
+    longitude: coords.longitude,
+  };
+};
+
 export const resolveMapsUrl = (input: {
   mapsUrl?: string | null;
   latitude?: number | null;
