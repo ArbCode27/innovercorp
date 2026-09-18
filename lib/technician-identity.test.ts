@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   decideTechnicianVerification,
+  formatTechnicianWelcome,
   looksLikeOtpCode,
   looksLikeTechnicianNextPage,
+  looksLikeTechnicianOfferAccept,
   looksLikeTechnicianResend,
   looksLikeTechnicianTicketRequest,
   shouldDeliverTechnicianTickets,
@@ -132,21 +134,29 @@ describe("technician inbound helpers", () => {
     expect(technicianFirstName("José Pérez")).toBe("José");
   });
 
-  it("delivers tickets after identification or an explicit request", () => {
+  it("greets by name and offers the list instead of sending tickets on phone identification", () => {
+    expect(
+      formatTechnicianWelcome("José Pérez"),
+    ).toBe(
+      "Hola José. Te identifiqué como técnico. ¿Quieres que te envíe tu listado de tickets pendientes?",
+    );
+    expect(looksLikeTechnicianOfferAccept("sí")).toBe(true);
+    expect(looksLikeTechnicianOfferAccept("dale")).toBe(true);
+    expect(looksLikeTechnicianOfferAccept("hola")).toBe(false);
     expect(
       shouldDeliverTechnicianTickets({
         justVerified: true,
         inboundText: "hola",
         inboundIsCedula: false,
       }),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       shouldDeliverTechnicianTickets({
-        justVerified: false,
-        inboundText: "hola",
+        justVerified: true,
+        inboundText: "sí",
         inboundIsCedula: false,
       }),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       shouldDeliverTechnicianTickets({
         justVerified: false,

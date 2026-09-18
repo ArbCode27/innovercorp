@@ -33,7 +33,7 @@ export type TechnicianIdentitySignals = {
 };
 
 const TICKET_REQUEST_RE =
-  /\b(pendiente(s)?|ticket(s)?|ruta|visita(s)?|casos?|lote|asignad[oa]s?)\b/i;
+  /\b(pendiente(s)?|ticket(s)?|ruta|visita(s)?|casos?|lote|asignad[oa]s?|listado)\b/i;
 
 const NEXT_PAGE_RE = /\b(siguiente(s)?|prox(imo|ima)|otro lote|m[aá]s tickets)\b/i;
 
@@ -41,6 +41,12 @@ const RESEND_RE = /\b(reenvia(r)?|mand(a|ame) de nuevo|otra vez|repet(i|í)r)\b/
 
 const TECHNICIAN_ROLE_RE =
   /\b(soy (el |la )?t[eé]cnic[oa]s?|mis (tickets|pendientes|casos)|mi ruta)\b/i;
+
+const OFFER_ACCEPT_RE =
+  /^(s[ií]+|dale|ok+|okay|va|claro|listo|por favor)([!.,\s].*)?$/i;
+
+const OFFER_ACCEPT_ACTION_RE =
+  /\b(env[ií]a(me|los|las)?|p[aá]sa(me|los|las)?|m[aá]nda(me|los|las)?|d[aá]me(los|las)?)\b/i;
 
 const PAYMENT_OVERRIDE_RE =
   /\b(soy cliente|quiero pagar|comprobante|transferencia|pago|tpago|pago m[oó]vil)\b/i;
@@ -65,6 +71,20 @@ export const looksLikeTechnicianResend = (value: string | null | undefined) =>
 export const looksLikeTechnicianRoleClaim = (
   value: string | null | undefined,
 ) => TECHNICIAN_ROLE_RE.test(String(value || ""));
+
+export const looksLikeTechnicianOfferAccept = (
+  value: string | null | undefined,
+) => {
+  const text = String(value || "").trim();
+  if (!text || text.length > 80) return false;
+  return OFFER_ACCEPT_RE.test(text) || OFFER_ACCEPT_ACTION_RE.test(text);
+};
+
+export const formatTechnicianWelcome = (name: string | null | undefined) =>
+  `Hola ${technicianFirstName(name)}. Te identifiqué como técnico. ¿Quieres que te envíe tu listado de tickets pendientes?`;
+
+export const formatTechnicianOffer = (name: string | null | undefined) =>
+  `Hola ${technicianFirstName(name)}. ¿Quieres que te envíe tu listado de tickets pendientes?`;
 
 export const looksLikeCustomerPaymentOverride = (
   value: string | null | undefined,
@@ -134,11 +154,11 @@ export const shouldDeliverTechnicianTickets = (input: {
   inboundText: string | null | undefined;
   inboundIsCedula: boolean;
 }) => {
-  if (input.justVerified) return true;
-  if (input.inboundIsCedula) return true;
   if (looksLikeTechnicianTicketRequest(input.inboundText)) return true;
   if (looksLikeTechnicianNextPage(input.inboundText)) return true;
   if (looksLikeTechnicianResend(input.inboundText)) return true;
+  if (looksLikeTechnicianOfferAccept(input.inboundText)) return true;
+  if (input.inboundIsCedula && !input.justVerified) return true;
   return false;
 };
 

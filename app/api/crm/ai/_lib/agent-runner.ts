@@ -28,11 +28,12 @@ import { resolveTechnicianSession } from "@/lib/crm-technicians";
 import { listOpenCasosForConversation } from "@/lib/crm-wispro-casos";
 import { documentLast4 } from "@/lib/technician-crypto";
 import {
+  formatTechnicianOffer,
+  formatTechnicianWelcome,
   looksLikeCustomerPaymentOverride,
   looksLikeTechnicianRoleClaim,
   looksLikeTechnicianTicketRequest,
   shouldDeliverTechnicianTickets,
-  technicianFirstName,
 } from "@/lib/technician-identity";
 import { deliverTechnicianPendingTickets } from "@/lib/technician-tickets";
 import {
@@ -594,8 +595,10 @@ export const runAiAgent = async (input: {
 
     return {
       action: "reply",
-      message: `Hola ${technicianFirstName(employee.name)}. Este chat está en modo técnico. Escribe *pendientes* para recibir tus tickets, *siguiente* para el próximo lote o *reenviar* si no te llegaron.`,
-      reason: "technician_help",
+      message: session?.justVerified
+        ? formatTechnicianWelcome(employee.name)
+        : formatTechnicianOffer(employee.name),
+      reason: session?.justVerified ? "technician_welcome" : "technician_offer",
       runId,
       clientId: input.client?.id ?? null,
     };
