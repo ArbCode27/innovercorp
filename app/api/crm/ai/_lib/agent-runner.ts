@@ -23,11 +23,12 @@ import {
 } from "./context-builder";
 import type { AiContent, AiContentPart } from "./ai-client";
 import type { MatchedWisproEmployee } from "@/lib/match-wispro-employee";
-import { matchWisproEmployeeForPhone } from "@/lib/match-wispro-employee";
+import { matchWisproEmployee } from "@/lib/match-wispro-employee";
 import {
   listOpenCasosForConversation,
   listPendingCasosForEmployee,
 } from "@/lib/crm-wispro-casos";
+import { extractLatestInboundCedula } from "./inbound-intent";
 import {
   generateAiWithRetry,
   isPermanentAiError,
@@ -122,7 +123,7 @@ const buildIdentityBlock = (input: {
     "N/D";
 
   const ticketLine = input.employee
-    ? `- rol: tecnico_wispro (${input.employee.name})`
+    ? `- rol: tecnico_wispro (${input.employee.name}${input.employee.document ? ` · ci ${input.employee.document}` : ""})`
     : input.clientTickets.length
       ? `- rol: cliente\n- ticket_activo: ${input.clientTickets
           .map(
@@ -133,7 +134,7 @@ const buildIdentityBlock = (input: {
       : `- rol: cliente\n- ticket_activo: ninguno`;
 
   const techLine = input.employee
-    ? `- tickets_pendientes: ${input.pendingCount ?? 0} (usa list_my_pending_tickets; el sistema envía foto y Maps)`
+    ? `- tickets_pendientes: ${input.pendingCount ?? 0} (usa list_my_pending_tickets; el técnico filtra por su cédula o WhatsApp; el sistema envía foto y Maps)`
     : null;
 
   return [
@@ -480,9 +481,12 @@ export const runAiAgent = async (input: {
     throw new Error("empty_history");
   }
 
-  const employee = await matchWisproEmployeeForPhone(
+  const employee = await matchWisproEmployee(
     input.supabase,
-    input.customerPhone || input.client?.whatsapp_id || input.client?.phone,
+    {
+      phone: input.customerPhone || input.client?.whatsapp_id || input.client?.phone,
+      document: extractLatestInboundCedula(input.messages),
+    },
   ).catch(() => null);
 
   let pendingCount: number | null = null;

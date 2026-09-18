@@ -82,7 +82,9 @@ export const EmployeePicker = ({
               {selectedName || "Sin asignar"}
             </span>
             <span className={`block truncate text-[11px] ${CRM_SURFACES.textMuted}`}>
-              {selectedPhone || "Opcional · todos los empleados Wispro"}
+              {selectedPhone ||
+                selected?.national_identification_number ||
+                "Opcional · todos los empleados Wispro"}
             </span>
           </span>
           <ChevronDown
@@ -100,7 +102,7 @@ export const EmployeePicker = ({
           "z-[80] w-[var(--radix-popover-trigger-width)] p-0",
         )}>
         <Command className="bg-transparent">
-          <CommandInput placeholder="Buscar técnico o teléfono..." />
+          <CommandInput placeholder="Buscar técnico, cédula o teléfono..." />
           <CommandList className="max-h-64">
             <CommandEmpty className={`py-4 text-center text-sm ${CRM_SURFACES.textMuted}`}>
               Sin coincidencias
@@ -139,7 +141,7 @@ export const EmployeePicker = ({
                 return (
                   <CommandItem
                     key={employee.id}
-                    value={`${employee.name} ${phone || ""} ${getInitials(name)}`}
+                    value={`${employee.name} ${phone || ""} ${employee.national_identification_number || ""} ${getInitials(name)}`}
                     className={cn(
                       CRM_MENU_ITEM,
                       "data-[selected=true]:bg-crm-accent-muted data-[selected=true]:text-crm-accent-muted-foreground",
@@ -156,7 +158,9 @@ export const EmployeePicker = ({
                     <span className="min-w-0 flex-1">
                       <span className="block truncate font-medium">{name}</span>
                       <span className={`block truncate text-[11px] ${CRM_SURFACES.textMuted}`}>
-                        {phone || "Sin teléfono"}
+                        {employee.national_identification_number
+                          ? `CI ${employee.national_identification_number}`
+                          : phone || "Sin cédula"}
                       </span>
                     </span>
                   </CommandItem>

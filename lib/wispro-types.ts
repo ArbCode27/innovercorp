@@ -13,6 +13,7 @@ export type WisproEmployee = {
   name: string;
   phone: string | null;
   phone_mobile: string | null;
+  national_identification_number: string | null;
   created_at: string | null;
   updated_at: string | null;
 };
@@ -89,6 +90,7 @@ export type CrmWisproCaso = {
   employeeId: string | null;
   employeeName: string | null;
   employeePhone: string | null;
+  employeeDocument: string | null;
   status: CrmWisproCasoStatus;
   kind: string | null;
   title: string;

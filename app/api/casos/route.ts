@@ -77,6 +77,7 @@ const buildFichaInput = async (
     wisproIssueId: string;
     wisproPublicId?: number | null;
     wisproOrderId?: string | null;
+    employeeDocument?: string | null;
   },
 ): Promise<UpsertCrmWisproCasoInput> => {
   const employee = await resolveEmployee(input.employeeId);
@@ -107,6 +108,8 @@ const buildFichaInput = async (
     employeeId: input.employeeId ?? employee?.id ?? null,
     employeeName: employee?.name ?? null,
     employeePhone: employee?.phone_mobile || employee?.phone || null,
+    employeeDocument:
+      employee?.national_identification_number ?? input.employeeDocument ?? null,
     status: resolveStatus(input),
     kind: input.kind ?? null,
     title: input.title,
@@ -217,14 +220,6 @@ export async function POST(request: NextRequest) {
             endAt: input.endAt,
             gps: hasGps(input.gps) ? input.gps : null,
           }
-        : null,
-      technician:
-        input.generateOrder && input.employeeId && input.startAt && input.endAt
-          ? {
-              employeeId: input.employeeId,
-              startAt: input.startAt,
-              endAt: input.endAt,
-            }
           : null,
     });
 
@@ -279,14 +274,6 @@ export async function PATCH(request: NextRequest) {
               gps: hasGps(input.gps) ? input.gps : null,
             }
           : null,
-      technician:
-        input.employeeId && input.startAt && input.endAt
-          ? {
-              employeeId: input.employeeId,
-              startAt: input.startAt,
-              endAt: input.endAt,
-            }
-          : null,
     });
 
     const withFicha = await persistFicha(result, {
@@ -306,6 +293,7 @@ export async function PATCH(request: NextRequest) {
       kind: input.kind ?? existing?.kind ?? "technical",
       wisproPublicId: input.publicId ?? existing?.wisproPublicId,
       wisproOrderId: result.orden.ok === true ? result.orden.id : existing?.wisproOrderId,
+      employeeDocument: existing?.employeeDocument,
       gps: input.gps ?? (existing?.latitude != null && existing?.longitude != null
         ? {
             latitude: existing.latitude,

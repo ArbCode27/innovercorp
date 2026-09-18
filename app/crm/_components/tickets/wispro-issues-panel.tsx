@@ -111,7 +111,12 @@ export const WisproIssuesPanel = () => {
                       {caso.cause || caso.title}
                     </TableCell>
                     <TableCell className={CRM_SURFACES.textSecondary}>
-                      {caso.employeeName || "sin asignar"}
+                      <p>{caso.employeeName || "sin asignar"}</p>
+                      {caso.employeeDocument ? (
+                        <p className={`text-[11px] ${CRM_SURFACES.textMuted}`}>
+                          CI {caso.employeeDocument}
+                        </p>
+                      ) : null}
                     </TableCell>
                     <TableCell>
                       {caso.mapsUrl ? (

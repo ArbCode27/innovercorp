@@ -48,6 +48,19 @@ const resolveInboundText = (message: AgentHistoryMessage | null | undefined) =>
     .filter(Boolean)
     .join(" ");
 
+export const extractLatestInboundCedula = (
+  messages: AgentHistoryMessage[],
+): string | null => {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (!isUserMessage(message)) continue;
+    const text = resolveInboundText(message);
+    if (!looksLikeCedula(text)) continue;
+    return String(text).replace(/\D/g, "");
+  }
+  return null;
+};
+
 export const getLatestInboundMessage = (
   messages: AgentHistoryMessage[],
 ): AgentHistoryMessage | null => {

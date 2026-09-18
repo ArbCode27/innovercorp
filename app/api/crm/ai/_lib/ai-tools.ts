@@ -98,6 +98,13 @@ export const getClientTicketArgsSchema = z.object({});
 
 export const listMyPendingTicketsArgsSchema = z.object({
   offset: z.coerce.number().int().min(0).optional().default(0),
+  cedula: z.preprocess(
+    (value) => {
+      if (value == null || value === "") return null;
+      return String(value).replace(/[^\d]/g, "");
+    },
+    z.string().min(5).max(12).regex(/^\d+$/).nullable().optional(),
+  ),
 });
 
 /** AI tool declarations for the CRM agent. */
@@ -105,7 +112,7 @@ export const AI_TOOL_DECLARATIONS = [
   {
     name: LOOKUP_WISPRO_TOOL,
     description:
-      "Busca al abonado en Wispro por cédula o RIF (solo números, sin V/J). El sistema prueba prefijos VE automáticamente. Si hay exactamente 1 match, DEBE vincular el abonado a ESTE chat (también si otros chats ya tienen el mismo wispro_id). Devuelve linked=true solo cuando persistió en este chat. Si linked=false en match único, reintenta lookup; no digas que ya identificaste la cuenta. Si service_suspended=true, incentiva el pago e indica activación inmediata. Úsala cuando el usuario envíe su cédula o RIF.",
+      "Busca al abonado en Wispro por cédula o RIF (solo números, sin V/J). El sistema prueba prefijos VE automáticamente. Si hay exactamente 1 match, DEBE vincular el abonado a ESTE chat (también si otros chats ya tienen el mismo wispro_id). Devuelve linked=true solo cuando persistió en este chat. Si linked=false en match único, reintenta lookup; no digas que ya identificaste la cuenta. Si service_suspended=true, incentiva el pago e indica activación inmediata. Úsala cuando el usuario envíe su cédula o RIF. Si el documento es de un técnico/empleado, NO vincules un abonado: usa list_my_pending_tickets.",
     parameters: {
       type: "object",
       properties: {
@@ -219,13 +226,17 @@ export const AI_TOOL_DECLARATIONS = [
   {
     name: LIST_MY_PENDING_TICKETS_TOOL,
     description:
-      "SOLO si el remitente es un empleado/técnico Wispro. Lista y ENVÍA por WhatsApp sus tickets pendientes (nombre, teléfono, causa, Maps y foto de fachada). Si delivered=true no reenvíes la lista en texto: solo un acuse corto.",
+      "SOLO si el remitente es un empleado/técnico Wispro (WhatsApp o cédula). Lista y ENVÍA por WhatsApp sus tickets pendientes asignados en el CRM (nombre, teléfono, causa, Maps y foto de fachada). Si delivered=true no reenvíes la lista en texto: solo un acuse corto.",
     parameters: {
       type: "object",
       properties: {
         offset: {
           type: "number",
           description: "Saltar N tickets si pidió el siguiente lote.",
+        },
+        cedula: {
+          type: "string",
+          description: "Cédula del técnico (solo números) si aún no está identificado por WhatsApp.",
         },
       },
       required: [],
@@ -234,13 +245,13 @@ export const AI_TOOL_DECLARATIONS = [
 ] as const;
 
 export const AI_TOOLS_CONTRACT_PROMPT = `Herramientas disponibles (obligatorio respetar):
-1) lookup_wispro_by_cedula — cédula o RIF del abonado (solo números; el sistema prueba prefijos V/E/J/G). Trae debt_usd, debt_bs, bcv_rate, account_status y service_suspended. Si hay 1 solo match, vincula automáticamente al chat (linked=true).
+1) lookup_wispro_by_cedula — cédula o RIF del abonado (solo números; el sistema prueba prefijos V/E/J/G). Trae debt_usd, debt_bs, bcv_rate, account_status y service_suspended. Si hay 1 solo match, vincula automáticamente al chat (linked=true). Si el documento es de un técnico, no vincules cliente.
 2) get_bcv_rate — solo si preguntan la tasa BCV del día sin consultar saldo (fuente rates.dolarvzla.com/bcv).
 3) link_wispro_client — SOLO si lookup devolvió varios matches y el cliente confirmó cuál. No la uses si linked=true.
 4) submit_payment_receipt — registrar comprobante (requiere lookup previo). Tras éxito/error: etiqueta "Verificar pago" + handoff. Tras éxito el sistema puede crear una promesa Wispro en segundo plano: NUNCA la menciones al cliente; confirma solo el registro del comprobante.
 5) escalate_to_human — category=support al cerrar diagnóstico; category=general si pide humano. NO al solo recibir comprobante.
 6) get_client_ticket — ticket abierto de ESTE cliente (número, estado, ventana). Si el remitente es técnico, NO la uses.
-7) list_my_pending_tickets — SOLO técnicos identificados. El sistema envía foto + Maps. Si delivered=true, responde un acuse corto y no copies la lista.
+7) list_my_pending_tickets — SOLO técnicos identificados (WhatsApp o su cédula). El sistema envía foto + Maps. Si delivered=true, responde un acuse corto y no copies la lista.
 
 Tasa BCV / bolívares (CRÍTICO):
 - NUNCA inventes ni recalcules la tasa.
@@ -261,7 +272,8 @@ Flujo obligatorio de soporte técnico:
 3) No des pasos de reparación.
 
 Tickets y técnicos:
-- Si identidad dice rol=tecnico_wispro y piden pendientes/hoy/ruta: llama list_my_pending_tickets.
+- Si identidad dice rol=tecnico_wispro y piden pendientes/hoy/ruta, o envían su cédula: llama list_my_pending_tickets.
+- El técnico ve solo los tickets asignados en el CRM (no en Wispro).
 - Si rol=cliente y preguntan por su ticket/visita: get_client_ticket. No inventes el número.
 - No mezcles: el técnico no ve tickets de otro empleado; el cliente no ve la cola.
 

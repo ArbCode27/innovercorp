@@ -26,12 +26,6 @@ const DEFAULT_BASE_URL = "https://www.cloud.wispro.co/api/v1";
 const REQUEST_TIMEOUT_MS = 15_000;
 const MAX_RETRIES = 2;
 
-/**
- * Field name used by POST /order/orders/{id}/schedule for the technician.
- * Change here if Wispro expects `assignable_id` instead of `employee_id`.
- */
-export const CAMPO_TECNICO = "employee_id" as const;
-
 export class WisproHttpError extends Error {
   readonly status: number;
   readonly body: string;
@@ -259,6 +253,12 @@ const normalizeEmployee = (record: unknown): WisproEmployee | null => {
     public_id: readNumber(row.public_id),
     phone: readString(row.phone),
     phone_mobile: readString(row.phone_mobile),
+    national_identification_number:
+      readString(row.national_identification_number) ||
+      readString(row.identification_number) ||
+      readString(row.document_number) ||
+      readString(row.document) ||
+      readString(row.dni),
     created_at: readString(row.created_at),
     updated_at: readString(row.updated_at),
   };
@@ -519,34 +519,6 @@ export const createWorkOrder = async (input: CreateOrderInput) => {
   return { id };
 };
 
-export const asignarTecnico = async (
-  orderId: string,
-  employeeId: string,
-  startAt: string,
-  endAt: string,
-) => {
-  try {
-    await wisproRequest({
-      method: "POST",
-      path: `/order/orders/${encodeURIComponent(orderId)}/schedule`,
-      json: {
-        [CAMPO_TECNICO]: employeeId,
-        start_at: startAt,
-        end_at: endAt,
-      },
-    });
-  } catch (error) {
-    if (error instanceof WisproHttpError && error.status >= 400 && error.status < 500) {
-      throw new WisproHttpError(
-        `${error.message}${error.body ? ` | body: ${error.body.slice(0, 800)}` : ""}`,
-        error.status,
-        error.body,
-      );
-    }
-    throw error;
-  }
-};
-
 export const rescheduleOrder = async (
   orderId: string,
   body: Record<string, unknown>,
@@ -584,11 +556,6 @@ export const createOrderFeedback = async (
 export const createCaso = async (input: {
   issue: CreateIssueInput;
   order?: CreateOrderInput | null;
-  technician?: {
-    employeeId: string;
-    startAt: string;
-    endAt: string;
-  } | null;
 }): Promise<ResultadoCaso> => {
   let ticket: ResultadoCaso["ticket"];
   try {
@@ -601,9 +568,7 @@ export const createCaso = async (input: {
         error: error instanceof Error ? error.message : String(error),
       },
       orden: input.order ? { ok: false, error: "No se creó porque falló el ticket" } : { ok: null },
-      tecnico: input.technician
-        ? { ok: false, error: "No se asignó porque falló el ticket" }
-        : { ok: null },
+      tecnico: { ok: null },
     };
   }
 
@@ -611,13 +576,12 @@ export const createCaso = async (input: {
     return { ticket, orden: { ok: null }, tecnico: { ok: null } };
   }
 
-  let orden: ResultadoCaso["orden"];
   try {
     const createdOrder = await createWorkOrder({
       ...input.order,
       ticketId: ticket.ok ? ticket.id : input.order.ticketId,
     });
-    orden = { ok: true, id: createdOrder.id };
+    return { ticket, orden: { ok: true, id: createdOrder.id }, tecnico: { ok: null } };
   } catch (error) {
     return {
       ticket,
@@ -625,32 +589,7 @@ export const createCaso = async (input: {
         ok: false,
         error: error instanceof Error ? error.message : String(error),
       },
-      tecnico: input.technician
-        ? { ok: false, error: "No se asignó porque falló la orden" }
-        : { ok: null },
-    };
-  }
-
-  if (!input.technician || !orden.ok) {
-    return { ticket, orden, tecnico: input.technician ? { ok: false, error: "Orden inválida" } : { ok: null } };
-  }
-
-  try {
-    await asignarTecnico(
-      orden.id,
-      input.technician.employeeId,
-      input.technician.startAt,
-      input.technician.endAt,
-    );
-    return { ticket, orden, tecnico: { ok: true } };
-  } catch (error) {
-    return {
-      ticket,
-      orden,
-      tecnico: {
-        ok: false,
-        error: error instanceof Error ? error.message : String(error),
-      },
+      tecnico: { ok: null },
     };
   }
 };
@@ -659,11 +598,6 @@ export const retryCasoSteps = async (input: {
   ticketId: string;
   order?: CreateOrderInput | null;
   existingOrderId?: string | null;
-  technician?: {
-    employeeId: string;
-    startAt: string;
-    endAt: string;
-  } | null;
 }): Promise<ResultadoCaso> => {
   const ticket: ResultadoCaso["ticket"] = {
     ok: true,
@@ -671,63 +605,29 @@ export const retryCasoSteps = async (input: {
     publicId: null,
   };
 
-  let orderId = input.existingOrderId?.trim() || null;
-  let orden: ResultadoCaso["orden"] = orderId
-    ? { ok: true, id: orderId }
-    : input.order
-      ? { ok: false, error: "pendiente" }
-      : { ok: null };
-
-  if (!orderId && input.order) {
-    try {
-      const created = await createWorkOrder({
-        ...input.order,
-        ticketId: input.ticketId,
-      });
-      orderId = created.id;
-      orden = { ok: true, id: created.id };
-    } catch (error) {
-      return {
-        ticket,
-        orden: {
-          ok: false,
-          error: error instanceof Error ? error.message : String(error),
-        },
-        tecnico: input.technician
-          ? { ok: false, error: "No se asignó porque falló la orden" }
-          : { ok: null },
-      };
-    }
+  const orderId = input.existingOrderId?.trim() || null;
+  if (orderId) {
+    return { ticket, orden: { ok: true, id: orderId }, tecnico: { ok: null } };
   }
 
-  if (!input.technician) {
-    return { ticket, orden, tecnico: { ok: null } };
-  }
-
-  if (!orderId) {
-    return {
-      ticket,
-      orden,
-      tecnico: { ok: false, error: "No hay orden para asignar el técnico" },
-    };
+  if (!input.order) {
+    return { ticket, orden: { ok: null }, tecnico: { ok: null } };
   }
 
   try {
-    await asignarTecnico(
-      orderId,
-      input.technician.employeeId,
-      input.technician.startAt,
-      input.technician.endAt,
-    );
-    return { ticket, orden, tecnico: { ok: true } };
+    const created = await createWorkOrder({
+      ...input.order,
+      ticketId: input.ticketId,
+    });
+    return { ticket, orden: { ok: true, id: created.id }, tecnico: { ok: null } };
   } catch (error) {
     return {
       ticket,
-      orden,
-      tecnico: {
+      orden: {
         ok: false,
         error: error instanceof Error ? error.message : String(error),
       },
+      tecnico: { ok: null },
     };
   }
 };

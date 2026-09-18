@@ -44,7 +44,8 @@ import {
   listOpenCasosForConversation,
   listPendingCasosForEmployee,
 } from "@/lib/crm-wispro-casos";
-import { matchWisproEmployeeForPhone } from "@/lib/match-wispro-employee";
+import { matchWisproEmployee } from "@/lib/match-wispro-employee";
+import { documentsMatch } from "@/lib/phone-match";
 import {
   formatTechnicianCaption,
   formatTechnicianList,
@@ -560,6 +561,31 @@ const handleLookup = async (
   }
 
   try {
+    const technicianByDocument = await matchWisproEmployee(ctx.supabase, {
+      document: parsed.data.cedula,
+    });
+    const technician =
+      ctx.wisproEmployee ||
+      (technicianByDocument &&
+      documentsMatch(parsed.data.cedula, technicianByDocument.document)
+        ? technicianByDocument
+        : null);
+
+    if (technician) {
+      ctx.wisproEmployee = technician;
+      return {
+        name: LOOKUP_WISPRO_TOOL,
+        ok: true,
+        response: {
+          ok: true,
+          role: "tecnico_wispro",
+          cedula: parsed.data.cedula,
+          employee: technician.name,
+          hint: "Este documento corresponde a un técnico. Llama list_my_pending_tickets para enviarle los tickets asignados en el CRM. No vincules un abonado.",
+        },
+      };
+    }
+
     const results = await searchWisproByCedula(parsed.data.cedula);
     ctx.lastLookupByWisproId.clear();
     ctx.lastLookupCedula = parsed.data.cedula;
@@ -1357,13 +1383,16 @@ const handleListMyPendingTickets = async (
 
   const employee =
     ctx.wisproEmployee ||
-    (await matchWisproEmployeeForPhone(ctx.supabase, ctx.customerPhone));
+    (await matchWisproEmployee(ctx.supabase, {
+      phone: ctx.customerPhone,
+      document: parsed.data.cedula || ctx.lastLookupCedula,
+    }));
   if (!employee) {
     return {
       name: LIST_MY_PENDING_TICKETS_TOOL,
       ok: true,
       directReply:
-        "Este WhatsApp no está registrado como empleado en Wispro. Pide que carguen tu número en la ficha de empleado.",
+        "No pude identificarte como técnico. Enviá tu cédula (solo números) o pedí que carguen tu WhatsApp o documento en la ficha de empleado.",
       stopAgent: true,
       response: {
         ok: true,

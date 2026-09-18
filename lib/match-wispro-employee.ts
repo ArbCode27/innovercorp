@@ -1,40 +1,71 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { listEmployees } from "./wispro";
-import { findEmployeeIdByPhoneLast10 } from "./crm-wispro-casos";
-import { phoneLast10, phonesMatch } from "./phone-match";
+import { findEmployeeByDocumentDigits, findEmployeeIdByPhoneLast10 } from "./crm-wispro-casos";
+import { documentDigits, phoneLast10 } from "./phone-match";
+import { pickWisproEmployeeFromCatalog } from "./pick-wispro-employee";
+import type { WisproEmployee } from "./wispro-types";
 
 export type MatchedWisproEmployee = {
   id: string;
   name: string;
   phone: string | null;
+  document: string | null;
 };
 
-export const matchWisproEmployeeForPhone = async (
-  supabase: SupabaseClient,
-  phone: string | null | undefined,
-): Promise<MatchedWisproEmployee | null> => {
-  const last10 = phoneLast10(phone);
-  if (!last10) return null;
+export { pickWisproEmployeeFromCatalog };
 
+const toMatched = (
+  employee: Pick<
+    WisproEmployee,
+    "id" | "name" | "phone" | "phone_mobile" | "national_identification_number"
+  >,
+): MatchedWisproEmployee => ({
+  id: employee.id,
+  name: employee.name,
+  phone: employee.phone_mobile || employee.phone,
+  document: employee.national_identification_number,
+});
+
+export const matchWisproEmployee = async (
+  supabase: SupabaseClient,
+  input: { phone?: string | null; document?: string | null },
+): Promise<MatchedWisproEmployee | null> => {
+  const document = documentDigits(input.document);
   try {
     const employees = await listEmployees();
-    const live = employees.find(
-      (employee) =>
-        phonesMatch(phone, employee.phone) ||
-        phonesMatch(phone, employee.phone_mobile),
-    );
-    if (live) {
-      return {
-        id: live.id,
-        name: live.name,
-        phone: live.phone_mobile || live.phone,
-      };
-    }
+    const live = pickWisproEmployeeFromCatalog(employees, {
+      phone: input.phone,
+      document,
+    });
+    if (live) return toMatched(live);
   } catch (error) {
     console.warn("[WISPRO] employee_match_catalog_failed", error);
   }
 
+  if (document) {
+    const byDocument = await findEmployeeByDocumentDigits(supabase, document);
+    if (byDocument) {
+      return {
+        id: byDocument.id,
+        name: byDocument.name,
+        phone: byDocument.phone,
+        document: byDocument.document,
+      };
+    }
+  }
+
+  const last10 = phoneLast10(input.phone);
   const fallback = await findEmployeeIdByPhoneLast10(supabase, last10);
   if (!fallback) return null;
-  return { id: fallback.id, name: fallback.name, phone: phone || null };
+  return {
+    id: fallback.id,
+    name: fallback.name,
+    phone: input.phone || null,
+    document: fallback.document,
+  };
 };
+
+export const matchWisproEmployeeForPhone = (
+  supabase: SupabaseClient,
+  phone: string | null | undefined,
+) => matchWisproEmployee(supabase, { phone });

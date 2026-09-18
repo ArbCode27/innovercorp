@@ -39,7 +39,6 @@ import { CrmButton } from "../shared/crm-button";
 import { humanizeReporteKey, suggestCategoryId } from "@/lib/parseReporte";
 import { casoFieldsFromReporte } from "@/lib/caso-from-reporte";
 import type {
-  ResultadoCaso,
   WisproCategory,
   WisproClientHit,
   WisproContractHit,
@@ -56,9 +55,6 @@ import { buildMapsUrl, parseCoordsFromMapsUrl } from "@/lib/maps-link";
 import type { Message } from "../../_lib/types";
 import { wisproCasoClient } from "../../_lib/wispro-caso-client";
 import { EmployeePicker } from "./employee-picker";
-import { ResultadoCasoPanel } from "./resultado-caso-panel";
-
-const storageKey = (publicId: number | string) => `wispro-caso:${publicId}`;
 
 const toDatetimeLocal = (date: Date) => {
   const pad = (value: number) => String(value).padStart(2, "0");
@@ -151,7 +147,6 @@ export const CrearCasoWisproDialog = ({
   const [contracts, setContracts] = useState<WisproContractHit[]>([]);
   const [isSearchingClients, setIsSearchingClients] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [result, setResult] = useState<ResultadoCaso | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [openSections, setOpenSections] = useState({
     cliente: true,
@@ -160,7 +155,6 @@ export const CrearCasoWisproDialog = ({
     ubicacion: true,
     tecnico: true,
   });
-  const lastPayloadRef = useRef<z.output<typeof createCasoSchema> | null>(null);
   const autoFilledKeyRef = useRef<string | null>(null);
   const latestReport = findLatestAiReport(messages);
 
@@ -242,7 +236,6 @@ export const CrearCasoWisproDialog = ({
     setReporte(latestReport);
     setParsed(fromReporte.parsed);
     setSuggestedCategory(false);
-    setResult(null);
     setConfirmOpen(false);
     setChatImages(chatCtx.images);
     void loadCatalog(false);
@@ -389,20 +382,6 @@ export const CrearCasoWisproDialog = ({
     }
   };
 
-  const persistResult = (next: ResultadoCaso, payload: z.output<typeof createCasoSchema>) => {
-    setResult(next);
-    lastPayloadRef.current = payload;
-    if (next.ticket.ok && next.ticket.publicId != null) {
-      sessionStorage.setItem(
-        storageKey(next.ticket.publicId),
-        JSON.stringify({
-          result: next,
-          payload,
-        }),
-      );
-    }
-  };
-
   const submitCaso = async (values: FormValues) => {
     setIsSubmitting(true);
     try {
@@ -423,54 +402,37 @@ export const CrearCasoWisproDialog = ({
             : null,
       };
       const next = await wisproCasoClient.createCaso(payload);
-      persistResult(next, payload);
-      if (next.ticket.ok && next.orden.ok !== false && next.tecnico.ok !== false) {
-        toast.success("Caso creado en Wispro");
-      } else if (next.ticket.ok) {
-        toast.warning("El ticket se creó, pero hubo un fallo parcial");
-      } else {
+      if (!next.ticket.ok) {
         toast.error(next.ticket.error);
+        return;
       }
+
+      const publicId = next.ticket.publicId;
+      const ticketLabel =
+        publicId != null ? `Ticket #${publicId}` : "Ticket creado";
+
+      if (next.orden.ok === false) {
+        toast.warning(
+          `${ticketLabel}. La orden no se creó: ${next.orden.error}`,
+        );
+      } else if (next.crm?.ok === false) {
+        toast.warning(
+          `${ticketLabel}. No se guardó la ficha CRM: ${next.crm.error}`,
+        );
+      } else {
+        const technicianName = selectedEmployee?.name;
+        toast.success(
+          technicianName
+            ? `${ticketLabel}. Técnico asignado en CRM: ${technicianName}`
+            : ticketLabel,
+        );
+      }
+      onOpenChange(false);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "No se pudo crear el caso");
     } finally {
       setIsSubmitting(false);
       setConfirmOpen(false);
-    }
-  };
-
-  const handleRetryFailed = async () => {
-    const payload = lastPayloadRef.current;
-    if (!result?.ticket.ok || !payload) return;
-    setIsSubmitting(true);
-    try {
-      const next = await wisproCasoClient.retryCaso({
-        ticketId: result.ticket.id,
-        publicId: result.ticket.publicId,
-        generateOrder: payload.generateOrder,
-        existingOrderId: result.orden.ok ? result.orden.id : null,
-        kind: payload.kind,
-        orderDescription: payload.orderDescription,
-        startAt: payload.startAt,
-        endAt: payload.endAt,
-        contractId: payload.contractId,
-        employeeId: payload.employeeId,
-        gps: payload.gps,
-        conversationId: payload.conversationId,
-        crmClientId: payload.crmClientId,
-        clientName: payload.clientName,
-        clientPhone: payload.clientPhone,
-        cause: payload.cause,
-        mapsUrl: payload.mapsUrl,
-        addressText: payload.addressText,
-        facadeMediaUrl: payload.facadeMediaUrl,
-        facadeMessageId: payload.facadeMessageId,
-      });
-      persistResult(next, payload);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "No se pudo reintentar");
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
@@ -489,17 +451,8 @@ export const CrearCasoWisproDialog = ({
             Se crea desde este chat. El número público del ticket es el que le pasás al cliente.
             {clientName ? ` Cliente CRM: ${clientName}.` : ""}
           </DialogDescription>
-        </DialogHeader>
+          </DialogHeader>
 
-        {result ? (
-          <div className="min-h-0 flex-1 overflow-y-auto pr-1">
-            <ResultadoCasoPanel
-              result={result}
-              onRetryFailed={() => void handleRetryFailed()}
-              isRetrying={isSubmitting}
-            />
-          </div>
-        ) : (
           <form
             className="grid min-h-0 flex-1 gap-4 overflow-y-auto lg:grid-cols-2"
             onSubmit={form.handleSubmit(
@@ -855,6 +808,10 @@ export const CrearCasoWisproDialog = ({
                   }
                   disabled={isLoadingCatalog}
                 />
+                <p className={`text-xs ${CRM_SURFACES.textMuted}`}>
+                  Se asigna en el CRM. El técnico ve estos tickets cuando envía su cédula a Nova.
+                  No se agenda en Wispro.
+                </p>
               </CollapsibleBlock>
 
               <CrmButton
@@ -866,7 +823,6 @@ export const CrearCasoWisproDialog = ({
               </CrmButton>
             </section>
           </form>
-        )}
       </DialogContent>
 
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
@@ -890,7 +846,7 @@ export const CrearCasoWisproDialog = ({
                 <p>
                   Ventana: {startAt || "—"} → {endAt || "—"}
                 </p>
-                <p>Técnico: {selectedEmployee?.name || "sin asignar"}</p>
+                <p>Técnico CRM: {selectedEmployee?.name || "sin asignar"}</p>
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>

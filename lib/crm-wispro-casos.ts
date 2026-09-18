@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { phoneLast10 } from "./phone-match";
+import { documentDigits, phoneLast10 } from "./phone-match";
 import type { CrmWisproCaso, CrmWisproCasoStatus } from "./wispro-types";
 
 export type UpsertCrmWisproCasoInput = {
@@ -12,6 +12,7 @@ export type UpsertCrmWisproCasoInput = {
   employeeId?: string | null;
   employeeName?: string | null;
   employeePhone?: string | null;
+  employeeDocument?: string | null;
   status: CrmWisproCasoStatus;
   kind?: string | null;
   title: string;
@@ -42,6 +43,8 @@ const toRow = (input: UpsertCrmWisproCasoInput) => ({
   employee_name: input.employeeName ?? null,
   employee_phone: input.employeePhone ?? null,
   employee_phone_last10: phoneLast10(input.employeePhone),
+  employee_document: input.employeeDocument ?? null,
+  employee_document_digits: documentDigits(input.employeeDocument),
   status: input.status,
   kind: input.kind ?? null,
   title: input.title,
@@ -72,6 +75,7 @@ const fromRow = (row: Record<string, unknown>): CrmWisproCaso => ({
   employeeId: (row.employee_id as string | null) ?? null,
   employeeName: (row.employee_name as string | null) ?? null,
   employeePhone: (row.employee_phone as string | null) ?? null,
+  employeeDocument: (row.employee_document as string | null) ?? null,
   status: String(row.status) as CrmWisproCasoStatus,
   kind: (row.kind as string | null) ?? null,
   title: String(row.title || ""),
@@ -205,7 +209,7 @@ export const findEmployeeIdByPhoneLast10 = async (
   if (!last10) return null;
   const { data, error } = await supabase
     .from("crm_wispro_casos")
-    .select("employee_id, employee_name")
+    .select("employee_id, employee_name, employee_phone, employee_document")
     .eq("employee_phone_last10", last10)
     .not("employee_id", "is", null)
     .order("updated_at", { ascending: false })
@@ -216,5 +220,30 @@ export const findEmployeeIdByPhoneLast10 = async (
   return {
     id: String(data.employee_id),
     name: data.employee_name ? String(data.employee_name) : "Técnico",
+    phone: data.employee_phone ? String(data.employee_phone) : null,
+    document: data.employee_document ? String(data.employee_document) : null,
+  };
+};
+
+export const findEmployeeByDocumentDigits = async (
+  supabase: SupabaseClient,
+  digits: string | null,
+) => {
+  if (!digits) return null;
+  const { data, error } = await supabase
+    .from("crm_wispro_casos")
+    .select("employee_id, employee_name, employee_phone, employee_document")
+    .eq("employee_document_digits", digits)
+    .not("employee_id", "is", null)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error || !data?.employee_id) return null;
+  return {
+    id: String(data.employee_id),
+    name: data.employee_name ? String(data.employee_name) : "Técnico",
+    phone: data.employee_phone ? String(data.employee_phone) : null,
+    document: data.employee_document ? String(data.employee_document) : digits,
   };
 };
