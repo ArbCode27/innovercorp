@@ -1,8 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { listEmployees } from "./wispro";
-import { findEmployeeByDocumentDigits, findEmployeeIdByPhoneLast10 } from "./crm-wispro-casos";
+import { findCrmTechnician } from "./crm-technicians";
+import {
+  findEmployeeByDocumentDigits,
+  findEmployeeIdByPhoneLast10,
+} from "./crm-wispro-casos";
 import { documentDigits, phoneLast10 } from "./phone-match";
 import { pickWisproEmployeeFromCatalog } from "./pick-wispro-employee";
+import { listEmployees } from "./wispro";
 import type { WisproEmployee } from "./wispro-types";
 
 export type MatchedWisproEmployee = {
@@ -31,6 +35,19 @@ export const matchWisproEmployee = async (
   input: { phone?: string | null; document?: string | null },
 ): Promise<MatchedWisproEmployee | null> => {
   const document = documentDigits(input.document);
+  const local = await findCrmTechnician(supabase, {
+    phone: input.phone,
+    document,
+  });
+  if (local?.active) {
+    return {
+      id: local.employeeId,
+      name: local.name,
+      phone: local.whatsappPhone || local.phone,
+      document: local.documentLast4,
+    };
+  }
+
   try {
     const employees = await listEmployees();
     const live = pickWisproEmployeeFromCatalog(employees, {

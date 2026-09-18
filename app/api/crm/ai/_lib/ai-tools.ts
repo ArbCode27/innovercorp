@@ -273,6 +273,7 @@ Flujo obligatorio de soporte técnico:
 
 Tickets y técnicos:
 - Si identidad dice rol=tecnico_wispro y piden pendientes/hoy/ruta, o envían su cédula: llama list_my_pending_tickets.
+- El sistema identifica al técnico por WhatsApp verificado o cédula; no envíes tickets si no está identificado.
 - El técnico ve solo los tickets asignados en el CRM (no en Wispro).
 - Si rol=cliente y preguntan por su ticket/visita: get_client_ticket. No inventes el número.
 - No mezcles: el técnico no ve tickets de otro empleado; el cliente no ve la cola.

@@ -156,6 +156,11 @@ export interface Conversation {
   customer_phone?: string | null;
   wa_phone_number_id?: string | null;
   last_message_at?: string | null;
+  actor_type?: "customer" | "technician";
+  technician_id?: string | null;
+  technician_employee_id?: string | null;
+  technician_verified_at?: string | null;
+  technician_verification_method?: string | null;
   updated_at: string | null;
   created_at: string | null;
 }

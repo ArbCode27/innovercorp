@@ -24,11 +24,24 @@ import {
 import type { AiContent, AiContentPart } from "./ai-client";
 import type { MatchedWisproEmployee } from "@/lib/match-wispro-employee";
 import { matchWisproEmployee } from "@/lib/match-wispro-employee";
+import { resolveTechnicianSession } from "@/lib/crm-technicians";
+import { listOpenCasosForConversation } from "@/lib/crm-wispro-casos";
+import { documentLast4 } from "@/lib/technician-crypto";
 import {
-  listOpenCasosForConversation,
-  listPendingCasosForEmployee,
-} from "@/lib/crm-wispro-casos";
-import { extractLatestInboundCedula } from "./inbound-intent";
+  looksLikeCustomerPaymentOverride,
+  looksLikeTechnicianRoleClaim,
+  looksLikeTechnicianTicketRequest,
+  shouldDeliverTechnicianTickets,
+  technicianFirstName,
+} from "@/lib/technician-identity";
+import { deliverTechnicianPendingTickets } from "@/lib/technician-tickets";
+import {
+  collectBurstInbound,
+  extractLatestInboundCedula,
+  getLatestInboundMessage,
+  inboundHasImage,
+  looksLikeCedula,
+} from "./inbound-intent";
 import {
   generateAiWithRetry,
   isPermanentAiError,
@@ -123,7 +136,11 @@ const buildIdentityBlock = (input: {
     "N/D";
 
   const ticketLine = input.employee
-    ? `- rol: tecnico_wispro (${input.employee.name}${input.employee.document ? ` · ci ${input.employee.document}` : ""})`
+    ? `- rol: tecnico_wispro (${input.employee.name}${
+        documentLast4(input.employee.document)
+          ? ` · ci ···${documentLast4(input.employee.document)}`
+          : ""
+      })`
     : input.clientTickets.length
       ? `- rol: cliente\n- ticket_activo: ${input.clientTickets
           .map(
@@ -134,7 +151,7 @@ const buildIdentityBlock = (input: {
       : `- rol: cliente\n- ticket_activo: ninguno`;
 
   const techLine = input.employee
-    ? `- tickets_pendientes: ${input.pendingCount ?? 0} (usa list_my_pending_tickets; el técnico filtra por su cédula o WhatsApp; el sistema envía foto y Maps)`
+    ? `- tickets_pendientes: ${input.pendingCount ?? 0} (solo tickets asignados a este empleado; el sistema envía foto y Maps)`
     : null;
 
   return [
@@ -481,13 +498,108 @@ export const runAiAgent = async (input: {
     throw new Error("empty_history");
   }
 
-  const employee = await matchWisproEmployee(
-    input.supabase,
-    {
-      phone: input.customerPhone || input.client?.whatsapp_id || input.client?.phone,
-      document: extractLatestInboundCedula(input.messages),
-    },
-  ).catch(() => null);
+  const latestInbound = getLatestInboundMessage(input.messages);
+  const inboundText = [latestInbound?.content, latestInbound?.caption]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .join(" ");
+  const burst = collectBurstInbound(input.messages);
+  const hasImage =
+    inboundHasImage(latestInbound) ||
+    burst.some((message) => inboundHasImage(message));
+  const inboundCedula = extractLatestInboundCedula(input.messages);
+  const paymentOverride =
+    hasImage || looksLikeCustomerPaymentOverride(inboundText);
+  const phone =
+    input.customerPhone || input.client?.whatsapp_id || input.client?.phone;
+
+  const session = await resolveTechnicianSession(input.supabase, {
+    conversationId: input.conversationId,
+    phone,
+    text: inboundText,
+    hasImage,
+    cedula: inboundCedula,
+    claimsTechnicianRole:
+      looksLikeTechnicianRoleClaim(inboundText) ||
+      looksLikeTechnicianTicketRequest(inboundText),
+    paymentOverride,
+  }).catch((error) => {
+    console.warn(`${LOG_PREFIX} technician_session_failed`, error);
+    return null;
+  });
+
+  if (
+    session &&
+    (session.status === "challenge_sent" ||
+      session.status === "challenge_failed" ||
+      session.status === "need_registered_phone" ||
+      session.status === "inactive") &&
+    session.message
+  ) {
+    return {
+      action: "reply",
+      message: session.message,
+      reason: session.reason,
+      runId,
+      clientId: input.client?.id ?? null,
+    };
+  }
+
+  let employee: MatchedWisproEmployee | null = session?.employee ?? null;
+  if (!employee && !paymentOverride) {
+    employee = await matchWisproEmployee(input.supabase, {
+      phone,
+      document: inboundCedula,
+    }).catch(() => null);
+  }
+
+  if (employee) {
+    const shouldDeliver = shouldDeliverTechnicianTickets({
+      justVerified: Boolean(session?.justVerified),
+      inboundText,
+      inboundIsCedula: looksLikeCedula(inboundText) || Boolean(inboundCedula),
+    });
+
+    if (shouldDeliver) {
+      if (!phone) {
+        return {
+          action: "reply",
+          message:
+            "No pude identificar tu WhatsApp para enviarte los tickets. Escribe desde el número registrado en tu ficha.",
+          reason: "technician_missing_phone",
+          runId,
+          clientId: input.client?.id ?? null,
+        };
+      }
+
+      const delivery = await deliverTechnicianPendingTickets({
+        supabase: input.supabase,
+        conversationId: input.conversationId,
+        to: phone,
+        employee,
+        technicianId: session?.technician?.id ?? null,
+        inboundText,
+        storedOffset: session?.reportOffset ?? 0,
+        justVerified: Boolean(session?.justVerified),
+      });
+
+      return {
+        action: "reply",
+        message: delivery.message,
+        reason: delivery.ok ? "technician_tickets" : "technician_tickets_failed",
+        runId,
+        clientId: input.client?.id ?? null,
+      };
+    }
+
+    return {
+      action: "reply",
+      message: `Hola ${technicianFirstName(employee.name)}. Este chat está en modo técnico. Escribe *pendientes* para recibir tus tickets, *siguiente* para el próximo lote o *reenviar* si no te llegaron.`,
+      reason: "technician_help",
+      runId,
+      clientId: input.client?.id ?? null,
+    };
+  }
 
   let pendingCount: number | null = null;
   let clientTickets: Array<{
@@ -497,21 +609,16 @@ export const runAiAgent = async (input: {
   }> = [];
 
   try {
-    if (employee) {
-      const pending = await listPendingCasosForEmployee(input.supabase, employee.id);
-      pendingCount = pending.length;
-    } else {
-      const open = await listOpenCasosForConversation(input.supabase, {
-        conversationId: input.conversationId,
-        crmClientId: input.client?.id ?? null,
-        wisproClientId: input.client?.wispro_id ?? null,
-      });
-      clientTickets = open.map((caso) => ({
-        publicId: caso.wisproPublicId,
-        status: caso.status,
-        title: caso.title,
-      }));
-    }
+    const open = await listOpenCasosForConversation(input.supabase, {
+      conversationId: input.conversationId,
+      crmClientId: input.client?.id ?? null,
+      wisproClientId: input.client?.wispro_id ?? null,
+    });
+    clientTickets = open.map((caso) => ({
+      publicId: caso.wisproPublicId,
+      status: caso.status,
+      title: caso.title,
+    }));
   } catch (error) {
     console.warn(`${LOG_PREFIX} ticket_identity_failed`, error);
   }

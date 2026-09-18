@@ -42,21 +42,9 @@ import {
 } from "./ai-tools";
 import {
   listOpenCasosForConversation,
-  listPendingCasosForEmployee,
 } from "@/lib/crm-wispro-casos";
-import { matchWisproEmployee } from "@/lib/match-wispro-employee";
-import { documentsMatch } from "@/lib/phone-match";
-import {
-  formatTechnicianCaption,
-  formatTechnicianList,
-} from "@/lib/technician-report";
-import {
-  sendWhatsAppImageFromUrl,
-  sendWhatsAppText,
-} from "@/lib/whatsapp-outbound";
-import { orderKindLabels } from "@/app/crm/_lib/wispro-caso-schema";
-import type { MatchedWisproEmployee } from "@/lib/match-wispro-employee";
-import type { CrmWisproCaso } from "@/lib/wispro-types";
+import { matchWisproEmployee, type MatchedWisproEmployee } from "@/lib/match-wispro-employee";
+import { deliverTechnicianPendingTickets } from "@/lib/technician-tickets";
 import {
   isUnsafeCustomerReply,
   SAFE_INTERNAL_LEAK_CUSTOMER_REPLY,
@@ -561,18 +549,7 @@ const handleLookup = async (
   }
 
   try {
-    const technicianByDocument = await matchWisproEmployee(ctx.supabase, {
-      document: parsed.data.cedula,
-    });
-    const technician =
-      ctx.wisproEmployee ||
-      (technicianByDocument &&
-      documentsMatch(parsed.data.cedula, technicianByDocument.document)
-        ? technicianByDocument
-        : null);
-
-    if (technician) {
-      ctx.wisproEmployee = technician;
+    if (ctx.wisproEmployee) {
       return {
         name: LOOKUP_WISPRO_TOOL,
         ok: true,
@@ -580,8 +557,8 @@ const handleLookup = async (
           ok: true,
           role: "tecnico_wispro",
           cedula: parsed.data.cedula,
-          employee: technician.name,
-          hint: "Este documento corresponde a un técnico. Llama list_my_pending_tickets para enviarle los tickets asignados en el CRM. No vincules un abonado.",
+          employee: ctx.wisproEmployee.name,
+          hint: "Este WhatsApp es de un técnico. Llama list_my_pending_tickets. No vincules un abonado.",
         },
       };
     }
@@ -1280,24 +1257,74 @@ const handleEscalate = async (
   };
 };
 
-const toTechnicianReport = (caso: CrmWisproCaso) => ({
-  wisproPublicId: caso.wisproPublicId,
-  kindLabel:
-    caso.kind && caso.kind in orderKindLabels
-      ? orderKindLabels[caso.kind as keyof typeof orderKindLabels]
-      : "Visita técnica",
-  clientName: caso.clientName,
-  clientPhone: caso.clientPhone,
-  cause: caso.cause,
-  title: caso.title,
-  addressText: caso.addressText,
-  mapsUrl: caso.mapsUrl,
-  latitude: caso.latitude,
-  longitude: caso.longitude,
-  windowStart: caso.windowStart,
-  windowEnd: caso.windowEnd,
-  facadeMediaUrl: caso.facadeMediaUrl,
-});
+const handleListMyPendingTickets = async (
+  ctx: AgentRunContext,
+  rawArgs: unknown,
+): Promise<ToolHandlerResult> => {
+  const parsed = listMyPendingTicketsArgsSchema.safeParse(rawArgs ?? {});
+  if (!parsed.success) {
+    return {
+      name: LIST_MY_PENDING_TICKETS_TOOL,
+      ok: false,
+      response: { ok: false, error: parsed.error.issues[0]?.message || "args inválidos" },
+    };
+  }
+
+  const employee =
+    ctx.wisproEmployee ||
+    (await matchWisproEmployee(ctx.supabase, {
+      phone: ctx.customerPhone,
+      document: parsed.data.cedula || ctx.lastLookupCedula,
+    }));
+  if (!employee) {
+    return {
+      name: LIST_MY_PENDING_TICKETS_TOOL,
+      ok: true,
+      directReply:
+        "No pude identificarte como técnico. Enviá tu cédula (solo números) o pedí que carguen tu WhatsApp o documento en la ficha de empleado.",
+      stopAgent: true,
+      response: {
+        ok: true,
+        identified: false,
+        count: 0,
+      },
+    };
+  }
+
+  const to = ctx.customerPhone || ctx.whatsappId;
+  if (!to) {
+    return {
+      name: LIST_MY_PENDING_TICKETS_TOOL,
+      ok: false,
+      response: { ok: false, error: "No hay teléfono de WhatsApp para enviar el reporte." },
+    };
+  }
+
+  const delivery = await deliverTechnicianPendingTickets({
+    supabase: ctx.supabase,
+    conversationId: ctx.conversationId,
+    to,
+    employee,
+    inboundText: parsed.data.cedula ? `cedula ${parsed.data.cedula}` : "pendientes",
+    storedOffset: parsed.data.offset || 0,
+  });
+
+  return {
+    name: LIST_MY_PENDING_TICKETS_TOOL,
+    ok: delivery.ok,
+    stopAgent: true,
+    directReply: delivery.message,
+    response: {
+      ok: delivery.ok,
+      identified: delivery.identified,
+      employee: employee.name,
+      count: delivery.count,
+      delivered: delivery.delivered,
+      remaining: delivery.remaining,
+      hint: "delivered=true: solo acuse corto, no copies la lista.",
+    },
+  };
+};
 
 const handleGetClientTicket = async (
   ctx: AgentRunContext,
@@ -1366,192 +1393,6 @@ const handleGetClientTicket = async (
       },
     };
   }
-};
-
-const handleListMyPendingTickets = async (
-  ctx: AgentRunContext,
-  rawArgs: unknown,
-): Promise<ToolHandlerResult> => {
-  const parsed = listMyPendingTicketsArgsSchema.safeParse(rawArgs ?? {});
-  if (!parsed.success) {
-    return {
-      name: LIST_MY_PENDING_TICKETS_TOOL,
-      ok: false,
-      response: { ok: false, error: parsed.error.issues[0]?.message || "args inválidos" },
-    };
-  }
-
-  const employee =
-    ctx.wisproEmployee ||
-    (await matchWisproEmployee(ctx.supabase, {
-      phone: ctx.customerPhone,
-      document: parsed.data.cedula || ctx.lastLookupCedula,
-    }));
-  if (!employee) {
-    return {
-      name: LIST_MY_PENDING_TICKETS_TOOL,
-      ok: true,
-      directReply:
-        "No pude identificarte como técnico. Enviá tu cédula (solo números) o pedí que carguen tu WhatsApp o documento en la ficha de empleado.",
-      stopAgent: true,
-      response: {
-        ok: true,
-        identified: false,
-        count: 0,
-      },
-    };
-  }
-
-  const to = ctx.customerPhone || ctx.whatsappId;
-  if (!to) {
-    return {
-      name: LIST_MY_PENDING_TICKETS_TOOL,
-      ok: false,
-      response: { ok: false, error: "No hay teléfono de WhatsApp para enviar el reporte." },
-    };
-  }
-
-  let all;
-  try {
-    all = await listPendingCasosForEmployee(ctx.supabase, employee.id);
-  } catch (error) {
-    return {
-      name: LIST_MY_PENDING_TICKETS_TOOL,
-      ok: false,
-      response: {
-        ok: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : "No se pudieron leer los tickets pendientes",
-      },
-    };
-  }
-  const offset = parsed.data.offset || 0;
-  const pageSize = 8;
-  const page = all.slice(offset, offset + pageSize);
-
-  if (!page.length) {
-    const message =
-      offset > 0
-        ? "No hay más tickets en este lote."
-        : `Hola ${employee.name.split(" ")[0]}, no tienes tickets pendientes asignados.`;
-    return {
-      name: LIST_MY_PENDING_TICKETS_TOOL,
-      ok: true,
-      stopAgent: true,
-      directReply: message,
-      response: {
-        ok: true,
-        identified: true,
-        employee: employee.name,
-        count: 0,
-        delivered: false,
-      },
-    };
-  }
-
-  const reports = page.map(toTechnicianReport);
-  let delivered = 0;
-  const failures: string[] = [];
-
-  try {
-    if (reports.length > 1) {
-      await sendWhatsAppText({
-        to,
-        body: formatTechnicianList(reports),
-        supabase: ctx.supabase,
-        conversationId: ctx.conversationId,
-        metadata: { engine: "ai", action: "technician_report_index" },
-      });
-    }
-
-    for (const report of reports) {
-      const caption = formatTechnicianCaption(report);
-      try {
-        if (report.facadeMediaUrl) {
-          await sendWhatsAppImageFromUrl({
-            to,
-            imageUrl: report.facadeMediaUrl,
-            caption,
-            supabase: ctx.supabase,
-            conversationId: ctx.conversationId,
-            metadata: {
-              engine: "ai",
-              action: "technician_report",
-              ticket: report.wisproPublicId,
-            },
-          });
-        } else {
-          await sendWhatsAppText({
-            to,
-            body: caption,
-            supabase: ctx.supabase,
-            conversationId: ctx.conversationId,
-            metadata: {
-              engine: "ai",
-              action: "technician_report",
-              ticket: report.wisproPublicId,
-            },
-          });
-        }
-        delivered += 1;
-      } catch (error) {
-        failures.push(
-          error instanceof Error ? error.message : "No se pudo enviar un ticket",
-        );
-        try {
-          await sendWhatsAppText({
-            to,
-            body: caption,
-            supabase: ctx.supabase,
-            conversationId: ctx.conversationId,
-            metadata: { engine: "ai", action: "technician_report_fallback" },
-          });
-          delivered += 1;
-        } catch {
-          // already recorded
-        }
-      }
-    }
-  } catch (error) {
-    return {
-      name: LIST_MY_PENDING_TICKETS_TOOL,
-      ok: false,
-      response: {
-        ok: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : "No se pudo enviar el reporte al técnico",
-      },
-    };
-  }
-
-  const remaining = Math.max(0, all.length - offset - page.length);
-  const ack =
-    delivered > 0
-      ? remaining
-        ? `Te envié ${delivered} ticket(s) con ubicación y foto. Quedan ${remaining}; pide el siguiente lote si los necesitas.`
-        : `Te envié ${delivered} ticket(s) pendiente(s) con nombre, teléfono, causa, Maps y foto de fachada.`
-      : "No pude enviar los tickets por WhatsApp. Intenta de nuevo.";
-
-  return {
-    name: LIST_MY_PENDING_TICKETS_TOOL,
-    ok: delivered > 0,
-    stopAgent: true,
-    directReply: ack,
-    response: {
-      ok: delivered > 0,
-      identified: true,
-      employee: employee.name,
-      count: all.length,
-      delivered,
-      remaining,
-      failures,
-      hint: "delivered=true: solo acuse corto, no copies la lista.",
-    },
-  };
 };
 
 export const executeAgentTool = async (

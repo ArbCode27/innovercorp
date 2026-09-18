@@ -16,6 +16,7 @@ import {
   upsertCrmWisproCaso,
   type UpsertCrmWisproCasoInput,
 } from "@/lib/crm-wispro-casos";
+import { upsertCrmTechnicianFromEmployee } from "@/lib/crm-technicians";
 import {
   parseCoordsFromMapsUrl,
   resolveMapsUrl,
@@ -155,6 +156,12 @@ const persistFicha = async (
         description: input.description,
       }),
     );
+    const employee = await resolveEmployee(input.employeeId);
+    if (employee) {
+      void upsertCrmTechnicianFromEmployee(supabase, employee).catch((error) => {
+        console.warn("[CASOS] technician_upsert_failed", error);
+      });
+    }
     return { ...result, crm: { ok: true, id: ficha.id } };
   } catch (error) {
     console.error("[CASOS] crm_ficha_failed", error);

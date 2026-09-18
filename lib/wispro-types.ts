@@ -106,6 +106,8 @@ export type CrmWisproCaso = {
   facadeMessageId: number | null;
   windowStart: string | null;
   windowEnd: string | null;
+  lastTechnicianReportAt: string | null;
+  lastTechnicianReportKey: string | null;
   createdAt: string | null;
   updatedAt: string | null;
 };

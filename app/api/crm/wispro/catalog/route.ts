@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getSupabaseAdmin } from "@/app/api/crm/_lib/supabase-admin";
+import { syncCrmTechnicians } from "@/lib/crm-technicians";
 import {
   listEmployees,
   listHelpDeskCategories,
@@ -28,6 +30,12 @@ export async function GET(request: NextRequest) {
       const allCount = includeAllEmployees
         ? employees.length
         : (await listEmployees(false)).length;
+      void syncCrmTechnicians(getSupabaseAdmin(), {
+        employees,
+        forceRefresh: refresh,
+      }).catch((error) => {
+        console.warn("[TECHNICIANS] catalog_sync_failed", error);
+      });
       return NextResponse.json({ employees, allCount });
     }
 
@@ -39,6 +47,13 @@ export async function GET(request: NextRequest) {
       }),
       listEmployees(refresh),
     ]);
+
+    void syncCrmTechnicians(getSupabaseAdmin(), {
+      employees: includeAllEmployees ? allEmployees : employees,
+      forceRefresh: refresh,
+    }).catch((error) => {
+      console.warn("[TECHNICIANS] catalog_sync_failed", error);
+    });
 
     return NextResponse.json({
       categories,

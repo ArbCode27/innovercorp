@@ -198,6 +198,7 @@ export const isCommittedAgentDecision = (input: {
   return (
     reason.includes("payment") ||
     reason.includes("submit") ||
-    reason.includes("escalat")
+    reason.includes("escalat") ||
+    reason.includes("technician")
   );
 };

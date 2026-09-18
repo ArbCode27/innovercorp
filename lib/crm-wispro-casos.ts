@@ -92,6 +92,8 @@ const fromRow = (row: Record<string, unknown>): CrmWisproCaso => ({
     row.facade_message_id == null ? null : Number(row.facade_message_id),
   windowStart: (row.window_start as string | null) ?? null,
   windowEnd: (row.window_end as string | null) ?? null,
+  lastTechnicianReportAt: (row.last_technician_report_at as string | null) ?? null,
+  lastTechnicianReportKey: (row.last_technician_report_key as string | null) ?? null,
   createdAt: (row.created_at as string | null) ?? null,
   updatedAt: (row.updated_at as string | null) ?? null,
 });

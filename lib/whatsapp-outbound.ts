@@ -74,6 +74,7 @@ export const sendWhatsAppText = async (input: {
   supabase: SupabaseClient;
   conversationId: number;
   metadata?: Record<string, unknown>;
+  persist?: boolean;
 }) => {
   const to = normalizePhone(input.to);
   const response = await fetch(
@@ -105,12 +106,14 @@ export const sendWhatsAppText = async (input: {
   }
 
   const waMessageId = String(data.messages?.[0]?.id || "") || null;
-  await persistOutbound(input.supabase, {
-    conversationId: input.conversationId,
-    waMessageId,
-    content: input.body,
-    metadata: input.metadata,
-  });
+  if (input.persist !== false) {
+    await persistOutbound(input.supabase, {
+      conversationId: input.conversationId,
+      waMessageId,
+      content: input.body,
+      metadata: input.metadata,
+    });
+  }
   return waMessageId;
 };
 
