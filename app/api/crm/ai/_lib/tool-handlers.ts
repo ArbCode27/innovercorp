@@ -28,14 +28,34 @@ import {
 import {
   ESCALATE_HUMAN_TOOL,
   GET_BCV_RATE_TOOL,
+  GET_CLIENT_TICKET_TOOL,
   LINK_WISPRO_TOOL,
+  LIST_MY_PENDING_TICKETS_TOOL,
   LOOKUP_WISPRO_TOOL,
   SUBMIT_PAYMENT_RECEIPT_TOOL,
   escalateHumanArgsSchema,
+  getClientTicketArgsSchema,
   linkWisproArgsSchema,
+  listMyPendingTicketsArgsSchema,
   lookupWisproArgsSchema,
   submitPaymentReceiptArgsSchema,
 } from "./ai-tools";
+import {
+  listOpenCasosForConversation,
+  listPendingCasosForEmployee,
+} from "@/lib/crm-wispro-casos";
+import { matchWisproEmployeeForPhone } from "@/lib/match-wispro-employee";
+import {
+  formatTechnicianCaption,
+  formatTechnicianList,
+} from "@/lib/technician-report";
+import {
+  sendWhatsAppImageFromUrl,
+  sendWhatsAppText,
+} from "@/lib/whatsapp-outbound";
+import { orderKindLabels } from "@/app/crm/_lib/wispro-caso-schema";
+import type { MatchedWisproEmployee } from "@/lib/match-wispro-employee";
+import type { CrmWisproCaso } from "@/lib/wispro-types";
 import {
   isUnsafeCustomerReply,
   SAFE_INTERNAL_LEAK_CUSTOMER_REPLY,
@@ -55,6 +75,7 @@ export type AgentRunContext = {
   replyMode?: "full" | "after_hours_payments" | "forced" | "skip";
   allowedToolNames?: string[] | null;
   officeHours?: OfficeHoursSnapshot | null;
+  wisproEmployee: MatchedWisproEmployee | null;
   lastLookupByWisproId: Map<string, WisproSearchResult>;
   lastLookupCedula: string | null;
   linkedWisproId: string | null;
@@ -63,6 +84,7 @@ export type AgentRunContext = {
   escalated: boolean;
   escalateReason: string | null;
   escalateMessage: string | null;
+  directReply: string | null;
 };
 
 export type ToolHandlerResult = {
@@ -73,6 +95,7 @@ export type ToolHandlerResult = {
   shouldHandoff?: boolean;
   handoffMessage?: string;
   handoffReason?: string;
+  directReply?: string;
 };
 
 const forClient = (ctx: AgentRunContext, message: string) =>
@@ -1231,6 +1254,277 @@ const handleEscalate = async (
   };
 };
 
+const toTechnicianReport = (caso: CrmWisproCaso) => ({
+  wisproPublicId: caso.wisproPublicId,
+  kindLabel:
+    caso.kind && caso.kind in orderKindLabels
+      ? orderKindLabels[caso.kind as keyof typeof orderKindLabels]
+      : "Visita técnica",
+  clientName: caso.clientName,
+  clientPhone: caso.clientPhone,
+  cause: caso.cause,
+  title: caso.title,
+  addressText: caso.addressText,
+  mapsUrl: caso.mapsUrl,
+  latitude: caso.latitude,
+  longitude: caso.longitude,
+  windowStart: caso.windowStart,
+  windowEnd: caso.windowEnd,
+  facadeMediaUrl: caso.facadeMediaUrl,
+});
+
+const handleGetClientTicket = async (
+  ctx: AgentRunContext,
+  rawArgs: unknown,
+): Promise<ToolHandlerResult> => {
+  const parsed = getClientTicketArgsSchema.safeParse(rawArgs ?? {});
+  if (!parsed.success) {
+    return {
+      name: GET_CLIENT_TICKET_TOOL,
+      ok: false,
+      response: { ok: false, error: parsed.error.issues[0]?.message || "args inválidos" },
+    };
+  }
+
+  if (ctx.wisproEmployee) {
+    return {
+      name: GET_CLIENT_TICKET_TOOL,
+      ok: false,
+      response: {
+        ok: false,
+        error: "Este WhatsApp es de un técnico. Usa list_my_pending_tickets.",
+      },
+    };
+  }
+
+  try {
+    const casos = await listOpenCasosForConversation(ctx.supabase, {
+      conversationId: ctx.conversationId,
+      crmClientId: ctx.clientId,
+      wisproClientId: ctx.linkedWisproId,
+    });
+    const ticket = casos[0] || null;
+
+    return {
+      name: GET_CLIENT_TICKET_TOOL,
+      ok: true,
+      response: {
+        ok: true,
+        found: Boolean(ticket),
+        count: casos.length,
+        ticket: ticket
+          ? {
+              public_id: ticket.wisproPublicId,
+              title: ticket.title,
+              status: ticket.status,
+              window_start: ticket.windowStart,
+              window_end: ticket.windowEnd,
+              technician_assigned: Boolean(ticket.employeeId),
+            }
+          : null,
+        hint: ticket
+          ? "Informa el número de ticket y el estado. No envíes Maps ni la foto."
+          : "No hay ticket abierto en este chat. No inventes un número.",
+      },
+    };
+  } catch (error) {
+    return {
+      name: GET_CLIENT_TICKET_TOOL,
+      ok: false,
+      response: {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "No se pudo leer el ticket del cliente",
+      },
+    };
+  }
+};
+
+const handleListMyPendingTickets = async (
+  ctx: AgentRunContext,
+  rawArgs: unknown,
+): Promise<ToolHandlerResult> => {
+  const parsed = listMyPendingTicketsArgsSchema.safeParse(rawArgs ?? {});
+  if (!parsed.success) {
+    return {
+      name: LIST_MY_PENDING_TICKETS_TOOL,
+      ok: false,
+      response: { ok: false, error: parsed.error.issues[0]?.message || "args inválidos" },
+    };
+  }
+
+  const employee =
+    ctx.wisproEmployee ||
+    (await matchWisproEmployeeForPhone(ctx.supabase, ctx.customerPhone));
+  if (!employee) {
+    return {
+      name: LIST_MY_PENDING_TICKETS_TOOL,
+      ok: true,
+      directReply:
+        "Este WhatsApp no está registrado como empleado en Wispro. Pide que carguen tu número en la ficha de empleado.",
+      stopAgent: true,
+      response: {
+        ok: true,
+        identified: false,
+        count: 0,
+      },
+    };
+  }
+
+  const to = ctx.customerPhone || ctx.whatsappId;
+  if (!to) {
+    return {
+      name: LIST_MY_PENDING_TICKETS_TOOL,
+      ok: false,
+      response: { ok: false, error: "No hay teléfono de WhatsApp para enviar el reporte." },
+    };
+  }
+
+  let all;
+  try {
+    all = await listPendingCasosForEmployee(ctx.supabase, employee.id);
+  } catch (error) {
+    return {
+      name: LIST_MY_PENDING_TICKETS_TOOL,
+      ok: false,
+      response: {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "No se pudieron leer los tickets pendientes",
+      },
+    };
+  }
+  const offset = parsed.data.offset || 0;
+  const pageSize = 8;
+  const page = all.slice(offset, offset + pageSize);
+
+  if (!page.length) {
+    const message =
+      offset > 0
+        ? "No hay más tickets en este lote."
+        : `Hola ${employee.name.split(" ")[0]}, no tienes tickets pendientes asignados.`;
+    return {
+      name: LIST_MY_PENDING_TICKETS_TOOL,
+      ok: true,
+      stopAgent: true,
+      directReply: message,
+      response: {
+        ok: true,
+        identified: true,
+        employee: employee.name,
+        count: 0,
+        delivered: false,
+      },
+    };
+  }
+
+  const reports = page.map(toTechnicianReport);
+  let delivered = 0;
+  const failures: string[] = [];
+
+  try {
+    if (reports.length > 1) {
+      await sendWhatsAppText({
+        to,
+        body: formatTechnicianList(reports),
+        supabase: ctx.supabase,
+        conversationId: ctx.conversationId,
+        metadata: { engine: "ai", action: "technician_report_index" },
+      });
+    }
+
+    for (const report of reports) {
+      const caption = formatTechnicianCaption(report);
+      try {
+        if (report.facadeMediaUrl) {
+          await sendWhatsAppImageFromUrl({
+            to,
+            imageUrl: report.facadeMediaUrl,
+            caption,
+            supabase: ctx.supabase,
+            conversationId: ctx.conversationId,
+            metadata: {
+              engine: "ai",
+              action: "technician_report",
+              ticket: report.wisproPublicId,
+            },
+          });
+        } else {
+          await sendWhatsAppText({
+            to,
+            body: caption,
+            supabase: ctx.supabase,
+            conversationId: ctx.conversationId,
+            metadata: {
+              engine: "ai",
+              action: "technician_report",
+              ticket: report.wisproPublicId,
+            },
+          });
+        }
+        delivered += 1;
+      } catch (error) {
+        failures.push(
+          error instanceof Error ? error.message : "No se pudo enviar un ticket",
+        );
+        try {
+          await sendWhatsAppText({
+            to,
+            body: caption,
+            supabase: ctx.supabase,
+            conversationId: ctx.conversationId,
+            metadata: { engine: "ai", action: "technician_report_fallback" },
+          });
+          delivered += 1;
+        } catch {
+          // already recorded
+        }
+      }
+    }
+  } catch (error) {
+    return {
+      name: LIST_MY_PENDING_TICKETS_TOOL,
+      ok: false,
+      response: {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "No se pudo enviar el reporte al técnico",
+      },
+    };
+  }
+
+  const remaining = Math.max(0, all.length - offset - page.length);
+  const ack =
+    delivered > 0
+      ? remaining
+        ? `Te envié ${delivered} ticket(s) con ubicación y foto. Quedan ${remaining}; pide el siguiente lote si los necesitas.`
+        : `Te envié ${delivered} ticket(s) pendiente(s) con nombre, teléfono, causa, Maps y foto de fachada.`
+      : "No pude enviar los tickets por WhatsApp. Intenta de nuevo.";
+
+  return {
+    name: LIST_MY_PENDING_TICKETS_TOOL,
+    ok: delivered > 0,
+    stopAgent: true,
+    directReply: ack,
+    response: {
+      ok: delivered > 0,
+      identified: true,
+      employee: employee.name,
+      count: all.length,
+      delivered,
+      remaining,
+      failures,
+      hint: "delivered=true: solo acuse corto, no copies la lista.",
+    },
+  };
+};
+
 export const executeAgentTool = async (
   ctx: AgentRunContext,
   toolName: string,
@@ -1287,6 +1581,12 @@ export const executeAgentTool = async (
       break;
     case ESCALATE_HUMAN_TOOL:
       result = await handleEscalate(ctx, rawArgs);
+      break;
+    case GET_CLIENT_TICKET_TOOL:
+      result = await handleGetClientTicket(ctx, rawArgs);
+      break;
+    case LIST_MY_PENDING_TICKETS_TOOL:
+      result = await handleListMyPendingTickets(ctx, rawArgs);
       break;
     default:
       result = {

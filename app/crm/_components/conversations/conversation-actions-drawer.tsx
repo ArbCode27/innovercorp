@@ -8,6 +8,7 @@ import {
   Tag,
   UserCheck,
   UserPlus,
+  Wrench,
 } from "lucide-react";
 import {
   Drawer,
@@ -32,6 +33,7 @@ interface ConversationActionsDrawerProps {
   onOpenLabels: () => void;
   onOpenNote: () => void;
   onOpenAssign: () => void;
+  onOpenCreateCaso?: () => void;
 }
 
 export const ConversationActionsDrawer = ({
@@ -45,6 +47,7 @@ export const ConversationActionsDrawer = ({
   onOpenLabels,
   onOpenNote,
   onOpenAssign,
+  onOpenCreateCaso,
 }: ConversationActionsDrawerProps) => (
   <Drawer>
     <DrawerTrigger asChild>
@@ -136,6 +139,19 @@ export const ConversationActionsDrawer = ({
               onClick={onOpenAssign}>
               <UserPlus className="size-4" aria-hidden="true" />
               {assignLabel}
+            </CrmButton>
+          </DrawerClose>
+        ) : null}
+
+        {onOpenCreateCaso ? (
+          <DrawerClose asChild>
+            <CrmButton
+              type="button"
+              variant="secondary"
+              className="w-full justify-start"
+              onClick={onOpenCreateCaso}>
+              <Wrench className="size-4" aria-hidden="true" />
+              Ticket Wispro
             </CrmButton>
           </DrawerClose>
         ) : null}

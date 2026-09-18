@@ -35,6 +35,7 @@ import { AssignAgentDialog } from "../agents/assign-agent-dialog";
 import { LabelPickerDialog } from "../labels/label-picker-dialog";
 import { UnknownClientBanner } from "../wispro/unknown-client-banner";
 import { WisproSearchDialog } from "../wispro/wispro-search-dialog";
+import { CrearCasoWisproDialog } from "../wispro/crear-caso-wispro-dialog";
 import { ResolveConversationDialog } from "./resolve-conversation-dialog";
 import { ConversationDetails } from "./conversation-details";
 import { ConversationHeader } from "./conversation-header";
@@ -118,6 +119,7 @@ export const ConversationPanel = ({
   const [isCreatingPaymentPromise, setIsCreatingPaymentPromise] = useState(false);
   const [isResolveDialogOpen, setIsResolveDialogOpen] = useState(false);
   const [isDetailsSheetOpen, setIsDetailsSheetOpen] = useState(false);
+  const [isCasoDialogOpen, setIsCasoDialogOpen] = useState(false);
   const [note, setNote] = useState("");
 
   const clientDisplayName = client?.name || "Número desconocido";
@@ -241,6 +243,7 @@ export const ConversationPanel = ({
           isResolving={isResolvingConversation}
           onOpenNote={() => setIsNoteDialogOpen(true)}
           onOpenAssign={() => setIsAssignDialogOpen(true)}
+          onOpenCreateCaso={() => setIsCasoDialogOpen(true)}
         />
         {showUnknownBanner ? (
           <UnknownClientBanner onOpenWispro={() => setIsWisproDialogOpen(true)} />
@@ -293,6 +296,7 @@ export const ConversationPanel = ({
               isWisproLinked ? () => setIsPromiseDialogOpen(true) : undefined
             }
             isCreatingPaymentPromise={isCreatingPaymentPromise}
+            onOpenCreateCaso={() => setIsCasoDialogOpen(true)}
           />
         </SheetContent>
       </Sheet>
@@ -313,6 +317,7 @@ export const ConversationPanel = ({
           isWisproLinked ? () => setIsPromiseDialogOpen(true) : undefined
         }
         isCreatingPaymentPromise={isCreatingPaymentPromise}
+        onOpenCreateCaso={() => setIsCasoDialogOpen(true)}
       />
 
       <WisproSearchDialog
@@ -329,6 +334,19 @@ export const ConversationPanel = ({
               }
             : null
         }
+      />
+
+      <CrearCasoWisproDialog
+        open={isCasoDialogOpen}
+        onOpenChange={setIsCasoDialogOpen}
+        conversationId={conversation?.id}
+        crmClientId={client?.id}
+        wisproClientId={client?.wispro_id}
+        clientName={client?.name}
+        clientPhone={
+          client?.whatsapp_id || client?.phone || conversation?.customer_phone
+        }
+        messages={messages}
       />
 
       <AlertDialog

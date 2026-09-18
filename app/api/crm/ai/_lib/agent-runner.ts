@@ -22,6 +22,12 @@ import {
   type AgentHistoryMessage,
 } from "./context-builder";
 import type { AiContent, AiContentPart } from "./ai-client";
+import type { MatchedWisproEmployee } from "@/lib/match-wispro-employee";
+import { matchWisproEmployeeForPhone } from "@/lib/match-wispro-employee";
+import {
+  listOpenCasosForConversation,
+  listPendingCasosForEmployee,
+} from "@/lib/crm-wispro-casos";
 import {
   generateAiWithRetry,
   isPermanentAiError,
@@ -90,6 +96,13 @@ const buildIdentityBlock = (input: {
   conversationId: number;
   customerPhone: string | null;
   client: AgentClientSnapshot | null;
+  employee: MatchedWisproEmployee | null;
+  pendingCount: number | null;
+  clientTickets: Array<{
+    publicId: number | null;
+    status: string;
+    title: string;
+  }>;
 }) => {
   const linked = Boolean(input.client?.wispro_id);
   const billing = parseClientEnvoicing(input.client?.envoicing);
@@ -108,6 +121,21 @@ const buildIdentityBlock = (input: {
     input.client?.plan?.trim() ||
     "N/D";
 
+  const ticketLine = input.employee
+    ? `- rol: tecnico_wispro (${input.employee.name})`
+    : input.clientTickets.length
+      ? `- rol: cliente\n- ticket_activo: ${input.clientTickets
+          .map(
+            (ticket) =>
+              `#${ticket.publicId ?? "s/n"} · ${ticket.status} · ${ticket.title}`,
+          )
+          .join(" | ")}`
+      : `- rol: cliente\n- ticket_activo: ninguno`;
+
+  const techLine = input.employee
+    ? `- tickets_pendientes: ${input.pendingCount ?? 0} (usa list_my_pending_tickets; el sistema envía foto y Maps)`
+    : null;
+
   return [
     "Identidad de ESTE chat (inyectada por el sistema; no la inventes):",
     `- conversation_id: ${input.conversationId}`,
@@ -123,7 +151,11 @@ const buildIdentityBlock = (input: {
     `- service_suspended: ${serviceSuspended}`,
     `- wispro_id: ${input.client?.wispro_id || "N/D"}`,
     `- vinculado_wispro: ${linked ? "sí" : "no"}`,
-  ].join("\n");
+    ticketLine,
+    techLine,
+  ]
+    .filter((line): line is string => Boolean(line))
+    .join("\n");
 };
 
 const createAgentContext = (input: {
@@ -137,6 +169,7 @@ const createAgentContext = (input: {
   replyMode?: BotReplyMode;
   allowedToolNames?: string[] | null;
   officeHours?: OfficeHoursSnapshot | null;
+  wisproEmployee?: MatchedWisproEmployee | null;
 }): AgentRunContext => {
   const identity = resolveLinkedClientIdentity(input.client);
   return {
@@ -152,6 +185,7 @@ const createAgentContext = (input: {
     replyMode: input.replyMode ?? "full",
     allowedToolNames: input.allowedToolNames ?? null,
     officeHours: input.officeHours ?? null,
+    wisproEmployee: input.wisproEmployee ?? null,
     lastLookupByWisproId: new Map(),
     lastLookupCedula: null,
     linkedWisproId: identity.wisproId,
@@ -160,6 +194,7 @@ const createAgentContext = (input: {
     escalated: false,
     escalateReason: null,
     escalateMessage: null,
+    directReply: null,
   };
 };
 
@@ -312,6 +347,10 @@ const runAgentLoop = async (input: {
           }
         }
 
+        if (toolResult.directReply) {
+          input.ctx.directReply = toolResult.directReply;
+        }
+
         if (toolResult.stopAgent || toolResult.shouldHandoff) {
           stopAgent = true;
         }
@@ -353,6 +392,16 @@ const runAgentLoop = async (input: {
       action: "reply",
       message: safeReply.message,
       reason: safeReply.reason,
+      runId: input.ctx.runId,
+      clientId: input.ctx.clientId,
+    };
+  }
+
+  if (input.ctx.directReply) {
+    return {
+      action: "reply",
+      message: input.ctx.directReply,
+      reason: "direct_tool_reply",
       runId: input.ctx.runId,
       clientId: input.ctx.clientId,
     };
@@ -431,6 +480,38 @@ export const runAiAgent = async (input: {
     throw new Error("empty_history");
   }
 
+  const employee = await matchWisproEmployeeForPhone(
+    input.supabase,
+    input.customerPhone || input.client?.whatsapp_id || input.client?.phone,
+  ).catch(() => null);
+
+  let pendingCount: number | null = null;
+  let clientTickets: Array<{
+    publicId: number | null;
+    status: string;
+    title: string;
+  }> = [];
+
+  try {
+    if (employee) {
+      const pending = await listPendingCasosForEmployee(input.supabase, employee.id);
+      pendingCount = pending.length;
+    } else {
+      const open = await listOpenCasosForConversation(input.supabase, {
+        conversationId: input.conversationId,
+        crmClientId: input.client?.id ?? null,
+        wisproClientId: input.client?.wispro_id ?? null,
+      });
+      clientTickets = open.map((caso) => ({
+        publicId: caso.wisproPublicId,
+        status: caso.status,
+        title: caso.title,
+      }));
+    }
+  } catch (error) {
+    console.warn(`${LOG_PREFIX} ticket_identity_failed`, error);
+  }
+
   const systemPrompt = [
     input.businessPrompt?.trim() || DEFAULT_AI_SYSTEM_PROMPT,
     "",
@@ -450,6 +531,9 @@ export const runAiAgent = async (input: {
       conversationId: input.conversationId,
       customerPhone: input.customerPhone,
       client: input.client,
+      employee,
+      pendingCount,
+      clientTickets,
     }),
   ]
     .filter((block): block is string => block !== null)
@@ -493,6 +577,7 @@ export const runAiAgent = async (input: {
       replyMode,
       allowedToolNames,
       officeHours,
+      wisproEmployee: employee,
     });
 
     const degraded = Boolean(options?.degraded);

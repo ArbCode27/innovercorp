@@ -8,6 +8,7 @@ import { CRM_SURFACES } from "../../_lib/crm-theme";
 import { TicketFormDialog } from "./ticket-form-dialog";
 import { TicketsStats } from "./tickets-stats";
 import { TicketsTable } from "./tickets-table";
+import { WisproIssuesPanel } from "./wispro-issues-panel";
 
 interface TicketsViewProps {
   tickets: Ticket[];
@@ -35,12 +36,23 @@ export const TicketsView = ({
         </div>
         <CrmButton type="button" onClick={() => setIsDialogOpen(true)} className="w-full sm:w-auto">
           <Plus className="mr-2 size-4" aria-hidden="true" />
-          Nuevo ticket
+          Nuevo ticket interno
         </CrmButton>
       </div>
-      <div className="space-y-5">
-        <TicketsStats tickets={tickets} />
-        <TicketsTable tickets={tickets} clientsById={clientsById} />
+      <div className="space-y-8">
+        <WisproIssuesPanel />
+        <div className="space-y-5">
+          <div>
+            <h3 className={`text-base font-semibold ${CRM_SURFACES.textPrimary}`}>
+              Tickets internos CRM
+            </h3>
+            <p className={`text-xs ${CRM_SURFACES.textMuted}`}>
+              Los tickets de mesa de ayuda de Wispro (con foto, Maps y técnico) están arriba.
+            </p>
+          </div>
+          <TicketsStats tickets={tickets} />
+          <TicketsTable tickets={tickets} clientsById={clientsById} />
+        </div>
       </div>
       <TicketFormDialog
         open={isDialogOpen}

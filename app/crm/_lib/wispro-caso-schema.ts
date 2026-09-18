@@ -1,0 +1,96 @@
+import { z } from "zod";
+
+export const ORDER_KINDS = [
+  "technical",
+  "installation",
+  "resignation",
+  "feasibility",
+] as const;
+
+export const orderKindLabels: Record<(typeof ORDER_KINDS)[number], string> = {
+  technical: "Visita técnica por falla",
+  installation: "Instalación nueva",
+  resignation: "Baja de servicio",
+  feasibility: "Estudio de factibilidad",
+};
+
+const emptyToNull = z
+  .union([z.string(), z.null(), z.undefined()])
+  .transform((value) => {
+    const next = String(value || "").trim();
+    return next || null;
+  });
+
+const optionalUuid = emptyToNull.refine(
+  (value) => value === null || z.string().uuid().safeParse(value).success,
+  "UUID inválido",
+);
+
+export const gpsSchema = z
+  .object({
+    street: z.string().trim().optional().nullable(),
+    number: z.string().trim().optional().nullable(),
+    city: z.string().trim().optional().nullable(),
+    state: z.string().trim().optional().nullable(),
+    countryCode: z.string().trim().optional().nullable(),
+    latitude: z.coerce.number(),
+    longitude: z.coerce.number(),
+  })
+  .nullable()
+  .optional();
+
+const optionalPositiveInt = z.preprocess(
+  (value) => {
+    if (value === "" || value === null || value === undefined) return null;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : value;
+  },
+  z.number().int().positive().nullable().optional(),
+);
+
+const crmFichaFields = {
+  conversationId: optionalPositiveInt,
+  crmClientId: optionalPositiveInt,
+  clientName: emptyToNull,
+  clientPhone: emptyToNull,
+  cause: emptyToNull,
+  mapsUrl: emptyToNull,
+  addressText: emptyToNull,
+  facadeMediaUrl: emptyToNull,
+  facadeMessageId: optionalPositiveInt,
+};
+
+export const createCasoSchema = z.object({
+  title: z.string().trim().min(1, "El título es obligatorio").max(80),
+  description: z.string().trim().min(1, "La descripción es obligatoria"),
+  categoryId: z.string().uuid("Categoría inválida"),
+  clientId: optionalUuid,
+  contractId: optionalUuid,
+  assignableId: optionalUuid,
+  generateOrder: z.boolean().default(true),
+  kind: z.enum(ORDER_KINDS).default("technical"),
+  orderDescription: z.string().trim().optional().nullable(),
+  startAt: z.string().trim().optional().nullable(),
+  endAt: z.string().trim().optional().nullable(),
+  employeeId: optionalUuid,
+  gps: gpsSchema,
+  ...crmFichaFields,
+});
+
+export const retryCasoSchema = z.object({
+  ticketId: z.string().uuid(),
+  publicId: z.number().int().optional().nullable(),
+  generateOrder: z.boolean().default(true),
+  existingOrderId: z.string().uuid().optional().nullable(),
+  kind: z.enum(ORDER_KINDS).default("technical"),
+  orderDescription: z.string().trim().optional().nullable(),
+  startAt: z.string().trim().optional().nullable(),
+  endAt: z.string().trim().optional().nullable(),
+  contractId: optionalUuid,
+  employeeId: optionalUuid,
+  gps: gpsSchema,
+  ...crmFichaFields,
+});
+
+export type CreateCasoInput = z.infer<typeof createCasoSchema>;
+export type RetryCasoInput = z.infer<typeof retryCasoSchema>;

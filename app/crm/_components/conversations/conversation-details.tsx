@@ -31,6 +31,7 @@ interface ConversationDetailsProps {
   isUnlinkingWispro?: boolean;
   onCreatePaymentPromise?: () => void;
   isCreatingPaymentPromise?: boolean;
+  onOpenCreateCaso?: () => void;
 }
 
 export const ConversationDetails = ({
@@ -47,6 +48,7 @@ export const ConversationDetails = ({
   isUnlinkingWispro = false,
   onCreatePaymentPromise,
   isCreatingPaymentPromise = false,
+  onOpenCreateCaso,
 }: ConversationDetailsProps) => {
   const activeTicket =
     tickets.find((ticket) => ticket.status !== "Resuelto") ||
@@ -136,6 +138,16 @@ export const ConversationDetails = ({
         ) : (
           <p className={`text-xs ${CRM_SURFACES.textLabel}`}>Sin tickets activos</p>
         )}
+        {onOpenCreateCaso ? (
+          <CrmButton
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="mt-2 w-full"
+            onClick={onOpenCreateCaso}>
+            Crear ticket Wispro
+          </CrmButton>
+        ) : null}
       </section>
 
       <section className={`space-y-3 border-b p-4 ${CRM_SURFACES.border}`}>

@@ -8,6 +8,7 @@ import {
   Tag,
   UserCheck,
   UserPlus,
+  Wrench,
 } from "lucide-react";
 import type { Agent, Client, Conversation } from "../../_lib/types";
 import { canAssignConversation } from "../../_lib/conversation-permissions";
@@ -31,6 +32,7 @@ interface ConversationHeaderProps {
   isResolving?: boolean;
   onOpenNote: () => void;
   onOpenAssign: () => void;
+  onOpenCreateCaso?: () => void;
 }
 
 export const ConversationHeader = ({
@@ -45,6 +47,7 @@ export const ConversationHeader = ({
   onResolve,
   onOpenNote,
   onOpenAssign,
+  onOpenCreateCaso,
   isResolving = false,
 }: ConversationHeaderProps) => {
   const displayName =
@@ -135,6 +138,7 @@ export const ConversationHeader = ({
             onOpenLabels={onOpenLabels}
             onOpenNote={onOpenNote}
             onOpenAssign={onOpenAssign}
+            onOpenCreateCaso={onOpenCreateCaso}
           />
           <CrmThemeToggle className="size-8 md:hidden" />
         </div>
@@ -174,6 +178,12 @@ export const ConversationHeader = ({
             <CrmButton type="button" variant="secondary" size="sm" onClick={onOpenAssign}>
               <UserPlus className="size-3" aria-hidden="true" />
               {assignLabel}
+            </CrmButton>
+          ) : null}
+          {onOpenCreateCaso ? (
+            <CrmButton type="button" variant="secondary" size="sm" onClick={onOpenCreateCaso}>
+              <Wrench className="size-3" aria-hidden="true" />
+              Ticket Wispro
             </CrmButton>
           ) : null}
         </div>

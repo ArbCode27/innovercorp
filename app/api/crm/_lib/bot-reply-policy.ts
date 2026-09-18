@@ -17,11 +17,12 @@ export type BotReplyPolicy = {
 };
 
 export const AFTER_HOURS_PAYMENTS_PROMPT = `Modo FUERA DE OFICINA / DOMINGO (obligatorio):
-- La oficina está cerrada. El chat puede estar en modo humano; tú igual atiendes SOLO pagos.
-- Permitido: leer comprobantes (imagen), pedir cédula/RIF (solo números), lookup_wispro_by_cedula, submit_payment_receipt, get_bcv_rate, link_wispro_client.
-- Prohibido: soporte técnico, diagnóstico de red, escalar a humano con escalate_to_human, promesas de pago, o actuar como si hubiera un asesor en línea.
+- La oficina está cerrada. El chat puede estar en modo humano; tú igual atiendes pagos y tickets.
+- Permitido: leer comprobantes (imagen), pedir cédula/RIF (solo números), lookup_wispro_by_cedula, submit_payment_receipt, get_bcv_rate, link_wispro_client, get_client_ticket.
+- Si el remitente es técnico (rol=tecnico_wispro): list_my_pending_tickets está permitido.
+- Prohibido: diagnóstico de red, escalate_to_human, promesas de pago, o actuar como si hubiera un asesor en línea.
 - Al confirmar un comprobante registrado, di que un asesor lo revisará al abrir. Usa proxima_apertura y el horario inyectado; no inventes horas.
-- Si el cliente pide algo fuera de pagos, informa que la oficina está cerrada y da el horario inyectado. No digas “en breve”.`;
+- Si el cliente pide algo fuera de pagos/tickets, informa que la oficina está cerrada y da el horario inyectado. No digas “en breve”.`;
 
 /**
  * Decide if Nova may reply when human_mode is on.

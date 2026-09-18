@@ -41,6 +41,8 @@ export const DEFAULT_AFTER_HOURS_PAYMENT_TOOLS = [
   "submit_payment_receipt",
   "get_bcv_rate",
   "link_wispro_client",
+  "get_client_ticket",
+  "list_my_pending_tickets",
 ] as const;
 
 export const DEFAULT_AFTER_HOURS_PAYMENTS: AfterHoursPaymentsConfig = {
@@ -486,9 +488,15 @@ export const parseAfterHoursPaymentsConfig = (
   }
 
   const row = raw as Record<string, unknown>;
-  const allowedTools = Array.isArray(row.allowedTools)
-    ? row.allowedTools.filter((item): item is string => typeof item === "string")
-    : DEFAULT_AFTER_HOURS_PAYMENTS.allowedTools;
+  const extras = ["get_client_ticket", "list_my_pending_tickets"];
+  const allowedTools = Array.from(
+    new Set([
+      ...(Array.isArray(row.allowedTools)
+        ? row.allowedTools.filter((item): item is string => typeof item === "string")
+        : DEFAULT_AFTER_HOURS_PAYMENTS.allowedTools),
+      ...extras,
+    ]),
+  );
 
   return {
     enabled:
