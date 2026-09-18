@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { Archive, MessageCircle } from "lucide-react";
+import { Archive, ChevronUp, MessageCircle } from "lucide-react";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
 import { formatCrmResolvedLabel } from "../../_lib/formatters";
 import {
@@ -10,16 +10,23 @@ import {
   groupMessagesByDay,
   historyMessageToDisplayMessage,
 } from "../../_lib/history-utils";
-import type { Agent, ConversationHistory, Label } from "../../_lib/types";
+import type { Agent, ConversationHistory, HistoryMessage, Label } from "../../_lib/types";
 import { EmptyState } from "../shared/empty-state";
 import { DateDivider } from "../shared/date-divider";
+import { LoadingState } from "../shared/loading-state";
 import { MessageBubble } from "../conversations/message-bubble";
 import { LabelChip } from "../shared/label-chip";
+import { CrmButton } from "../shared/crm-button";
 
 interface HistoryMessagesProps {
   entry: ConversationHistory;
   resolvedByAgent: Agent | null;
   labels: Label[];
+  messages: HistoryMessage[];
+  isLoading?: boolean;
+  isLoadingOlder?: boolean;
+  hasMore?: boolean;
+  onLoadOlder?: () => void;
 }
 
 const ResolvedSessionBanner = ({
@@ -59,16 +66,56 @@ export const HistoryMessages = ({
   entry,
   resolvedByAgent,
   labels,
+  messages,
+  isLoading = false,
+  isLoadingOlder = false,
+  hasMore = false,
+  onLoadOlder,
 }: HistoryMessagesProps) => {
   const scrollRef = useRef<HTMLDivElement | null>(null);
-  const messages = entry.history_messages ?? [];
+  const stickToBottom = useRef(true);
+  const restoreFromHeight = useRef<number | null>(null);
+  const entryWithMessages: ConversationHistory = {
+    ...entry,
+    history_messages: messages,
+  };
   const messageGroups = groupMessagesByDay(messages);
+
+  useEffect(() => {
+    stickToBottom.current = true;
+    restoreFromHeight.current = null;
+  }, [entry.id]);
 
   useEffect(() => {
     const scrollContainer = scrollRef.current;
     if (!scrollContainer) return;
-    scrollContainer.scrollTop = scrollContainer.scrollHeight;
-  }, [entry.id]);
+
+    if (restoreFromHeight.current != null) {
+      scrollContainer.scrollTop =
+        scrollContainer.scrollHeight - restoreFromHeight.current;
+      restoreFromHeight.current = null;
+      return;
+    }
+
+    if (stickToBottom.current) {
+      scrollContainer.scrollTop = scrollContainer.scrollHeight;
+    }
+  }, [entry.id, messages.length, isLoading]);
+
+  const handleLoadOlder = () => {
+    const scrollContainer = scrollRef.current;
+    stickToBottom.current = false;
+    restoreFromHeight.current = scrollContainer?.scrollHeight ?? 0;
+    onLoadOlder?.();
+  };
+
+  if (isLoading && !messages.length) {
+    return (
+      <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden">
+        <LoadingState label="Cargando mensajes..." />
+      </div>
+    );
+  }
 
   if (!messages.length) {
     return (
@@ -94,13 +141,31 @@ export const HistoryMessages = ({
         <article
           aria-label={`Historial de ${entry.client_name || "cliente desconocido"}`}
           className="flex flex-col gap-4 p-5">
-          <ResolvedSessionBanner entry={entry} resolvedByAgent={resolvedByAgent} />
+          <ResolvedSessionBanner
+            entry={entryWithMessages}
+            resolvedByAgent={resolvedByAgent}
+          />
 
           {labels.length ? (
             <div className="flex flex-wrap justify-center gap-1.5">
               {labels.map((label) => (
                 <LabelChip key={label.id} label={label} />
               ))}
+            </div>
+          ) : null}
+
+          {hasMore ? (
+            <div className="flex justify-center">
+              <CrmButton
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={handleLoadOlder}
+                disabled={isLoadingOlder}
+                aria-label="Cargar mensajes anteriores">
+                <ChevronUp className="size-3.5" />
+                {isLoadingOlder ? "Cargando..." : "Cargar mensajes anteriores"}
+              </CrmButton>
             </div>
           ) : null}
 

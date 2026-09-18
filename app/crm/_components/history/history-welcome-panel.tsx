@@ -22,9 +22,8 @@ export const HistoryWelcomePanel = ({ totalEntries }: HistoryWelcomePanelProps) 
           Historial de conversaciones
         </h2>
         <p className={`mx-auto mt-3 max-w-lg text-sm leading-6 ${CRM_SURFACES.textMuted}`}>
-          Consulta conversaciones resueltas y archivadas. El panel izquierdo las
-          agrupa por fecha de resolución; al abrirlas verás los mensajes
-          organizados por día.
+          Consulta conversaciones resueltas de a 20 por página. Filtra por fecha
+          de resolución y abre un chat para ver los mensajes.
         </p>
 
         <div className="mt-7 grid gap-3 sm:grid-cols-3">

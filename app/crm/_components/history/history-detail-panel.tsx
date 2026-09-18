@@ -1,6 +1,6 @@
 "use client";
 
-import type { Agent, ConversationHistory, Label } from "../../_lib/types";
+import type { Agent, ConversationHistory, HistoryMessage, Label } from "../../_lib/types";
 import { HistoryHeader } from "./history-header";
 import { HistoryMessages } from "./history-messages";
 import { HistoryWelcomePanel } from "./history-welcome-panel";
@@ -11,6 +11,11 @@ interface HistoryDetailPanelProps {
   assignedAgent: Agent | null;
   labels: Label[];
   totalEntries: number;
+  messages?: HistoryMessage[];
+  isLoadingMessages?: boolean;
+  isLoadingOlder?: boolean;
+  hasMoreMessages?: boolean;
+  onLoadOlder?: () => void;
   onBackToList?: () => void;
 }
 
@@ -20,6 +25,11 @@ export const HistoryDetailPanel = ({
   assignedAgent,
   labels,
   totalEntries,
+  messages = [],
+  isLoadingMessages = false,
+  isLoadingOlder = false,
+  hasMoreMessages = false,
+  onLoadOlder,
   onBackToList,
 }: HistoryDetailPanelProps) => {
   if (!entry) {
@@ -47,6 +57,11 @@ export const HistoryDetailPanel = ({
         entry={entry}
         resolvedByAgent={resolvedByAgent}
         labels={labels}
+        messages={messages}
+        isLoading={isLoadingMessages}
+        isLoadingOlder={isLoadingOlder}
+        hasMore={hasMoreMessages}
+        onLoadOlder={onLoadOlder}
       />
     </section>
   );

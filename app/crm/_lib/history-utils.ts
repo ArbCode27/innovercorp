@@ -11,7 +11,7 @@ export type { MessageDayGroupOf as MessageDayGroup } from "./formatters";
 export { groupMessagesByDay };
 
 export const getHistoryMessageCount = (entry: ConversationHistory) =>
-  entry.history_messages?.length ?? entry.total_messages ?? 0;
+  entry.total_messages ?? entry.history_messages?.length ?? 0;
 
 export const getHistorySourceConversationId = (entry: ConversationHistory) =>
   entry.history_messages?.find((message) => message.source_conversation_id)

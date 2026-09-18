@@ -18,7 +18,7 @@ export const normalizeConversationHistoryEntry = (
     ...rest,
     label_ids: rest.label_ids || [],
     human_mode: Boolean(rest.human_mode),
-    history_messages: historyMessages,
-    total_messages: Math.max(rest.total_messages ?? 0, historyMessages.length),
+    history_messages: historyMessages.length ? historyMessages : undefined,
+    total_messages: rest.total_messages ?? historyMessages.length,
   };
 };

@@ -37,14 +37,6 @@ export const HistoryView = ({
     : null;
   const isEntryOpen = history.selectedHistoryId !== null;
 
-  if (history.isLoading) {
-    return (
-      <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden">
-        <LoadingState label="Cargando historial..." />
-      </div>
-    );
-  }
-
   return (
     <div className="flex max-h-[100vh] min-h-0 flex-1 gap-2 overflow-hidden md:gap-3">
       <aside
@@ -62,21 +54,41 @@ export const HistoryView = ({
             </div>
           </div>
           <p className={`mt-1 text-xs ${CRM_SURFACES.textMuted}`}>
-            {history.filteredEntries.length} de {history.entries.length}{" "}
-            archivadas
+            {history.total
+              ? `${history.pageSize} por página · ${history.total} archivadas`
+              : "Conversaciones resueltas"}
           </p>
         </div>
 
         <HistoryFilters
           searchTerm={history.searchTerm}
+          from={history.from}
+          to={history.to}
           onSearchChange={history.setSearchTerm}
+          onDateRangeChange={history.applyDateRange}
+          onPreset={history.applyPreset}
         />
 
-        <HistoryList
-          groups={history.groupedEntries}
-          selectedHistoryId={history.selectedHistoryId}
-          onSelect={history.selectHistoryEntry}
-        />
+        {history.isLoading ? (
+          <div className="flex min-h-0 flex-1 items-center justify-center">
+            <LoadingState label="Cargando historial..." />
+          </div>
+        ) : (
+          <HistoryList
+            groups={history.groupedEntries}
+            selectedHistoryId={history.selectedHistoryId}
+            isRefreshing={history.isRefreshing}
+            page={history.page}
+            pageCount={history.pageCount}
+            total={history.total}
+            pageSize={history.pageSize}
+            canPrev={history.canPrev}
+            canNext={history.canNext}
+            onPrev={history.goPrev}
+            onNext={history.goNext}
+            onSelect={history.selectHistoryEntry}
+          />
+        )}
       </aside>
 
       <div
@@ -88,7 +100,16 @@ export const HistoryView = ({
           resolvedByAgent={resolvedByAgent}
           assignedAgent={assignedAgent}
           labels={selectedLabels}
-          totalEntries={history.entries.length}
+          totalEntries={history.total}
+          messages={history.selectedMessages?.messages || []}
+          isLoadingMessages={history.selectedMessages?.isLoading}
+          isLoadingOlder={history.selectedMessages?.isLoadingOlder}
+          hasMoreMessages={history.selectedMessages?.hasMore}
+          onLoadOlder={() => {
+            if (history.selectedHistoryId) {
+              void history.loadOlderMessages(history.selectedHistoryId);
+            }
+          }}
           onBackToList={history.clearSelectedHistory}
         />
       </div>

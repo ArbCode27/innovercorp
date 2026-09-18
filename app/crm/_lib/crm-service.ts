@@ -19,6 +19,7 @@ import type {
   Ticket,
   Client,
   ConversationHistory,
+  HistoryMessage,
   UpdateQuickReplyInput,
   UpsertAgentInput,
 } from "./types";
@@ -408,11 +409,35 @@ export const crmService = {
     return payload.historyId;
   },
 
-  async loadConversationHistory(): Promise<ConversationHistory[]> {
-    const response = await fetch("/api/crm/conversations/history");
+  async loadConversationHistory(input?: {
+    limit?: number;
+    offset?: number;
+    from?: string | null;
+    to?: string | null;
+    q?: string | null;
+  }): Promise<{
+    entries: ConversationHistory[];
+    total: number;
+    limit: number;
+    offset: number;
+  }> {
+    const params = new URLSearchParams();
+    if (input?.limit) params.set("limit", String(input.limit));
+    if (input?.offset) params.set("offset", String(input.offset));
+    if (input?.from) params.set("from", input.from);
+    if (input?.to) params.set("to", input.to);
+    if (input?.q) params.set("q", input.q);
+
+    const query = params.toString();
+    const response = await fetch(
+      `/api/crm/conversations/history${query ? `?${query}` : ""}`,
+    );
 
     const payload = (await response.json()) as {
       entries?: ConversationHistory[];
+      total?: number;
+      limit?: number;
+      offset?: number;
       error?: string;
     };
 
@@ -422,7 +447,42 @@ export const crmService = {
       );
     }
 
-    return payload.entries ?? [];
+    return {
+      entries: payload.entries ?? [],
+      total: payload.total ?? payload.entries?.length ?? 0,
+      limit: payload.limit ?? 20,
+      offset: payload.offset ?? 0,
+    };
+  },
+
+  async loadHistoryMessages(
+    historyId: number,
+    input?: { before?: string | null; limit?: number },
+  ): Promise<{ messages: HistoryMessage[]; hasMore: boolean }> {
+    const params = new URLSearchParams();
+    if (input?.before) params.set("before", input.before);
+    if (input?.limit) params.set("limit", String(input.limit));
+    const query = params.toString();
+    const response = await fetch(
+      `/api/crm/conversations/history/${historyId}/messages${query ? `?${query}` : ""}`,
+    );
+
+    const payload = (await response.json()) as {
+      messages?: HistoryMessage[];
+      hasMore?: boolean;
+      error?: string;
+    };
+
+    if (!response.ok) {
+      throw new Error(
+        payload.error || "No se pudieron cargar los mensajes del historial",
+      );
+    }
+
+    return {
+      messages: payload.messages ?? [],
+      hasMore: Boolean(payload.hasMore),
+    };
   },
 
   async createClient(input: CreateClientInput, existingClients: number) {
