@@ -138,4 +138,28 @@ export const wisproCasoClient = {
     }
     return payload as ResultadoCaso;
   },
+
+  async manageCaso(input: { action: "finalize"; issueId: string } | {
+    action: "reassign";
+    issueId: string;
+    employeeId: string;
+  }) {
+    const response = await fetch("/api/casos", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    const payload = (await response.json()) as {
+      ok?: boolean;
+      action?: string;
+      caso?: CrmWisproCaso;
+      error?: string;
+      wispro?: { ok?: boolean; state?: string };
+      orden?: { ok?: boolean | null; error?: string };
+    };
+    if (!response.ok) {
+      throw new Error(payload.error || `No se actualizó el ticket (HTTP ${response.status})`);
+    }
+    return payload;
+  },
 };

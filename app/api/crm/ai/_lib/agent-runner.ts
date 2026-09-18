@@ -25,17 +25,18 @@ import type { AiContent, AiContentPart } from "./ai-client";
 import type { MatchedWisproEmployee } from "@/lib/match-wispro-employee";
 import { matchWisproEmployee } from "@/lib/match-wispro-employee";
 import { resolveTechnicianSession } from "@/lib/crm-technicians";
-import { listOpenCasosForConversation } from "@/lib/crm-wispro-casos";
+import { listOpenCasosForConversation, listPendingCasosForEmployee } from "@/lib/crm-wispro-casos";
 import { documentLast4 } from "@/lib/technician-crypto";
 import {
   formatTechnicianOffer,
   formatTechnicianWelcome,
   looksLikeCustomerPaymentOverride,
+  looksLikeTechnicianFinalizeRequest,
   looksLikeTechnicianRoleClaim,
   looksLikeTechnicianTicketRequest,
   shouldDeliverTechnicianTickets,
 } from "@/lib/technician-identity";
-import { deliverTechnicianPendingTickets } from "@/lib/technician-tickets";
+import { deliverTechnicianPendingTickets, TECHNICIAN_TOOL_NAMES } from "@/lib/technician-tickets";
 import {
   collectBurstInbound,
   extractLatestInboundCedula,
@@ -487,7 +488,7 @@ export const runAiAgent = async (input: {
 }): Promise<AgentDecision> => {
   const runId = crypto.randomUUID();
   const replyMode = input.replyMode ?? "full";
-  const allowedToolNames = input.allowedToolNames ?? null;
+  let allowedToolNames = input.allowedToolNames ?? null;
   const officeHours =
     input.officeHours ?? resolveOfficeHoursSnapshot(new Date());
   const { contents, attachedMediaIds } = await buildAgentContents({
@@ -555,6 +556,7 @@ export const runAiAgent = async (input: {
   }
 
   if (employee) {
+    const wantsFinalize = looksLikeTechnicianFinalizeRequest(inboundText);
     const shouldDeliver = shouldDeliverTechnicianTickets({
       justVerified: Boolean(session?.justVerified),
       inboundText,
@@ -593,15 +595,23 @@ export const runAiAgent = async (input: {
       };
     }
 
-    return {
-      action: "reply",
-      message: session?.justVerified
-        ? formatTechnicianWelcome(employee.name)
-        : formatTechnicianOffer(employee.name),
-      reason: session?.justVerified ? "technician_welcome" : "technician_offer",
-      runId,
-      clientId: input.client?.id ?? null,
-    };
+    if (!wantsFinalize) {
+      return {
+        action: "reply",
+        message: session?.justVerified
+          ? formatTechnicianWelcome(employee.name)
+          : formatTechnicianOffer(employee.name),
+        reason: session?.justVerified ? "technician_welcome" : "technician_offer",
+        runId,
+        clientId: input.client?.id ?? null,
+      };
+    }
+
+    if (allowedToolNames?.length) {
+      allowedToolNames = Array.from(
+        new Set([...allowedToolNames, ...TECHNICIAN_TOOL_NAMES]),
+      );
+    }
   }
 
   let pendingCount: number | null = null;
@@ -612,16 +622,24 @@ export const runAiAgent = async (input: {
   }> = [];
 
   try {
-    const open = await listOpenCasosForConversation(input.supabase, {
-      conversationId: input.conversationId,
-      crmClientId: input.client?.id ?? null,
-      wisproClientId: input.client?.wispro_id ?? null,
-    });
-    clientTickets = open.map((caso) => ({
-      publicId: caso.wisproPublicId,
-      status: caso.status,
-      title: caso.title,
-    }));
+    if (employee) {
+      const pending = await listPendingCasosForEmployee(
+        input.supabase,
+        employee.id,
+      );
+      pendingCount = pending.length;
+    } else {
+      const open = await listOpenCasosForConversation(input.supabase, {
+        conversationId: input.conversationId,
+        crmClientId: input.client?.id ?? null,
+        wisproClientId: input.client?.wispro_id ?? null,
+      });
+      clientTickets = open.map((caso) => ({
+        publicId: caso.wisproPublicId,
+        status: caso.status,
+        title: caso.title,
+      }));
+    }
   } catch (error) {
     console.warn(`${LOG_PREFIX} ticket_identity_failed`, error);
   }

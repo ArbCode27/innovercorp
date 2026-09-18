@@ -132,7 +132,7 @@ const shouldRetry = (method: string, status: number | null) => {
 };
 
 type WisproRequestInput = {
-  method: "GET" | "POST";
+  method: "GET" | "POST" | "PUT" | "PATCH";
   path: string;
   query?: Record<string, string | number | null | undefined>;
   json?: unknown;
@@ -543,14 +543,62 @@ export const closeOrder = async (orderId: string) =>
     json: {},
   });
 
-export const createOrderFeedback = async (
-  orderId: string,
-  body: Record<string, unknown>,
-) =>
-  wisproRequest({
-    method: "POST",
-    path: `/order/orders/${encodeURIComponent(orderId)}/feedbacks`,
-    json: body,
+export const updateHelpDeskIssue = async (input: {
+  issueId: string;
+  state?: "closed" | "pending" | "finalized";
+  assignableId?: string | null;
+}) => {
+  const query: Record<string, string> = { id: input.issueId };
+  if (input.state) query.state = input.state;
+  if (input.assignableId) query.assignable_id = input.assignableId;
+
+  return wisproRequest({
+    method: "PUT",
+    path: `/help_desk/issues/${encodeURIComponent(input.issueId)}`,
+    query,
+  });
+};
+
+export const closeHelpDeskIssue = async (issueId: string) => {
+  try {
+    await updateHelpDeskIssue({ issueId, state: "finalized" });
+    return { ok: true as const, state: "finalized" as const };
+  } catch (finalizedError) {
+    try {
+      await updateHelpDeskIssue({ issueId, state: "closed" });
+      return { ok: true as const, state: "closed" as const };
+    } catch {
+      throw finalizedError;
+    }
+  }
+};
+
+export const closeWorkOrderIfPresent = async (orderId: string | null | undefined) => {
+  if (!orderId) return { ok: null } as const;
+  try {
+    await finalizeOrder(orderId);
+    return { ok: true } as const;
+  } catch {
+    try {
+      await closeOrder(orderId);
+      return { ok: true } as const;
+    } catch (error) {
+      return {
+        ok: false as const,
+        error: error instanceof Error ? error.message : "No se pudo cerrar la orden",
+      };
+    }
+  }
+};
+
+export const reassignHelpDeskIssue = async (input: {
+  issueId: string;
+  employeeId: string;
+}) =>
+  updateHelpDeskIssue({
+    issueId: input.issueId,
+    state: "pending",
+    assignableId: input.employeeId,
   });
 
 export const createCaso = async (input: {

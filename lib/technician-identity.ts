@@ -51,6 +51,12 @@ const OFFER_ACCEPT_ACTION_RE =
 const PAYMENT_OVERRIDE_RE =
   /\b(soy cliente|quiero pagar|comprobante|transferencia|pago|tpago|pago m[oó]vil)\b/i;
 
+const FINALIZE_VERB_RE =
+  /(?:^|[\s,.;:!?¿¡])(?:cierra(?:r)?|cerr[aá]|finaliza(?:r)?|termin(?:e|é|ó)|complet(?:e|é)|resuelto|ya(?:\s+est[aá])?\s+listo)(?=$|[\s,.;:!?])/i;
+
+const FINALIZE_TARGET_RE =
+  /(?:ticket|caso|visita|#\s*\d{2,}|\d{3,})/i;
+
 export const looksLikeOtpCode = (value: string | null | undefined) => {
   const text = String(value || "").trim();
   if (!text) return false;
@@ -89,6 +95,14 @@ export const formatTechnicianOffer = (name: string | null | undefined) =>
 export const looksLikeCustomerPaymentOverride = (
   value: string | null | undefined,
 ) => PAYMENT_OVERRIDE_RE.test(String(value || ""));
+
+export const looksLikeTechnicianFinalizeRequest = (
+  value: string | null | undefined,
+) => {
+  const text = String(value || "").trim();
+  if (!text) return false;
+  return FINALIZE_VERB_RE.test(text) && FINALIZE_TARGET_RE.test(text);
+};
 
 export const technicianFirstName = (name: string | null | undefined) => {
   const first = String(name || "")
@@ -154,6 +168,7 @@ export const shouldDeliverTechnicianTickets = (input: {
   inboundText: string | null | undefined;
   inboundIsCedula: boolean;
 }) => {
+  if (looksLikeTechnicianFinalizeRequest(input.inboundText)) return false;
   if (looksLikeTechnicianTicketRequest(input.inboundText)) return true;
   if (looksLikeTechnicianNextPage(input.inboundText)) return true;
   if (looksLikeTechnicianResend(input.inboundText)) return true;

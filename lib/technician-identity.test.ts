@@ -3,6 +3,7 @@ import {
   decideTechnicianVerification,
   formatTechnicianWelcome,
   looksLikeOtpCode,
+  looksLikeTechnicianFinalizeRequest,
   looksLikeTechnicianNextPage,
   looksLikeTechnicianOfferAccept,
   looksLikeTechnicianResend,
@@ -171,5 +172,27 @@ describe("technician inbound helpers", () => {
         inboundIsCedula: true,
       }),
     ).toBe(true);
+    expect(
+      shouldDeliverTechnicianTickets({
+        justVerified: false,
+        inboundText: "cierra el ticket 1842",
+        inboundIsCedula: false,
+      }),
+    ).toBe(false);
+  });
+
+  it("detects a technician asking to finalize a ticket", () => {
+    expect(looksLikeTechnicianFinalizeRequest("cierra el ticket 1842")).toBe(
+      true,
+    );
+    expect(looksLikeTechnicianFinalizeRequest("cierra el #1842")).toBe(true);
+    expect(looksLikeTechnicianFinalizeRequest("finaliza el 1842")).toBe(true);
+    expect(looksLikeTechnicianFinalizeRequest("terminé el ticket")).toBe(true);
+    expect(looksLikeTechnicianFinalizeRequest("ya está listo el caso")).toBe(
+      true,
+    );
+    expect(looksLikeTechnicianFinalizeRequest("listo")).toBe(false);
+    expect(looksLikeTechnicianFinalizeRequest("sí")).toBe(false);
+    expect(looksLikeTechnicianFinalizeRequest("pásame los tickets")).toBe(false);
   });
 });

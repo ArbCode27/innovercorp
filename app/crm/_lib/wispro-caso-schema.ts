@@ -94,3 +94,17 @@ export const retryCasoSchema = z.object({
 
 export type CreateCasoInput = z.infer<typeof createCasoSchema>;
 export type RetryCasoInput = z.infer<typeof retryCasoSchema>;
+
+export const manageCasoSchema = z.discriminatedUnion("action", [
+  z.object({
+    action: z.literal("finalize"),
+    issueId: z.string().uuid("Ticket inválido"),
+  }),
+  z.object({
+    action: z.literal("reassign"),
+    issueId: z.string().uuid("Ticket inválido"),
+    employeeId: z.string().uuid("Técnico inválido"),
+  }),
+]);
+
+export type ManageCasoInput = z.infer<typeof manageCasoSchema>;

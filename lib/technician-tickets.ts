@@ -21,7 +21,10 @@ import type { CrmWisproCaso } from "./wispro-types";
 const PAGE_SIZE = 8;
 const DEDUPE_WINDOW_MS = 2 * 60 * 60 * 1000;
 
-export const TECHNICIAN_TOOL_NAMES = ["list_my_pending_tickets"] as const;
+export const TECHNICIAN_TOOL_NAMES = [
+  "list_my_pending_tickets",
+  "finalize_my_ticket",
+] as const;
 
 export type TechnicianTicketDelivery = {
   ok: boolean;

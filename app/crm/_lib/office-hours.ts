@@ -43,6 +43,7 @@ export const DEFAULT_AFTER_HOURS_PAYMENT_TOOLS = [
   "link_wispro_client",
   "get_client_ticket",
   "list_my_pending_tickets",
+  "finalize_my_ticket",
 ] as const;
 
 export const DEFAULT_AFTER_HOURS_PAYMENTS: AfterHoursPaymentsConfig = {
@@ -488,7 +489,11 @@ export const parseAfterHoursPaymentsConfig = (
   }
 
   const row = raw as Record<string, unknown>;
-  const extras = ["get_client_ticket", "list_my_pending_tickets"];
+  const extras = [
+    "get_client_ticket",
+    "list_my_pending_tickets",
+    "finalize_my_ticket",
+  ];
   const allowedTools = Array.from(
     new Set([
       ...(Array.isArray(row.allowedTools)

@@ -2,21 +2,28 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   createCaso,
   listEmployees,
+  reassignHelpDeskIssue,
   retryCasoSteps,
   WisproHttpError,
 } from "@/lib/wispro";
 import {
   createCasoSchema,
+  manageCasoSchema,
   retryCasoSchema,
 } from "@/app/crm/_lib/wispro-caso-schema";
 import { getSupabaseAdmin } from "@/app/api/crm/_lib/supabase-admin";
 import {
   getCrmWisproCasoByIssueId,
   listCrmWisproCasos,
+  patchCrmWisproCaso,
   upsertCrmWisproCaso,
   type UpsertCrmWisproCasoInput,
 } from "@/lib/crm-wispro-casos";
 import { upsertCrmTechnicianFromEmployee } from "@/lib/crm-technicians";
+import {
+  FinalizeCasoError,
+  finalizeCrmWisproCaso,
+} from "@/lib/finalize-crm-caso";
 import {
   parseCoordsFromMapsUrl,
   resolveMapsUrl,
@@ -182,7 +189,13 @@ export async function GET() {
   try {
     const supabase = getSupabaseAdmin();
     const casos = await listCrmWisproCasos(supabase);
-    return NextResponse.json({ casos });
+    return NextResponse.json({
+      casos: casos.map((caso) => ({
+        ...caso,
+        facadeMediaUrl: null,
+        hasFacade: Boolean(caso.hasFacade || caso.facadeMediaUrl),
+      })),
+    });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "No se pudieron listar los casos";
@@ -317,6 +330,107 @@ export async function PATCH(request: NextRequest) {
         : error instanceof Error
           ? error.message
           : "No se pudo reintentar el caso";
+    const status = error instanceof WisproHttpError ? error.status : 500;
+    return NextResponse.json({ error: message }, { status });
+  }
+}
+
+export async function PUT(request: NextRequest) {
+  try {
+    const parsed = manageCasoSchema.safeParse(await request.json());
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: parsed.error.issues[0]?.message || "Datos inválidos" },
+        { status: 400 },
+      );
+    }
+
+    const supabase = getSupabaseAdmin();
+    const existing = await getCrmWisproCasoByIssueId(
+      supabase,
+      parsed.data.issueId,
+    );
+    if (!existing) {
+      return NextResponse.json(
+        { error: "No existe la ficha CRM de este ticket" },
+        { status: 404 },
+      );
+    }
+
+    if (parsed.data.action === "finalize") {
+      const { caso, issue, order } = await finalizeCrmWisproCaso(supabase, {
+        issueId: parsed.data.issueId,
+      });
+      return NextResponse.json({
+        ok: true,
+        action: "finalize",
+        caso: {
+          ...caso,
+          facadeMediaUrl: null,
+          hasFacade: Boolean(caso.hasFacade || caso.facadeMediaUrl),
+        },
+        wispro: { ok: true, state: issue.state },
+        orden: order,
+      });
+    }
+
+    if (existing.status === "done" || existing.status === "cancelled") {
+      return NextResponse.json(
+        { error: "Este ticket ya está cerrado" },
+        { status: 409 },
+      );
+    }
+
+    const employee = await resolveEmployee(parsed.data.employeeId);
+    if (!employee) {
+      return NextResponse.json(
+        { error: "No se encontró el técnico en Wispro" },
+        { status: 404 },
+      );
+    }
+
+    await reassignHelpDeskIssue({
+      issueId: existing.wisproIssueId,
+      employeeId: employee.id,
+    });
+    void upsertCrmTechnicianFromEmployee(supabase, employee).catch((error) => {
+      console.warn("[CASOS] technician_upsert_failed", error);
+    });
+    const caso = await patchCrmWisproCaso(supabase, existing.wisproIssueId, {
+      employeeId: employee.id,
+      employeeName: employee.name,
+      employeePhone: employee.phone_mobile || employee.phone,
+      employeeDocument: employee.national_identification_number,
+    });
+
+    return NextResponse.json({
+      ok: true,
+      action: "reassign",
+      caso: {
+        ...caso,
+        facadeMediaUrl: null,
+        hasFacade: Boolean(caso.hasFacade || caso.facadeMediaUrl),
+      },
+      wispro: { ok: true },
+    });
+  } catch (error) {
+    if (error instanceof FinalizeCasoError) {
+      const status =
+        error.code === "not_found"
+          ? 404
+          : error.code === "already_closed"
+            ? 409
+            : error.code === "forbidden"
+              ? 403
+              : 502;
+      return NextResponse.json({ error: error.message }, { status });
+    }
+    const message =
+      error instanceof WisproHttpError
+        ? error.message
+        : error instanceof Error
+          ? error.message
+          : "No se pudo actualizar el ticket";
     const status = error instanceof WisproHttpError ? error.status : 500;
     return NextResponse.json({ error: message }, { status });
   }

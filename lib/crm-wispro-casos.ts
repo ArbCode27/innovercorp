@@ -90,6 +90,7 @@ const fromRow = (row: Record<string, unknown>): CrmWisproCaso => ({
   facadeMediaUrl: (row.facade_media_url as string | null) ?? null,
   facadeMessageId:
     row.facade_message_id == null ? null : Number(row.facade_message_id),
+  hasFacade: Boolean(row.facade_media_url),
   windowStart: (row.window_start as string | null) ?? null,
   windowEnd: (row.window_end as string | null) ?? null,
   lastTechnicianReportAt: (row.last_technician_report_at as string | null) ?? null,
@@ -130,6 +131,52 @@ export const upsertCrmWisproCaso = async (
   }
 
   return fromRow(data as Record<string, unknown>);
+};
+
+export const toUpsertCrmWisproCasoInput = (
+  caso: CrmWisproCaso,
+): UpsertCrmWisproCasoInput => ({
+  conversationId: caso.conversationId,
+  crmClientId: caso.crmClientId,
+  wisproClientId: caso.wisproClientId,
+  wisproIssueId: caso.wisproIssueId,
+  wisproPublicId: caso.wisproPublicId,
+  wisproOrderId: caso.wisproOrderId,
+  employeeId: caso.employeeId,
+  employeeName: caso.employeeName,
+  employeePhone: caso.employeePhone,
+  employeeDocument: caso.employeeDocument,
+  status: caso.status,
+  kind: caso.kind,
+  title: caso.title,
+  cause: caso.cause,
+  description: caso.description,
+  clientName: caso.clientName,
+  clientPhone: caso.clientPhone,
+  mapsUrl: caso.mapsUrl,
+  latitude: caso.latitude,
+  longitude: caso.longitude,
+  addressText: caso.addressText,
+  facadeMediaUrl: caso.facadeMediaUrl,
+  facadeMessageId: caso.facadeMessageId,
+  windowStart: caso.windowStart,
+  windowEnd: caso.windowEnd,
+});
+
+export const patchCrmWisproCaso = async (
+  supabase: SupabaseClient,
+  wisproIssueId: string,
+  patch: Partial<UpsertCrmWisproCasoInput>,
+) => {
+  const existing = await getCrmWisproCasoByIssueId(supabase, wisproIssueId);
+  if (!existing) {
+    throw new Error("No existe la ficha CRM de este ticket");
+  }
+  return upsertCrmWisproCaso(supabase, {
+    ...toUpsertCrmWisproCasoInput(existing),
+    ...patch,
+    wisproIssueId,
+  });
 };
 
 export const listCrmWisproCasos = async (

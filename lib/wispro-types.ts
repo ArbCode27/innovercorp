@@ -104,6 +104,7 @@ export type CrmWisproCaso = {
   addressText: string | null;
   facadeMediaUrl: string | null;
   facadeMessageId: number | null;
+  hasFacade?: boolean;
   windowStart: string | null;
   windowEnd: string | null;
   lastTechnicianReportAt: string | null;

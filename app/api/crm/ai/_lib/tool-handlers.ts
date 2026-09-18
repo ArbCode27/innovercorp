@@ -27,6 +27,7 @@ import {
 } from "@/app/api/crm/_lib/dolarvzla-rate";
 import {
   ESCALATE_HUMAN_TOOL,
+  FINALIZE_MY_TICKET_TOOL,
   GET_BCV_RATE_TOOL,
   GET_CLIENT_TICKET_TOOL,
   LINK_WISPRO_TOOL,
@@ -34,6 +35,7 @@ import {
   LOOKUP_WISPRO_TOOL,
   SUBMIT_PAYMENT_RECEIPT_TOOL,
   escalateHumanArgsSchema,
+  finalizeMyTicketArgsSchema,
   getClientTicketArgsSchema,
   linkWisproArgsSchema,
   listMyPendingTicketsArgsSchema,
@@ -45,6 +47,12 @@ import {
 } from "@/lib/crm-wispro-casos";
 import { matchWisproEmployee, type MatchedWisproEmployee } from "@/lib/match-wispro-employee";
 import { deliverTechnicianPendingTickets } from "@/lib/technician-tickets";
+import {
+  FinalizeCasoError,
+  finalizeCrmWisproCaso,
+  listAndMatchTechnicianTicket,
+} from "@/lib/finalize-crm-caso";
+import { recordTechnicianEvent } from "@/lib/crm-technicians";
 import {
   isUnsafeCustomerReply,
   SAFE_INTERNAL_LEAK_CUSTOMER_REPLY,
@@ -1395,6 +1403,151 @@ const handleGetClientTicket = async (
   }
 };
 
+const handleFinalizeMyTicket = async (
+  ctx: AgentRunContext,
+  rawArgs: unknown,
+): Promise<ToolHandlerResult> => {
+  const parsed = finalizeMyTicketArgsSchema.safeParse(rawArgs ?? {});
+  if (!parsed.success) {
+    return {
+      name: FINALIZE_MY_TICKET_TOOL,
+      ok: false,
+      response: {
+        ok: false,
+        error: parsed.error.issues[0]?.message || "args inválidos",
+      },
+    };
+  }
+
+  const employee =
+    ctx.wisproEmployee ||
+    (await matchWisproEmployee(ctx.supabase, {
+      phone: ctx.customerPhone,
+    }));
+  if (!employee) {
+    return {
+      name: FINALIZE_MY_TICKET_TOOL,
+      ok: false,
+      response: {
+        ok: false,
+        error: "Este WhatsApp no está identificado como técnico.",
+        hint: "Pide que escriba desde su número registrado o envíe su cédula.",
+      },
+    };
+  }
+
+  try {
+    const { pending, matches } = await listAndMatchTechnicianTicket(
+      ctx.supabase,
+      employee.id,
+      {
+        publicId: parsed.data.public_id,
+        clientName: parsed.data.client_name,
+      },
+    );
+
+    if (!pending.length) {
+      return {
+        name: FINALIZE_MY_TICKET_TOOL,
+        ok: true,
+        response: {
+          ok: true,
+          closed: false,
+          count: 0,
+          hint: "No tiene tickets pendientes. No inventes un cierre.",
+        },
+      };
+    }
+
+    if (matches.length !== 1) {
+      return {
+        name: FINALIZE_MY_TICKET_TOOL,
+        ok: true,
+        response: {
+          ok: true,
+          closed: false,
+          count: pending.length,
+          matches: matches.map((caso) => ({
+            public_id: caso.wisproPublicId,
+            client_name: caso.clientName,
+            cause: caso.cause || caso.title,
+          })),
+          candidates: pending.slice(0, 8).map((caso) => ({
+            public_id: caso.wisproPublicId,
+            client_name: caso.clientName,
+            cause: caso.cause || caso.title,
+          })),
+          hint:
+            matches.length === 0
+              ? "Ese número no está en tus pendientes. Pide el número correcto."
+              : "Hay varios tickets. Pregunta cuál public_id cerrar y vuelve a llamar la tool.",
+        },
+      };
+    }
+
+    const target = matches[0];
+    const result = await finalizeCrmWisproCaso(ctx.supabase, {
+      issueId: target.wisproIssueId,
+      employeeId: employee.id,
+    });
+    await recordTechnicianEvent(ctx.supabase, {
+      conversationId: ctx.conversationId,
+      event: "ticket_finalized",
+      method: "ai_tool",
+      metadata: {
+        public_id: target.wisproPublicId,
+        issue_id: target.wisproIssueId,
+      },
+    });
+
+    const ticketLabel =
+      target.wisproPublicId != null ? `#${target.wisproPublicId}` : "el ticket";
+    const orderWarning =
+      result.order.ok === false
+        ? " El ticket se cerró, pero la orden Wispro no se pudo finalizar."
+        : "";
+
+    return {
+      name: FINALIZE_MY_TICKET_TOOL,
+      ok: true,
+      stopAgent: true,
+      directReply: `Listo. Cerré ${ticketLabel} en el CRM y en Wispro.${orderWarning}`,
+      response: {
+        ok: true,
+        closed: true,
+        public_id: target.wisproPublicId,
+        client_name: target.clientName,
+        wispro_state: result.issue.state,
+        order_closed: result.order.ok,
+        hint: "Confirma el cierre en un mensaje corto. No menciones tools.",
+      },
+    };
+  } catch (error) {
+    if (error instanceof FinalizeCasoError) {
+      return {
+        name: FINALIZE_MY_TICKET_TOOL,
+        ok: false,
+        response: {
+          ok: false,
+          error: error.message,
+          code: error.code,
+        },
+      };
+    }
+    return {
+      name: FINALIZE_MY_TICKET_TOOL,
+      ok: false,
+      response: {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "No se pudo finalizar el ticket",
+      },
+    };
+  }
+};
+
 export const executeAgentTool = async (
   ctx: AgentRunContext,
   toolName: string,
@@ -1457,6 +1610,9 @@ export const executeAgentTool = async (
       break;
     case LIST_MY_PENDING_TICKETS_TOOL:
       result = await handleListMyPendingTickets(ctx, rawArgs);
+      break;
+    case FINALIZE_MY_TICKET_TOOL:
+      result = await handleFinalizeMyTicket(ctx, rawArgs);
       break;
     default:
       result = {
