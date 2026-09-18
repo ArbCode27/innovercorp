@@ -191,8 +191,25 @@ describe("technician inbound helpers", () => {
     expect(looksLikeTechnicianFinalizeRequest("ya está listo el caso")).toBe(
       true,
     );
+    expect(looksLikeTechnicianFinalizeRequest("Finaliza Sandra key")).toBe(
+      true,
+    );
+    expect(looksLikeTechnicianFinalizeRequest("cierra a María López")).toBe(
+      true,
+    );
+    expect(looksLikeTechnicianFinalizeRequest("por favor finaliza sandra key")).toBe(
+      true,
+    );
+    expect(looksLikeTechnicianFinalizeRequest("finaliza")).toBe(false);
     expect(looksLikeTechnicianFinalizeRequest("listo")).toBe(false);
     expect(looksLikeTechnicianFinalizeRequest("sí")).toBe(false);
     expect(looksLikeTechnicianFinalizeRequest("pásame los tickets")).toBe(false);
+    expect(
+      shouldDeliverTechnicianTickets({
+        justVerified: false,
+        inboundText: "Finaliza Sandra key",
+        inboundIsCedula: false,
+      }),
+    ).toBe(false);
   });
 });

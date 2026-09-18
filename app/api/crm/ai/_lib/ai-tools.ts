@@ -257,7 +257,7 @@ export const AI_TOOL_DECLARATIONS = [
   {
     name: FINALIZE_MY_TICKET_TOOL,
     description:
-      "SOLO técnicos identificados. Finaliza un ticket asignado a ESTE técnico en CRM y Wispro. Úsala si pide cerrar, finalizar o marcar terminado un ticket. Pasa public_id (número del ticket, ej. 1842) si lo dijo. Si tiene uno solo pendiente puedes omitirlo. Si hay varios y no indica cuál, NO inventes: pide el número. Nunca cierres un ticket de otro técnico ni de un cliente.",
+      "SOLO técnicos identificados. Finaliza un ticket asignado a ESTE técnico en CRM y Wispro. Úsala si pide cerrar, finalizar o marcar terminado un ticket. Pasa public_id si dijo el número (ej. 1842). Si dio el nombre del cliente (ej. Finaliza Sandra key), pasa client_name. Si tiene uno solo pendiente puedes omitir ambos. Si hay varios y no indica cuál, NO inventes: pide el número o el nombre. Nunca cierres un ticket de otro técnico ni de un cliente.",
     parameters: {
       type: "object",
       properties: {
@@ -283,7 +283,7 @@ export const AI_TOOLS_CONTRACT_PROMPT = `Herramientas disponibles (obligatorio r
 5) escalate_to_human — category=support al cerrar diagnóstico; category=general si pide humano. NO al solo recibir comprobante.
 6) get_client_ticket — ticket abierto de ESTE cliente (número, estado, ventana). Si el remitente es técnico, NO la uses.
 7) list_my_pending_tickets — SOLO técnicos identificados (WhatsApp o su cédula). El sistema envía foto + Maps. Si delivered=true, responde un acuse corto y no copies la lista.
-8) finalize_my_ticket — SOLO técnicos identificados. Cierra el ticket en CRM y Wispro. Pasa public_id si lo mencionó. Si hay varios pendientes y no dijo cuál, pregunta el número. No cierres tickets de otro técnico.
+8) finalize_my_ticket — SOLO técnicos identificados. Cierra el ticket en CRM y Wispro. Pasa public_id si mencionó el número, o client_name si dijo el nombre del cliente. Si hay varios pendientes y no dijo cuál, pregunta. No cierres tickets de otro técnico.
 
 Tasa BCV / bolívares (CRÍTICO):
 - NUNCA inventes ni recalcules la tasa.
@@ -305,7 +305,7 @@ Flujo obligatorio de soporte técnico:
 
 Tickets y técnicos:
 - Si identidad dice rol=tecnico_wispro y piden pendientes/hoy/ruta, o envían su cédula: llama list_my_pending_tickets.
-- Si el técnico pide cerrar/finalizar un ticket: llama finalize_my_ticket con public_id. Confirma el número cerrado. Si falta el número y hay más de uno, pregunta.
+- Si el técnico pide cerrar/finalizar un ticket: llama finalize_my_ticket. Pasa public_id si dijo el número, o client_name si dijo el nombre (ej. “Finaliza Sandra key”). Confirma el número cerrado. Si falta dato y hay más de uno, pregunta.
 - El sistema identifica al técnico por WhatsApp verificado o cédula; no envíes tickets si no está identificado.
 - El técnico ve solo los tickets asignados en el CRM (no en Wispro).
 - Si rol=cliente y preguntan por su ticket/visita: get_client_ticket. No inventes el número.

@@ -57,6 +57,30 @@ const FINALIZE_VERB_RE =
 const FINALIZE_TARGET_RE =
   /(?:ticket|caso|visita|#\s*\d{2,}|\d{3,})/i;
 
+const FINALIZE_LEADING_FILLER_RE =
+  /^(?:el|la|los|las|de|del|al|a|un|una|mi|su|este|esta|ese|esa|por\s+favor|please)[\s,]+/i;
+
+const FINALIZE_NAME_RE = /^[\p{L}][\p{L}\s.'’-]{1,79}$/u;
+
+const stripFinalizeFillers = (value: string) => {
+  let rest = value.replace(/\s+/g, " ").trim();
+  rest = rest.replace(/[\s,]+(?:por\s+favor|please)$/i, "").trim();
+  while (true) {
+    const next = rest.replace(FINALIZE_LEADING_FILLER_RE, "").trim();
+    if (next === rest) break;
+    rest = next;
+  }
+  return rest;
+};
+
+const looksLikeFinalizeClientName = (value: string) => {
+  const rest = stripFinalizeFillers(value);
+  if (rest.length < 3 || rest.length > 80) return false;
+  const words = rest.split(/\s+/).filter(Boolean);
+  if (words.length < 1 || words.length > 6) return false;
+  return FINALIZE_NAME_RE.test(rest);
+};
+
 export const looksLikeOtpCode = (value: string | null | undefined) => {
   const text = String(value || "").trim();
   if (!text) return false;
@@ -101,7 +125,17 @@ export const looksLikeTechnicianFinalizeRequest = (
 ) => {
   const text = String(value || "").trim();
   if (!text) return false;
-  return FINALIZE_VERB_RE.test(text) && FINALIZE_TARGET_RE.test(text);
+  const verbMatch = FINALIZE_VERB_RE.exec(text);
+  if (!verbMatch) return false;
+  if (FINALIZE_TARGET_RE.test(text)) return true;
+  const remainder = [
+    text.slice(0, verbMatch.index),
+    text.slice(verbMatch.index + verbMatch[0].length),
+  ]
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return looksLikeFinalizeClientName(remainder);
 };
 
 export const technicianFirstName = (name: string | null | undefined) => {

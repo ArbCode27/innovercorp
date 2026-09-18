@@ -49,6 +49,11 @@ describe("matchPendingCasosForTechnician", () => {
       wisproPublicId: 1901,
       clientName: "Carlos Ruiz",
     }),
+    caso({
+      wisproIssueId: "c",
+      wisproPublicId: 1843,
+      clientName: "SANDRA KEY SERRANO",
+    }),
   ];
 
   it("matches a unique public id", () => {
@@ -67,8 +72,16 @@ describe("matchPendingCasosForTechnician", () => {
     ).toEqual(["a"]);
   });
 
+  it("matches a partial client name from a technician message", () => {
+    expect(
+      matchPendingCasosForTechnician(pending, { clientName: "Sandra key" }).map(
+        (item) => item.wisproIssueId,
+      ),
+    ).toEqual(["c"]);
+  });
+
   it("returns all pending tickets when there is no filter", () => {
-    expect(matchPendingCasosForTechnician(pending, {})).toHaveLength(2);
+    expect(matchPendingCasosForTechnician(pending, {})).toHaveLength(3);
   });
 
   it("does not invent a match for another public id", () => {
