@@ -438,11 +438,18 @@ const tryAssociateLookupMatch = async (
       existingClientId: conversation.client_id ?? ctx.clientId,
       conversationPhone:
         conversation.customer_phone ?? ctx.customerPhone ?? ctx.whatsappId,
-      whatsappId: ctx.whatsappId,
+      whatsappId:
+        ctx.whatsappId ||
+        conversation.customer_phone ||
+        ctx.customerPhone,
       waName: ctx.waName,
     });
 
     ctx.clientId = client.id;
+    ctx.linkedWisproId = client.wispro_id ?? match.customer.id;
+    ctx.linkedClientName = client.name;
+    ctx.linkedCedula =
+      match.customer.national_identification_number || ctx.linkedCedula;
 
     console.log("[AI_TOOL] wispro_auto_link_ok", {
       conversationId: ctx.conversationId,
@@ -502,8 +509,8 @@ const buildLookupHint = (input: {
 
   if (!input.linked) {
     return input.linkError
-      ? `Lookup ok pero no se pudo vincular automáticamente (${input.linkError}). Informa saldo; puedes reintentar con link_wispro_client.`
-      : "Un solo match. Informa saldo. Si aún no está vinculado, llama link_wispro_client.";
+      ? `Lookup ok pero ESTE chat NO quedó vinculado (${input.linkError}). NO digas que ya identificaste la cuenta. Llama lookup_wispro_by_cedula otra vez. Si vuelve a fallar, informa el saldo y escalate_to_human porque la ficha del CRM no persistió.`
+      : "Un solo match. El sistema debió vincular este chat. Si linked=false, llama lookup_wispro_by_cedula otra vez; no asumas que la ficha ya está en el CRM.";
   }
 
   if (input.serviceSuspended) {
@@ -552,7 +559,19 @@ const handleLookup = async (
 
     // Auto-link only on a unique match (deterministic; do not rely on a 2nd tool call).
     if (results.length === 1 && results[0]) {
-      const linkResult = await tryAssociateLookupMatch(ctx, results[0]);
+      let linkResult = await tryAssociateLookupMatch(ctx, results[0]);
+      if (
+        !linkResult.linked &&
+        linkResult.skippedReason === "associate_failed"
+      ) {
+        console.warn("[AI_TOOL] wispro_auto_link_retry", {
+          conversationId: ctx.conversationId,
+          runId: ctx.runId,
+          wisproId: results[0].customer.id,
+          firstError: linkResult.error,
+        });
+        linkResult = await tryAssociateLookupMatch(ctx, results[0]);
+      }
       linked = linkResult.linked;
       linkError = linkResult.error;
       linkSkippedReason = linkResult.skippedReason;
@@ -643,7 +662,16 @@ const handleLink = async (
     };
   }
 
-  const linkResult = await tryAssociateLookupMatch(ctx, match);
+  let linkResult = await tryAssociateLookupMatch(ctx, match);
+  if (!linkResult.linked && linkResult.skippedReason === "associate_failed") {
+    console.warn("[AI_TOOL] wispro_link_retry", {
+      conversationId: ctx.conversationId,
+      runId: ctx.runId,
+      wisproId: match.customer.id,
+      firstError: linkResult.error,
+    });
+    linkResult = await tryAssociateLookupMatch(ctx, match);
+  }
 
   if (!linkResult.linked) {
     return {

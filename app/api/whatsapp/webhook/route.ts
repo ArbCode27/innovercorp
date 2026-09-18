@@ -340,6 +340,55 @@ const findOrCreateClient = async (
     }
   }
 
+  // Last resort: any conversation for this phone (keeps Wispro on returning numbers).
+  const { data: anyByPhone, error: anyByPhoneError } = await supabase
+    .from("conversations")
+    .select("id, client_id")
+    .eq("customer_phone", from)
+    .not("client_id", "is", null)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (anyByPhoneError) {
+    console.warn(`${WEBHOOK_LOG_PREFIX} conversation_phone_lookup_failed`, {
+      from: maskPhone(from),
+      error: anyByPhoneError.message,
+    });
+  } else if (anyByPhone?.client_id) {
+    const { data: historicalClient, error: historicalClientError } =
+      await supabase
+        .from("clients")
+        .select("*")
+        .eq("id", anyByPhone.client_id)
+        .maybeSingle();
+
+    if (historicalClientError) throw historicalClientError;
+
+    if (historicalClient) {
+      const { data: patchedClient, error: patchError } = await supabase
+        .from("clients")
+        .update({
+          whatsapp_id: historicalClient.whatsapp_id || from,
+          phone: historicalClient.phone || from,
+          wa_name: historicalClient.wa_name || profileWaName,
+        })
+        .eq("id", historicalClient.id)
+        .select("*")
+        .single();
+
+      if (patchError) throw patchError;
+
+      console.log(`${WEBHOOK_LOG_PREFIX} client_recovered_from_conversation_phone`, {
+        clientId: patchedClient.id,
+        conversationId: anyByPhone.id,
+        from: maskPhone(from),
+        hasWispro: Boolean(patchedClient.wispro_id),
+      });
+      return patchedClient;
+    }
+  }
+
   const buildClientRow = (name: string, storedWaName: string | null) => ({
     name,
     phone: from,

@@ -1173,19 +1173,9 @@ export const useCrmData = (agent: Agent | null) => {
         return {
           ...current,
           clients: clientExists
-            ? current.clients.map((client) => {
-                if (client.id === saved.id) return saved;
-                // Another row may have been cleared of this wispro_id on the server.
-                if (client.wispro_id === customer.id && client.id !== saved.id) {
-                  return {
-                    ...client,
-                    wispro_id: null,
-                    envoicing: null,
-                    account: "Prospecto",
-                  };
-                }
-                return client;
-              })
+            ? current.clients.map((client) =>
+                client.id === saved.id ? saved : client,
+              )
             : [...current.clients, saved],
           conversations: current.conversations.map((conversation) =>
             conversation.id === selectedConversation.id

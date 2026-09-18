@@ -295,6 +295,21 @@ export const refreshClientBillingFromWispro = async (input: {
       };
     }
 
+    const { error: siblingError } = await input.supabase
+      .from("clients")
+      .update(updatePayload)
+      .eq("wispro_id", wisproId)
+      .neq("id", input.clientId);
+
+    if (siblingError) {
+      console.warn(`${LOG_PREFIX} sibling_billing_sync_failed`, {
+        clientId: input.clientId,
+        wisproId,
+        message: siblingError.message,
+        code: siblingError.code ?? null,
+      });
+    }
+
     console.log(`${LOG_PREFIX} completed`, {
       clientId: input.clientId,
       conversationId: input.conversationId ?? null,

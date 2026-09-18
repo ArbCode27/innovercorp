@@ -343,6 +343,6 @@ export const AI_MEDIA_CONTRACT_PROMPT = `Media (imagen/audio):
 - Si parece comprobante de pago:
   1) Extrae amount, transaction_code y bank solo si aparecen en el análisis.
   2) Si NO tienes cédula del abonado: PÍDELA. No uses escalate_to_human todavía.
-  3) Con cédula: lookup_wispro_by_cedula y luego submit_payment_receipt (link opcional).
+  3) Con cédula: lookup_wispro_by_cedula (con 1 match el sistema vincula ESTE chat) y luego submit_payment_receipt.
   4) Tras submit, el sistema hace handoff; confirma según el resultado. NUNCA digas que el pago está aprobado.
 - No digas que no puedes ver imágenes o audios: en este sistema sí los recibes (como texto enriquecido).`;

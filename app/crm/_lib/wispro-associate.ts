@@ -67,32 +67,13 @@ const normalizePhone = (value?: string | null) => {
   return digits.length >= 8 ? digits : "";
 };
 
-const clearWisproFieldsFromClient = async (
-  supabase: SupabaseClient,
-  clientId: number,
-  linkId: string,
-) => {
-  console.warn(`${LOG_PREFIX} wispro_freed_from_other_client`, {
-    linkId,
-    otherClientId: clientId,
-  });
-
-  const { error } = await supabase
-    .from("clients")
-    .update({
-      wispro_id: null,
-      envoicing: null,
-      account: "Prospecto",
-      zone: DEFAULT_ZONE,
-    })
-    .eq("id", clientId);
-
-  throwDbError(error, "No se pudo liberar la vinculación Wispro previa", {
-    linkId,
-    otherClientId: clientId,
-    step: "clear_other_wispro",
-  });
-};
+const isUniqueViolation = (error: unknown) =>
+  Boolean(
+    error &&
+      typeof error === "object" &&
+      "code" in error &&
+      String((error as { code?: string }).code) === "23505",
+  );
 
 const findClientByWhatsappOrPhone = async (
   supabase: SupabaseClient,
@@ -207,8 +188,8 @@ const createAnchorClient = async (
 };
 
 /**
- * Links Wispro to the WhatsApp chat client (single identity).
- * Never moves the conversation to a Wispro-only row without WA identity.
+ * Links Wispro to THIS WhatsApp chat's CRM client.
+ * Multiple chats may share the same wispro_id; never steal it from another row.
  */
 export const associateWisproClient = async (
   supabase: SupabaseClient,
@@ -265,15 +246,19 @@ export const associateWisproClient = async (
 
   const { data: existingByWispro, error: lookupError } = await supabase
     .from("clients")
-    .select("*")
+    .select("id")
     .eq("wispro_id", customer.id)
-    .maybeSingle<Client>();
+    .limit(50);
 
   throwDbError(lookupError, "No se pudo buscar el cliente en Wispro", {
     linkId,
     step: "lookup_by_wispro_id",
     wisproId: customer.id,
   });
+
+  const siblingClientIds = (existingByWispro || [])
+    .map((row) => Number(row.id))
+    .filter((id) => Number.isInteger(id) && id > 0);
 
   // 1) Resolve chat anchor: conversation client → WA/phone match → create.
   let anchor: Client | null = null;
@@ -345,6 +330,8 @@ export const associateWisproClient = async (
     anchorSource = "created";
   }
 
+  const otherLinkedClientIds = siblingClientIds.filter((id) => id !== anchor.id);
+
   console.log(`${LOG_PREFIX} anchor_resolved`, {
     linkId,
     conversationId,
@@ -356,21 +343,21 @@ export const associateWisproClient = async (
     hadPhone: Boolean(anchor.phone),
     phone: maskPhone(anchor.phone),
     whatsappId: maskPhone(anchor.whatsapp_id),
+    otherLinkedCount: otherLinkedClientIds.length,
+    otherLinkedClientIds,
   });
 
-  // 2) Free wispro_id if held by another CRM row (keep WA chat as anchor).
-  if (existingByWispro && existingByWispro.id !== anchor.id) {
-    await clearWisproFieldsFromClient(supabase, existingByWispro.id, linkId);
-  } else if (existingByWispro) {
-    console.log(`${LOG_PREFIX} wispro_already_on_anchor`, {
+  if (otherLinkedClientIds.length) {
+    console.log(`${LOG_PREFIX} wispro_shared_with_other_chats`, {
       linkId,
       anchorClientId: anchor.id,
       wisproId: customer.id,
+      otherLinkedClientIds,
     });
   }
 
-  // 3) Merge Wispro + ensure WhatsApp identity on the same row.
-  const updatePayload: Record<string, string | null> = {
+  // 2) Persist Wispro on THIS chat only. Other chats keep the same wispro_id.
+  const wisproPayload: Record<string, string | null> = {
     wispro_id: customer.id,
     name: customer.name,
     zone,
@@ -379,6 +366,8 @@ export const associateWisproClient = async (
     envoicing: envoicingPayload,
     initials: getInitials(customer.name),
   };
+
+  const updatePayload: Record<string, string | null> = { ...wisproPayload };
 
   if (waIdentity) {
     if (!anchor.phone?.trim()) {
@@ -406,12 +395,28 @@ export const associateWisproClient = async (
     envoicingBytes: envoicingPayload.length,
   });
 
-  const { data: updated, error: updateError } = await supabase
-    .from("clients")
-    .update(updatePayload)
-    .eq("id", anchor.id)
-    .select()
-    .single<Client>();
+  const persistClientUpdate = async (payload: Record<string, string | null>) =>
+    supabase
+      .from("clients")
+      .update(payload)
+      .eq("id", anchor.id)
+      .select()
+      .single<Client>();
+
+  let { data: updated, error: updateError } = await persistClientUpdate(
+    updatePayload,
+  );
+
+  if (updateError && isUniqueViolation(updateError)) {
+    console.warn(`${LOG_PREFIX} client_update_unique_retry_wispro_only`, {
+      linkId,
+      anchorClientId: anchor.id,
+      wisproId: customer.id,
+      ...describeDbError(updateError),
+    });
+    ({ data: updated, error: updateError } =
+      await persistClientUpdate(wisproPayload));
+  }
 
   if (updateError) {
     console.error(`${LOG_PREFIX} client_update_failed`, {
@@ -453,7 +458,7 @@ export const associateWisproClient = async (
     client.phone?.trim() ||
     null;
 
-  const { error: conversationError } = await supabase
+  const { data: updatedConversation, error: conversationError } = await supabase
     .from("conversations")
     .update({
       client_id: client.id,
@@ -462,7 +467,9 @@ export const associateWisproClient = async (
         : {}),
       updated_at: new Date().toISOString(),
     })
-    .eq("id", conversationId);
+    .eq("id", conversationId)
+    .select("id, client_id")
+    .maybeSingle<{ id: number; client_id: number | null }>();
 
   if (conversationError) {
     console.error(`${LOG_PREFIX} conversation_update_failed`, {
@@ -476,6 +483,16 @@ export const associateWisproClient = async (
       conversationError.message ||
         "No se pudo vincular el cliente a la conversación",
     );
+  }
+
+  if (!updatedConversation || Number(updatedConversation.client_id) !== client.id) {
+    console.error(`${LOG_PREFIX} conversation_update_verify_failed`, {
+      linkId,
+      conversationId,
+      clientId: client.id,
+      persistedClientId: updatedConversation?.client_id ?? null,
+    });
+    throw new Error("La conversación no quedó vinculada al cliente de este chat");
   }
 
   console.log(`${LOG_PREFIX} conversation_update_ok`, {

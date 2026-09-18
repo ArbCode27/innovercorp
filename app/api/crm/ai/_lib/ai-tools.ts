@@ -97,7 +97,7 @@ export const AI_TOOL_DECLARATIONS = [
   {
     name: LOOKUP_WISPRO_TOOL,
     description:
-      "Busca al abonado en Wispro por cédula o RIF (solo números, sin V/J). El sistema prueba prefijos VE automáticamente. Si hay exactamente 1 match, vincula el abonado a ESTE chat de forma automática (también en modo humano). Devuelve saldo (debt_usd/debt_bs), account_status, service_suspended y linked. Si service_suspended=true, incentiva el pago e indica activación inmediata. Úsala cuando el usuario envíe su cédula o RIF.",
+      "Busca al abonado en Wispro por cédula o RIF (solo números, sin V/J). El sistema prueba prefijos VE automáticamente. Si hay exactamente 1 match, DEBE vincular el abonado a ESTE chat (también si otros chats ya tienen el mismo wispro_id). Devuelve linked=true solo cuando persistió en este chat. Si linked=false en match único, reintenta lookup; no digas que ya identificaste la cuenta. Si service_suspended=true, incentiva el pago e indica activación inmediata. Úsala cuando el usuario envíe su cédula o RIF.",
     parameters: {
       type: "object",
       properties: {
@@ -123,7 +123,7 @@ export const AI_TOOL_DECLARATIONS = [
   {
     name: LINK_WISPRO_TOOL,
     description:
-      "Vincula un match de Wispro a ESTE chat cuando hubo VARIOS resultados en lookup. No hace falta si lookup ya devolvió linked=true (match único). No bloquea el registro de pagos.",
+      "Vincula un match de Wispro a ESTE chat cuando hubo VARIOS resultados en lookup. No hace falta si lookup ya devolvió linked=true. Varios chats pueden compartir el mismo wispro_id. No bloquea el registro de pagos.",
     parameters: {
       type: "object",
       properties: {
