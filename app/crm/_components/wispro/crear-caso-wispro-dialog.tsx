@@ -59,6 +59,7 @@ import { collectCasoContextFromMessages } from "@/lib/caso-chat-context";
 import { buildMapsUrl, extractMapsUrl, parseCoordsFromMapsUrl } from "@/lib/maps-link";
 import type { Message } from "../../_lib/types";
 import { wisproCasoClient } from "../../_lib/wispro-caso-client";
+import { EmployeePicker } from "./employee-picker";
 import { ResultadoCasoPanel } from "./resultado-caso-panel";
 
 const storageKey = (publicId: number | string) => `wispro-caso:${publicId}`;
@@ -873,26 +874,14 @@ export const CrearCasoWisproDialog = ({
                 title="Técnico"
                 open={openSections.tecnico}
                 onToggle={() => toggleSection("tecnico")}>
-                <Select
-                  value={employeeId || "__none__"}
-                  onValueChange={(value) =>
-                    form.setValue("employeeId", value === "__none__" ? "" : value, {
-                      shouldDirty: true,
-                    })
-                  }>
-                  <SelectTrigger className={CRM_SURFACES.input}>
-                    <SelectValue placeholder="Opcional" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">Sin asignar</SelectItem>
-                    {employees.map((employee) => (
-                      <SelectItem key={employee.id} value={employee.id}>
-                        {employee.name}
-                        {employee.phone_mobile ? ` · ${employee.phone_mobile}` : ""}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <EmployeePicker
+                  employees={employees}
+                  value={employeeId || ""}
+                  onChange={(nextId) =>
+                    form.setValue("employeeId", nextId, { shouldDirty: true })
+                  }
+                  disabled={isLoadingCatalog}
+                />
               </CollapsibleBlock>
 
               <CrmButton

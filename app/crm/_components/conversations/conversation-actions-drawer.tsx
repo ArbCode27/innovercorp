@@ -5,7 +5,6 @@ import {
   EllipsisVertical,
   FileText,
   RotateCcw,
-  Tag,
   UserCheck,
   UserPlus,
   Wrench,
@@ -30,7 +29,6 @@ interface ConversationActionsDrawerProps {
   onTakeControl: () => void;
   onReactivateBot: () => void;
   onResolve: () => void;
-  onOpenLabels: () => void;
   onOpenNote: () => void;
   onOpenAssign: () => void;
   onOpenCreateCaso?: () => void;
@@ -44,7 +42,6 @@ export const ConversationActionsDrawer = ({
   onTakeControl,
   onReactivateBot,
   onResolve,
-  onOpenLabels,
   onOpenNote,
   onOpenAssign,
   onOpenCreateCaso,
@@ -67,7 +64,7 @@ export const ConversationActionsDrawer = ({
           Acciones de conversación
         </DrawerTitle>
         <DrawerDescription className={CRM_SURFACES.textMuted}>
-          Gestiona control, notas, etiquetas y seguimiento del cliente.
+          Gestiona control, notas y seguimiento del cliente.
         </DrawerDescription>
       </DrawerHeader>
 
@@ -105,17 +102,6 @@ export const ConversationActionsDrawer = ({
             onClick={onResolve}>
             <Check className="size-4" aria-hidden="true" />
             {isResolving ? "Archivando..." : "Resolver"}
-          </CrmButton>
-        </DrawerClose>
-
-        <DrawerClose asChild>
-          <CrmButton
-            type="button"
-            variant="secondary"
-            className="w-full justify-start"
-            onClick={onOpenLabels}>
-            <Tag className="size-4" aria-hidden="true" />
-            Editar etiquetas
           </CrmButton>
         </DrawerClose>
 

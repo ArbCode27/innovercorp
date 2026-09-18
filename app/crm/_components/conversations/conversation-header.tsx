@@ -5,7 +5,6 @@ import {
   Check,
   FileText,
   RotateCcw,
-  Tag,
   UserCheck,
   UserPlus,
   Wrench,
@@ -25,7 +24,6 @@ interface ConversationHeaderProps {
   currentAgent: Agent;
   onBackToList?: () => void;
   onOpenDetails?: () => void;
-  onOpenLabels: () => void;
   onTakeControl: () => void;
   onReactivateBot: () => void;
   onResolve: () => void;
@@ -41,7 +39,6 @@ export const ConversationHeader = ({
   currentAgent,
   onBackToList,
   onOpenDetails,
-  onOpenLabels,
   onTakeControl,
   onReactivateBot,
   onResolve,
@@ -135,7 +132,6 @@ export const ConversationHeader = ({
             onTakeControl={onTakeControl}
             onReactivateBot={onReactivateBot}
             onResolve={onResolve}
-            onOpenLabels={onOpenLabels}
             onOpenNote={onOpenNote}
             onOpenAssign={onOpenAssign}
             onOpenCreateCaso={onOpenCreateCaso}
@@ -165,10 +161,6 @@ export const ConversationHeader = ({
             onClick={onResolve}>
             <Check className="size-3" aria-hidden="true" />
             {isResolving ? "Archivando..." : "Resolver"}
-          </CrmButton>
-          <CrmButton type="button" variant="secondary" size="sm" onClick={onOpenLabels}>
-            <Tag className="size-3" aria-hidden="true" />
-            Editar etiquetas
           </CrmButton>
           <CrmButton type="button" variant="secondary" size="sm" onClick={onOpenNote}>
             <FileText className="size-3" aria-hidden="true" />

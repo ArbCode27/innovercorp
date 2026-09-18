@@ -32,7 +32,6 @@ import { CRM_DIALOG, CRM_SURFACES } from "../../_lib/crm-theme";
 import { getManualPaymentBlockReason } from "../../_lib/client-profile-utils";
 import type { Agent, Client, Conversation, Label, Message, QuickReply, Ticket, WisproCustomer, WisproSearchResult } from "../../_lib/types";
 import { AssignAgentDialog } from "../agents/assign-agent-dialog";
-import { LabelPickerDialog } from "../labels/label-picker-dialog";
 import { UnknownClientBanner } from "../wispro/unknown-client-banner";
 import { WisproSearchDialog } from "../wispro/wispro-search-dialog";
 import { CrearCasoWisproDialog } from "../wispro/crear-caso-wispro-dialog";
@@ -102,14 +101,13 @@ export const ConversationPanel = ({
   onTakeControl,
   onReactivateBot,
   onResolve,
-  onUpdateLabels,
+  onUpdateLabels: _onUpdateLabels,
   onQuickToggleLabel,
   onAssignAgent,
   onAssociateWispro,
   onUnlinkWispro,
   onCreatePaymentPromise,
 }: ConversationPanelProps) => {
-  const [isLabelDialogOpen, setIsLabelDialogOpen] = useState(false);
   const [isNoteDialogOpen, setIsNoteDialogOpen] = useState(false);
   const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false);
   const [isWisproDialogOpen, setIsWisproDialogOpen] = useState(false);
@@ -236,7 +234,6 @@ export const ConversationPanel = ({
           currentAgent={currentAgent}
           onOpenDetails={() => setIsDetailsSheetOpen(true)}
           onBackToList={onBackToList}
-          onOpenLabels={() => setIsLabelDialogOpen(true)}
           onTakeControl={onTakeControl}
           onReactivateBot={onReactivateBot}
           onResolve={() => setIsResolveDialogOpen(true)}
@@ -420,14 +417,6 @@ export const ConversationPanel = ({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      <LabelPickerDialog
-        open={isLabelDialogOpen}
-        labels={allLabels}
-        selectedLabelIds={conversation.label_ids}
-        onOpenChange={setIsLabelDialogOpen}
-        onSave={onUpdateLabels}
-      />
 
       <AssignAgentDialog
         open={isAssignDialogOpen}
