@@ -55,6 +55,7 @@ import { buildMapsUrl, parseCoordsFromMapsUrl } from "@/lib/maps-link";
 import type { Message } from "../../_lib/types";
 import { wisproCasoClient } from "../../_lib/wispro-caso-client";
 import { EmployeePicker } from "./employee-picker";
+import { FacadeImageField } from "./facade-image-field";
 
 const toDatetimeLocal = (date: Date) => {
   const pad = (value: number) => String(value).padStart(2, "0");
@@ -198,6 +199,7 @@ export const CrearCasoWisproDialog = ({
   const endAt = form.watch("endAt");
   const mapsUrl = form.watch("mapsUrl");
   const facadeMediaUrl = form.watch("facadeMediaUrl");
+  const facadeMessageId = form.watch("facadeMessageId");
 
   const highCategories = categories.filter((item) => item.level === "High");
   const lowCategories = categories.filter((item) => item.level !== "High");
@@ -791,47 +793,22 @@ export const CrearCasoWisproDialog = ({
                   placeholder="Calle, sector, referencia"
                   
                 />
-                <p className={`text-xs ${CRM_SURFACES.textMuted}`}>
-                  Foto de fachada (se reenvía al técnico con el reporte)
-                </p>
-                {chatImages.length ? (
-                  <div className="grid grid-cols-3 gap-2">
-                    {chatImages.map((image) => {
-                      const selected = image.mediaUrl === facadeMediaUrl;
-                      return (
-                        <button
-                          key={`${image.messageId}-${image.mediaUrl}`}
-                          type="button"
-                          onClick={() => {
-                            form.setValue("facadeMediaUrl", image.mediaUrl, {
-                              shouldDirty: true,
-                            });
-                            form.setValue("facadeMessageId", image.messageId, {
-                              shouldDirty: true,
-                            });
-                          }}
-                          aria-label="Elegir foto de fachada"
-                          aria-pressed={selected}
-                          className={`overflow-hidden rounded-xl border-2 ${
-                            selected
-                              ? "border-emerald-500"
-                              : "border-transparent"
-                          }`}>
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={image.mediaUrl}
-                            alt={image.caption || "Foto del chat"}
-                            className="h-20 w-full object-cover"
-                          />
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p className={`text-xs ${CRM_SURFACES.textMuted}`}>
-                    Este chat no tiene fotos recientes para usar como fachada.
-                  </p>
-                )}
+                <FacadeImageField
+                  chatImages={chatImages}
+                  value={{
+                    mediaUrl: facadeMediaUrl || "",
+                    messageId: facadeMessageId ?? null,
+                  }}
+                  disabled={isSubmitting}
+                  onChange={(next) => {
+                    form.setValue("facadeMediaUrl", next.mediaUrl, {
+                      shouldDirty: true,
+                    });
+                    form.setValue("facadeMessageId", next.messageId, {
+                      shouldDirty: true,
+                    });
+                  }}
+                />
               </CollapsibleBlock>
 
               <CollapsibleBlock

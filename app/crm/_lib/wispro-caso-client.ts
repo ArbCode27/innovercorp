@@ -162,4 +162,18 @@ export const wisproCasoClient = {
     }
     return payload;
   },
+
+  async uploadFacade(file: File) {
+    const body = new FormData();
+    body.append("image", file);
+    const response = await fetch("/api/crm/media/facade", {
+      method: "POST",
+      body,
+    });
+    const payload = (await response.json()) as { url?: string; error?: string };
+    if (!response.ok || !payload.url) {
+      throw new Error(payload.error || "No se subió la foto de fachada");
+    }
+    return payload.url;
+  },
 };
