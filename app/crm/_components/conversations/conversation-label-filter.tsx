@@ -13,7 +13,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { CRM_SURFACES } from "../../_lib/crm-theme";
 import type { Label } from "../../_lib/types";
 
 interface ConversationLabelFilterProps {
@@ -47,13 +46,13 @@ export const ConversationLabelFilter = ({
               ? `Etiqueta: ${selectedLabel.name}`
               : "Todas las etiquetas"}
           </span>
-          <ChevronDown className="size-4 shrink-0 opacity-50" aria-hidden="true" />
+          <ChevronDown className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         </Button>
       </PopoverTrigger>
 
       <PopoverContent
         align="start"
-        className={`w-[min(22rem,calc(100vw-2rem))] border p-0 ${CRM_SURFACES.border} ${CRM_SURFACES.elevated} ${CRM_SURFACES.textPrimary}`}>
+        className="w-[min(22rem,calc(100vw-2rem))] p-0">
         <Command>
           <CommandInput placeholder="Buscar etiqueta..." />
           <CommandList>
@@ -61,7 +60,6 @@ export const ConversationLabelFilter = ({
             <CommandGroup heading="Etiquetas">
               <CommandItem
                 value="todas"
-                className="data-[selected=true]:bg-crm-accent/25 data-[selected=true]:text-crm-accent-foreground"
                 onSelect={() => {
                   onLabelChange(null);
                   setIsLabelMenuOpen(false);
@@ -79,7 +77,6 @@ export const ConversationLabelFilter = ({
                 <CommandItem
                   key={label.id}
                   value={label.name}
-                  className="data-[selected=true]:bg-crm-accent/25 data-[selected=true]:text-crm-accent-foreground"
                   onSelect={() => {
                     onLabelChange(label.id);
                     setIsLabelMenuOpen(false);

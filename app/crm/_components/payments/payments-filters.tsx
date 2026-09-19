@@ -172,7 +172,7 @@ export const PaymentsFilters = ({
           </PopoverTrigger>
           <PopoverContent
             align="start"
-            className={`w-auto overflow-hidden rounded-2xl border p-0 shadow-lg ${CRM_SURFACES.border} `}
+            className="w-auto overflow-hidden rounded-2xl p-0 shadow-lg"
             sideOffset={8}>
             <Calendar
               mode="range"

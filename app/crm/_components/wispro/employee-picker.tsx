@@ -100,7 +100,6 @@ export const EmployeePicker = ({
             <CommandGroup heading="Técnicos">
               <CommandItem
                 value="sin asignar"
-                className="data-[selected=true]:bg-accent data-[selected=true]:text-accent-foreground"
                 onSelect={() => {
                   onChange("");
                   setOpen(false);
@@ -129,7 +128,6 @@ export const EmployeePicker = ({
                   <CommandItem
                     key={employee.id}
                     value={`${employee.name} ${phone || ""} ${employee.national_identification_number || ""} ${getInitials(name)}`}
-                    className="data-[selected=true]:bg-accent data-[selected=true]:text-accent-foreground"
                     onSelect={() => {
                       onChange(employee.id);
                       setOpen(false);

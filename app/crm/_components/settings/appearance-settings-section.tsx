@@ -64,7 +64,7 @@ export const AppearanceSettingsSection = ({
       className={`rounded-2xl p-4 md:p-5 ${CRM_SURFACES.elevated}`}>
       <div className="flex items-start gap-3">
         <Palette
-          className="mt-0.5 size-4 shrink-0 text-crm-accent"
+          className="mt-0.5 size-4 shrink-0 text-crm-accent-foreground"
           aria-hidden="true"
         />
         <div className="min-w-0 flex-1">
@@ -101,8 +101,8 @@ export const AppearanceSettingsSection = ({
                   "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
                   "inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border px-3 py-2 text-sm font-medium transition",
                   isSelected
-                    ? "border-crm-accent bg-crm-accent-muted text-crm-accent-muted-foreground"
-                    : `${CRM_SURFACES.border} ${CRM_SURFACES.card} ${CRM_SURFACES.textSecondary} ${CRM_SURFACES.hover}`,
+                    ? "border-crm-accent bg-accent text-accent-foreground"
+                    : `border-input bg-popover ${CRM_SURFACES.textSecondary} hover:bg-accent hover:text-accent-foreground`,
                 )}>
                 <Icon className="size-4" aria-hidden="true" />
                 {option.label}
@@ -144,8 +144,8 @@ export const AppearanceSettingsSection = ({
                   "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
                   "flex size-11 items-center justify-center rounded-full border-2 transition",
                   isSelected
-                    ? "border-slate-900 ring-2 ring-crm-accent ring-offset-2 ring-offset-slate-50 dark:border-white dark:ring-offset-[#161922]"
-                    : "border-transparent hover:border-slate-300 dark:hover:border-white/30",
+                    ? "border-foreground ring-2 ring-ring ring-offset-2 ring-offset-background"
+                    : "border-transparent hover:border-border",
                 )}>
                 <span
                   className="size-8 rounded-full shadow-inner"
@@ -192,8 +192,8 @@ export const AppearanceSettingsSection = ({
                     "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
                     "flex size-10 items-center justify-center rounded-full border-2 transition",
                     isSelected
-                      ? "border-slate-900 ring-2 ring-crm-accent ring-offset-2 ring-offset-slate-50 dark:border-white dark:ring-offset-[#161922]"
-                      : "border-transparent hover:border-slate-300 dark:hover:border-white/30",
+                      ? "border-foreground ring-2 ring-ring ring-offset-2 ring-offset-background"
+                      : "border-transparent hover:border-border",
                   )}>
                   <span
                     className="size-7 rounded-full shadow-inner"
