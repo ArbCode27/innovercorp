@@ -161,29 +161,29 @@ export const WisproIssuesPanel = () => {
 
   return (
     <section className="space-y-3">
-      <div className="flex items-center justify-between gap-3">
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h3 className={`text-base font-semibold ${CRM_SURFACES.textPrimary}`}>
+          <h2 className={`text-xl font-semibold md:text-2xl ${CRM_SURFACES.textPrimary}`}>
             Tickets
-          </h3>
-          <p className={`text-xs ${CRM_SURFACES.textMuted}`}>
+          </h2>
+          <p className={`text-sm ${CRM_SURFACES.textMuted}`}>
             Foto de fachada, Maps y técnico. Nova usa esta misma lista.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button
             type="button"
-            size="sm"
-            onClick={() => setIsCreateOpen(true)}>
+            onClick={() => setIsCreateOpen(true)}
+            className="w-full sm:w-auto">
             <Plus className="size-3.5" />
             Nuevo ticket
           </Button>
           <Button
             type="button"
             variant="secondary"
-            size="sm"
             onClick={() => void loadCasos()}
-            disabled={isLoading}>
+            disabled={isLoading}
+            className="w-full sm:w-auto">
             <RefreshCw className="size-3.5" />
             {isLoading ? "Actualizando..." : "Actualizar"}
           </Button>

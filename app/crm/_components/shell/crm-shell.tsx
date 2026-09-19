@@ -234,15 +234,7 @@ export const CrmShell = () => {
                 onDeleteQuickReply={crm.deleteQuickReply}
               />
             ) : null}
-            {activeView === "tickets" ? (
-              <TicketsView
-                tickets={crm.tickets}
-                clients={crm.clients}
-                clientsById={crm.clientsById}
-                agents={crm.agents}
-                onCreateTicket={crm.createTicket}
-              />
-            ) : null}
+            {activeView === "tickets" ? <TicketsView /> : null}
             {activeView === "labels" ? (
               <LabelsView
                 labels={crm.labels}
