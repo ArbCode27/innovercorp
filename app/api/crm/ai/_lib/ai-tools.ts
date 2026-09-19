@@ -238,7 +238,7 @@ export const AI_TOOL_DECLARATIONS = [
   {
     name: LIST_MY_PENDING_TICKETS_TOOL,
     description:
-      "SOLO si el remitente es un empleado/técnico Wispro (WhatsApp o cédula). Lista y ENVÍA por WhatsApp sus tickets pendientes asignados en el CRM (nombre, teléfono, causa, Maps y foto de fachada). Si delivered=true no reenvíes la lista en texto: solo un acuse corto.",
+      "SOLO si el remitente es un empleado/técnico Wispro (WhatsApp o cédula). Lista y ENVÍA por WhatsApp sus tickets pendientes asignados en el CRM (nombre, teléfono, causa, Maps y foto de fachada). Si delivered=true no escribas nada más.",
     parameters: {
       type: "object",
       properties: {
@@ -282,7 +282,7 @@ export const AI_TOOLS_CONTRACT_PROMPT = `Herramientas disponibles (obligatorio r
 4) submit_payment_receipt — registrar comprobante (requiere lookup previo). Tras éxito/error: etiqueta "Verificar pago" + handoff. Tras éxito el sistema puede crear una promesa Wispro en segundo plano: NUNCA la menciones al cliente; confirma solo el registro del comprobante.
 5) escalate_to_human — category=support al cerrar diagnóstico; category=general si pide humano. NO al solo recibir comprobante.
 6) get_client_ticket — ticket abierto de ESTE cliente (número, estado, ventana). Si el remitente es técnico, NO la uses.
-7) list_my_pending_tickets — SOLO técnicos identificados (WhatsApp o su cédula). El sistema envía foto + Maps. Si delivered=true, responde un acuse corto y no copies la lista.
+7) list_my_pending_tickets — SOLO técnicos identificados (WhatsApp o su cédula). El sistema envía foto + Maps. Si delivered=true, no escribas nada más.
 8) finalize_my_ticket — SOLO técnicos identificados. Cierra en CRM y Wispro. Pasa public_id o client_name (aunque el técnico hable informal). Si hay 1 pendiente o 1 match en la cola, cierra sin preguntar. No ofrezcas el listado.
 
 Tasa BCV / bolívares (CRÍTICO):
@@ -307,7 +307,7 @@ Flujo obligatorio de soporte técnico:
 Tickets y técnicos:
 - Si identidad dice rol=tecnico_wispro: la cola inyectada es la fuente de verdad. No la reenvíes ni ofrezcas el listado salvo que pida pendientes/reenviar/siguiente.
 - Intención informal de cierre (esa de sandra, ya esa, listo esa visita, finaliza key): llama finalize_my_ticket con client_name o public_id de la cola. No pidas el número si hay un match único o un solo pendiente.
-- Si pide pendientes/hoy/ruta: llama list_my_pending_tickets. Si delivered=true, acuse corto.
+- Si pide pendientes/hoy/ruta: llama list_my_pending_tickets. Si delivered=true, no escribas nada más.
 - El sistema identifica al técnico por WhatsApp verificado o cédula; no envíes tickets si no está identificado.
 - El técnico ve solo los tickets asignados en el CRM (no en Wispro).
 - Si rol=cliente y preguntan por su ticket/visita: get_client_ticket. No inventes el número.

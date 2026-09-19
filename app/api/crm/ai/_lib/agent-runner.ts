@@ -201,6 +201,7 @@ const createAgentContext = (input: {
   allowedToolNames?: string[] | null;
   officeHours?: OfficeHoursSnapshot | null;
   wisproEmployee?: MatchedWisproEmployee | null;
+  onBeforeLongRunningWork?: () => void;
 }): AgentRunContext => {
   const identity = resolveLinkedClientIdentity(input.client);
   return {
@@ -226,6 +227,8 @@ const createAgentContext = (input: {
     escalateReason: null,
     escalateMessage: null,
     directReply: null,
+    suppressReply: false,
+    onBeforeLongRunningWork: input.onBeforeLongRunningWork,
   };
 };
 
@@ -428,6 +431,16 @@ const runAgentLoop = async (input: {
     };
   }
 
+  if (input.ctx.suppressReply) {
+    return {
+      action: "reply",
+      message: "",
+      reason: "technician_tickets",
+      runId: input.ctx.runId,
+      clientId: input.ctx.clientId,
+    };
+  }
+
   if (input.ctx.directReply) {
     return {
       action: "reply",
@@ -496,6 +509,7 @@ export const runAiAgent = async (input: {
   replyMode?: BotReplyMode;
   allowedToolNames?: string[] | null;
   officeHours?: OfficeHoursSnapshot | null;
+  onBeforeLongRunningWork?: () => void;
 }): Promise<AgentDecision> => {
   const runId = crypto.randomUUID();
   const replyMode = input.replyMode ?? "full";
@@ -567,6 +581,7 @@ export const runAiAgent = async (input: {
   }
 
   if (employee) {
+    input.onBeforeLongRunningWork?.();
     const lastOutbound = getLatestOutboundMessage(input.messages);
     const listOfferPending = looksLikeTechnicianListOffer(
       [lastOutbound?.content, lastOutbound?.caption]
@@ -743,6 +758,7 @@ export const runAiAgent = async (input: {
       allowedToolNames,
       officeHours,
       wisproEmployee: employee,
+      onBeforeLongRunningWork: input.onBeforeLongRunningWork,
     });
 
     const degraded = Boolean(options?.degraded);

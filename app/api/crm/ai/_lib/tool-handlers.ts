@@ -82,6 +82,8 @@ export type AgentRunContext = {
   escalateReason: string | null;
   escalateMessage: string | null;
   directReply: string | null;
+  suppressReply: boolean;
+  onBeforeLongRunningWork?: () => void;
 };
 
 export type ToolHandlerResult = {
@@ -1308,6 +1310,7 @@ const handleListMyPendingTickets = async (
     };
   }
 
+  ctx.onBeforeLongRunningWork?.();
   const delivery = await deliverTechnicianPendingTickets({
     supabase: ctx.supabase,
     conversationId: ctx.conversationId,
@@ -1317,11 +1320,15 @@ const handleListMyPendingTickets = async (
     storedOffset: parsed.data.offset || 0,
   });
 
+  if (delivery.ok && !delivery.message.trim()) {
+    ctx.suppressReply = true;
+  }
+
   return {
     name: LIST_MY_PENDING_TICKETS_TOOL,
     ok: delivery.ok,
     stopAgent: true,
-    directReply: delivery.message,
+    directReply: delivery.message.trim() || undefined,
     response: {
       ok: delivery.ok,
       identified: delivery.identified,
@@ -1329,7 +1336,9 @@ const handleListMyPendingTickets = async (
       count: delivery.count,
       delivered: delivery.delivered,
       remaining: delivery.remaining,
-      hint: "delivered=true: solo acuse corto, no copies la lista.",
+      hint: delivery.ok
+        ? "El listado ya se envió por WhatsApp. No escribas nada más al técnico."
+        : undefined,
     },
   };
 };

@@ -659,6 +659,7 @@ export const replyToConversationWithAi = async (
         replyMode: replyPolicy.mode,
         allowedToolNames: replyPolicy.allowedTools,
         officeHours: officeHoursSnapshot,
+        onBeforeLongRunningWork: () => delayedAck?.cancel(),
       });
     } catch (aiError) {
       delayedAck?.cancel();
@@ -894,6 +895,22 @@ export const replyToConversationWithAi = async (
 
     const replyTextRaw = decision.message.trim();
     if (!replyTextRaw) {
+      if (decision.reason === "technician_tickets") {
+        await closeRun("replied", {
+          metadata: { intent, aiRunId: decision.runId, silentTickets: true },
+        });
+        console.log(`${LOG_PREFIX} silent_technician_tickets`, {
+          ...baseContext,
+          runId: decision.runId,
+        });
+        return {
+          ok: true,
+          reason: "technician_tickets",
+          action: "reply",
+          messageId: null,
+          runId: decision.runId,
+        };
+      }
       logAiNoReply("failed", {
         ...baseContext,
         reason: "empty_model_reply",

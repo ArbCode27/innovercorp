@@ -3,6 +3,7 @@ import { orderKindLabels } from "@/app/crm/_lib/wispro-caso-schema";
 import { listPendingCasosForEmployee } from "./crm-wispro-casos";
 import { recordTechnicianEvent, updateTechnicianReportOffset } from "./crm-technicians";
 import type { MatchedWisproEmployee } from "./match-wispro-employee";
+import { technicianDeliveryFollowUp } from "./technician-delivery-text";
 import {
   looksLikeTechnicianNextPage,
   looksLikeTechnicianResend,
@@ -269,20 +270,10 @@ export const deliverTechnicianPendingTickets = async (input: {
     },
   });
 
-  const greeting = input.justVerified
-    ? `Hola ${firstName}. Te identificamos como técnico. `
-    : "";
-  const ack =
-    delivered > 0
-      ? remaining
-        ? `${greeting}Te envié ${delivered} ticket(s) con ubicación y foto. Quedan ${remaining}; escribe *siguiente* si los necesitas.`
-        : `${greeting}Te envié ${delivered} ticket(s) pendiente(s) con nombre, teléfono, causa, Maps y foto de fachada.`
-      : "No pude enviar los tickets por WhatsApp. Intenta de nuevo.";
-
   return {
     ok: delivered > 0,
     identified: true,
-    message: ack.trim(),
+    message: technicianDeliveryFollowUp({ delivered, remaining }),
     count: all.length,
     delivered,
     remaining,
