@@ -1,18 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
-import { searchWisproByCedula } from "@/app/api/crm/_lib/wispro-api";
-import { getWisproClientById, searchWisproClients, WisproHttpError } from "@/lib/wispro";
+import {
+  searchWisproByCedula,
+  WisproApiError,
+} from "@/app/api/crm/_lib/wispro-api";
+import { looksLikeDocumentQuery } from "@/lib/wispro-client-search";
+import {
+  getWisproClientById,
+  searchWisproClients,
+  WisproHttpError,
+} from "@/lib/wispro";
 import type { WisproClientHit } from "@/lib/wispro-types";
 
 export const dynamic = "force-dynamic";
 
-const looksLikeDocumentQuery = (value: string) => {
-  const compact = value.replace(/[\s.-]/g, "");
-  const digits = compact.replace(/\D/g, "");
-  return (
-    digits.length >= 5 &&
-    digits.length <= 12 &&
-    /^[VEJGvejg]?\d+$/.test(compact)
-  );
+const toSearchError = (error: unknown) => {
+  if (error instanceof WisproHttpError || error instanceof WisproApiError) {
+    return { message: error.message, status: error.status };
+  }
+  return {
+    message:
+      error instanceof Error ? error.message : "No se pudieron buscar clientes",
+    status: 502,
+  };
 };
 
 export async function GET(request: NextRequest) {
@@ -40,13 +49,7 @@ export async function GET(request: NextRequest) {
     const clients = await searchWisproClients(query);
     return NextResponse.json({ clients });
   } catch (error) {
-    const message =
-      error instanceof WisproHttpError
-        ? error.message
-        : error instanceof Error
-          ? error.message
-          : "No se pudieron buscar clientes";
-    const status = error instanceof WisproHttpError ? error.status : 502;
+    const { message, status } = toSearchError(error);
     return NextResponse.json({ error: message }, { status });
   }
 }

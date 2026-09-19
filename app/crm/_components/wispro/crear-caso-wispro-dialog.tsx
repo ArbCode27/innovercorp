@@ -53,6 +53,7 @@ import type { z } from "zod";
 import { collectCasoContextFromMessages } from "@/lib/caso-chat-context";
 import { buildMapsUrl, parseCoordsFromMapsUrl } from "@/lib/maps-link";
 import type { Message } from "../../_lib/types";
+import { looksLikeDocumentQuery } from "@/lib/wispro-client-search";
 import { wisproCasoClient } from "../../_lib/wispro-caso-client";
 import { EmployeePicker } from "./employee-picker";
 import { FacadeImageField } from "./facade-image-field";
@@ -149,6 +150,7 @@ export const CrearCasoWisproDialog = ({
   const [selectedClient, setSelectedClient] = useState<WisproClientHit | null>(null);
   const [contracts, setContracts] = useState<WisproContractHit[]>([]);
   const [isSearchingClients, setIsSearchingClients] = useState(false);
+  const [clientSearchSettled, setClientSearchSettled] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [openSections, setOpenSections] = useState({
@@ -272,6 +274,22 @@ export const CrearCasoWisproDialog = ({
   }, [open, wisproClientId, conversationId, crmClientId, latestReport]);
 
   useEffect(() => {
+    if (!open) {
+      setClientHits([]);
+      setIsSearchingClients(false);
+      setClientSearchSettled(false);
+      return;
+    }
+    setClientHits([]);
+    setSelectedClient(null);
+    setClientQuery("");
+    setClientSearchSettled(false);
+    if (!wisproClientId) {
+      setContracts([]);
+    }
+  }, [open, wisproClientId]);
+
+  useEffect(() => {
     if (!open || !categories.length || !Object.keys(parsed).length) return;
     if (form.getValues("categoryId")) return;
     const suggested = suggestCategoryId(parsed, categories);
@@ -314,36 +332,50 @@ export const CrearCasoWisproDialog = ({
   }, [open, wisproClientId]);
 
   useEffect(() => {
+    if (!open) return;
     if (clientQuery.trim().length < 2 || selectedClient?.name === clientQuery) {
+      setClientHits([]);
+      setIsSearchingClients(false);
+      setClientSearchSettled(false);
       return;
     }
+
+    let cancelled = false;
+    setClientHits([]);
+    setClientSearchSettled(false);
     const timer = window.setTimeout(() => {
-      const compact = clientQuery.replace(/[\s.-]/g, "");
-      const digits = compact.replace(/\D/g, "");
-      const isDocumentQuery =
-        digits.length >= 5 &&
-        digits.length <= 12 &&
-        /^[VEJGvejg]?\d+$/.test(compact);
+      const isDocumentQuery = looksLikeDocumentQuery(clientQuery);
       setIsSearchingClients(true);
       void wisproCasoClient
         .searchClients(clientQuery)
         .then((hits) => {
+          if (cancelled) return;
           if (isDocumentQuery && hits.length === 1 && hits[0]) {
             void handleSelectClient(hits[0]);
             return;
           }
           setClientHits(hits);
+          setClientSearchSettled(true);
         })
         .catch((error: unknown) => {
+          if (cancelled) return;
+          setClientHits([]);
+          setClientSearchSettled(true);
           toast.error(
             error instanceof Error ? error.message : "Error al buscar clientes",
           );
         })
-        .finally(() => setIsSearchingClients(false));
+        .finally(() => {
+          if (!cancelled) setIsSearchingClients(false);
+        });
     }, 400);
-    return () => window.clearTimeout(timer);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clientQuery, selectedClient?.name]);
+  }, [open, clientQuery, selectedClient?.name]);
 
   const applyContractGps = (contract: WisproContractHit) => {
     if (form.getValues("mapsUrl") || form.getValues("gps")) return;
@@ -532,10 +564,15 @@ export const CrearCasoWisproDialog = ({
                   onChange={(event) => {
                     setClientQuery(event.target.value);
                     setSelectedClient(null);
+                    setClientHits([]);
+                    if (form.getValues("clientId")) {
+                      form.setValue("clientId", "", { shouldDirty: true });
+                      form.setValue("contractId", "", { shouldDirty: true });
+                      setContracts([]);
+                    }
                   }}
                   placeholder="Nombre o cédula"
                   autoComplete="off"
-                  
                 />
                 {isSearchingClients ? (
                   <p className={`text-xs ${CRM_SURFACES.textMuted}`}>Buscando...</p>
@@ -563,6 +600,15 @@ export const CrearCasoWisproDialog = ({
                       </li>
                     ))}
                   </ul>
+                ) : null}
+                {clientSearchSettled &&
+                !isSearchingClients &&
+                clientQuery.trim().length >= 2 &&
+                !selectedClient &&
+                !clientHits.length ? (
+                  <p className={`text-xs ${CRM_SURFACES.textMuted}`}>
+                    No hay clientes que coincidan con esa búsqueda.
+                  </p>
                 ) : null}
                 {selectedClient ? (
                   <p className={`text-[11px] ${CRM_SURFACES.textMuted}`}>

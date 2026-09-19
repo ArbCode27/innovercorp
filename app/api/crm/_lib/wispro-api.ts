@@ -29,16 +29,22 @@ export class WisproApiError extends Error {
 }
 
 const getWisproConfig = () => {
-  const token = process.env.WISPRO_API_TOKEN?.trim();
+  const token = (
+    process.env.WISPRO_API_KEY ||
+    process.env.WISPRO_API_TOKEN ||
+    ""
+  ).trim();
   if (!token) {
     throw new WisproApiError(
-      "WISPRO_API_TOKEN no está configurado en el servidor",
+      "WISPRO_API_KEY / WISPRO_API_TOKEN no está configurado en el servidor",
       { status: 503, code: "config" },
     );
   }
 
   const baseUrl = (
-    process.env.WISPRO_API_BASE_URL?.trim() || DEFAULT_BASE_URL
+    process.env.WISPRO_BASE_URL?.trim() ||
+    process.env.WISPRO_API_BASE_URL?.trim() ||
+    DEFAULT_BASE_URL
   ).replace(/\/+$/, "");
 
   return { token, baseUrl };

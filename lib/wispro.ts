@@ -1,4 +1,12 @@
 import tecnicosConfig from "@/config/tecnicos.json";
+import {
+  filterClientsByQuery,
+  looksLikeDocumentQuery,
+  nameFilterAttempts,
+  responseLooksUnfiltered,
+  wisproDocumentSearchQuery,
+  wisproNameSearchQuery,
+} from "./wispro-client-search";
 import { readWisproPagination } from "./wispro-pagination";
 import {
   isEmployeeActive,
@@ -427,22 +435,8 @@ export const listTechnicians = async (input?: {
   return selectFieldTechnicians(employees, config);
 };
 
-export const searchWisproClients = async (query: string) => {
-  const q = query.trim();
-  if (q.length < 2) return [] as WisproClientHit[];
-
-  const digits = q.replace(/\D/g, "");
-  const requestQuery = digits.length >= 5 && digits === q.replace(/\s/g, "")
-    ? { national_identification_number_eq: digits }
-    : { name_cont: q };
-
-  const payload = await wisproRequest({
-    method: "GET",
-    path: "/clients",
-    query: requestQuery,
-  });
-
-  return unwrapDataArray(payload)
+const mapClientHits = (payload: unknown): WisproClientHit[] =>
+  unwrapDataArray(payload)
     .map((record) => {
       if (!record || typeof record !== "object") return null;
       const row = record as Record<string, unknown>;
@@ -459,6 +453,37 @@ export const searchWisproClients = async (query: string) => {
       } satisfies WisproClientHit;
     })
     .filter((item): item is WisproClientHit => Boolean(item));
+
+const fetchClientPage = async (filter: Record<string, string>) => {
+  const payload = await wisproRequest({
+    method: "GET",
+    path: "/clients",
+    query: { page: 1, per_page: 25, ...filter },
+  });
+  return mapClientHits(payload);
+};
+
+const searchClientsByName = async (query: string) => {
+  for (const token of nameFilterAttempts(query)) {
+    const raw = await fetchClientPage(wisproNameSearchQuery(token));
+    const matched = filterClientsByQuery(raw, query);
+    if (matched.length) return matched;
+    if (responseLooksUnfiltered(raw, token)) break;
+  }
+
+  return [] as WisproClientHit[];
+};
+
+export const searchWisproClients = async (query: string) => {
+  const q = query.trim();
+  if (q.length < 2) return [] as WisproClientHit[];
+
+  if (looksLikeDocumentQuery(q)) {
+    const raw = await fetchClientPage(wisproDocumentSearchQuery(q));
+    return filterClientsByQuery(raw, q);
+  }
+
+  return searchClientsByName(q);
 };
 
 export const getWisproClientById = async (clientId: string) => {
