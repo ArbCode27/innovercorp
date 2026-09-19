@@ -22,7 +22,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { CRM_PANEL, CRM_SURFACES } from "../../_lib/crm-theme";
+import { cn } from "@/lib/utils";
+import { CRM_COUNT_BADGE, CRM_PANEL, CRM_SURFACES } from "../../_lib/crm-theme";
 import { CRM_NAV_ITEMS } from "../../_lib/constants";
 import type { Agent, CrmView } from "../../_lib/types";
 import { AvatarInitials } from "../shared/avatar-initials";
@@ -160,7 +161,10 @@ export const CrmMobileNav = ({
             <span className="truncate">{label}</span>
             {badgeCount > 0 ? (
               <span
-                className="absolute right-3 top-1 flex min-w-4 items-center justify-center rounded-full bg-crm-accent px-1 text-[10px] font-semibold leading-4 text-crm-accent-foreground"
+                className={cn(
+                  "absolute right-3 top-1 flex min-w-4 items-center justify-center rounded-full px-1 text-[10px] leading-4",
+                  CRM_COUNT_BADGE,
+                )}
                 aria-hidden="true">
                 {badgeCount > 99 ? "99+" : badgeCount}
               </span>

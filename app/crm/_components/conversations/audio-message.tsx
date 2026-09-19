@@ -173,7 +173,7 @@ export const AudioMessage = ({ src, caption }: AudioMessageProps) => {
             "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
             "flex size-10 shrink-0 items-center justify-center rounded-full transition",
             isPlaying
-              ? "bg-white/85 text-crm-accent shadow-sm dark:bg-white/15 dark:text-crm-accent"
+              ? "bg-white/85 text-crm-accent-foreground shadow-sm dark:bg-white/15 dark:text-white"
               : "bg-crm-accent text-crm-accent-foreground hover:bg-crm-accent-hover",
           )}
           onClick={handleTogglePlayback}

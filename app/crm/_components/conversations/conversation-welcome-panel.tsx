@@ -49,13 +49,13 @@ export const ConversationWelcomePanel = ({
       <div className="pointer-events-none absolute bottom-10 right-10 h-60 w-60 rounded-full bg-violet-500/10 blur-3xl" />
 
       <div className="relative z-10 mx-auto flex w-full max-w-3xl flex-col items-center justify-center text-center">
-        <div className="mb-6 flex size-16 items-center justify-center rounded-3xl border border-crm-accent/20 bg-crm-accent/10 text-crm-accent shadow-2xl shadow-black/20">
+        <div className="mb-6 flex size-16 items-center justify-center rounded-3xl border border-crm-accent/20 bg-crm-accent/10 text-crm-accent-muted-foreground shadow-2xl shadow-black/20">
           <MessageCircle className="size-8" aria-hidden="true" />
         </div>
 
         <div className={`rounded-3xl p-8 ${CRM_SURFACES.elevatedTranslucent}`}>
           <div className={`mx-auto mb-3 inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs ${CRM_SURFACES.elevated} ${CRM_SURFACES.textMuted}`}>
-            <Sparkles className="size-3.5 text-crm-accent" aria-hidden="true" />
+            <Sparkles className="size-3.5 text-crm-accent-muted-foreground" aria-hidden="true" />
             Centro de atención CRM
           </div>
           <h2 className={`text-2xl font-semibold ${CRM_SURFACES.textPrimary}`}>
@@ -74,7 +74,7 @@ export const ConversationWelcomePanel = ({
 
           <div className="mt-7 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div className={`rounded-2xl p-4 ${CRM_SURFACES.elevated}`}>
-              <Headphones className="mx-auto mb-2 size-5 text-crm-accent" aria-hidden="true" />
+              <Headphones className="mx-auto mb-2 size-5 text-crm-accent-muted-foreground" aria-hidden="true" />
               <p className={`text-xl font-semibold ${CRM_SURFACES.textPrimary}`}>{activeCount}</p>
               <p className={`text-xs ${CRM_SURFACES.textMuted}`}>activas</p>
             </div>

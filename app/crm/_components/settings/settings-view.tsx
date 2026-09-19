@@ -252,7 +252,7 @@ export const SettingsView = ({
             </h3>
             <div className="mt-3 flex items-start gap-3">
               <Sparkles
-                className="mt-0.5 size-4 shrink-0 text-crm-accent"
+                className="mt-0.5 size-4 shrink-0 text-crm-accent-muted-foreground"
                 aria-hidden="true"
               />
               <div className="min-w-0">

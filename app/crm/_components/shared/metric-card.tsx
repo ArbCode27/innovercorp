@@ -11,11 +11,11 @@ interface MetricCardProps {
 }
 
 const tones = {
-  blue: "text-primary",
-  green: "text-success-foreground",
-  amber: "text-warning-foreground",
+  blue: "text-crm-accent-muted-foreground",
+  green: "text-success-foreground dark:text-success",
+  amber: "text-warning-foreground dark:text-warning",
   red: "text-destructive",
-  purple: "text-primary",
+  purple: "text-crm-accent-muted-foreground",
 }
 
 export const MetricCard = ({

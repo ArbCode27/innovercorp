@@ -33,7 +33,7 @@ export const HistoryWelcomePanel = ({ totalEntries }: HistoryWelcomePanelProps) 
             <p className={`text-xs ${CRM_SURFACES.textMuted}`}>archivadas</p>
           </div>
           <div className={`rounded-2xl p-4 ${CRM_SURFACES.elevated}`}>
-            <CalendarDays className="mx-auto mb-2 size-5 text-crm-accent" aria-hidden="true" />
+            <CalendarDays className="mx-auto mb-2 size-5 text-crm-accent-muted-foreground" aria-hidden="true" />
             <p className={`text-sm font-semibold ${CRM_SURFACES.textPrimary}`}>Por fecha</p>
             <p className={`text-xs ${CRM_SURFACES.textMuted}`}>de resolución</p>
           </div>

@@ -150,7 +150,7 @@ export const MessageBubble = ({
             <StatusIcon
               className={`size-3 ${
                 status === "read"
-                  ? "text-crm-accent"
+                  ? "text-crm-accent-muted-foreground"
                   : status === "failed"
                     ? "text-red-500 dark:text-red-300"
                     : CRM_SURFACES.textMuted

@@ -95,7 +95,7 @@ export const LocationMessage = ({ message, isOutgoing }: LocationMessageProps) =
 
         {coordinateLabel ? (
           <p
-            className={`font-mono text-[11px] ${isOutgoing ? "text-crm-accent" : CRM_SURFACES.textMuted}`}>
+            className={`font-mono text-[11px] ${isOutgoing ? "text-crm-accent-muted-foreground" : CRM_SURFACES.textMuted}`}>
             {coordinateLabel}
           </p>
         ) : null}

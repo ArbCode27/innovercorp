@@ -579,7 +579,7 @@ export const MessageComposer = ({
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium">{quickReply.title}</span>
                     {quickReply.shortcut ? (
-                      <span className="rounded bg-crm-accent/10 px-1.5 py-0.5 text-[11px] font-semibold text-crm-accent">
+                      <span className="rounded bg-accent px-1.5 py-0.5 text-[11px] font-semibold text-accent-foreground">
                         /{quickReply.shortcut}
                       </span>
                     ) : null}

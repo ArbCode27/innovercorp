@@ -1,6 +1,8 @@
 import type { LucideIcon } from "lucide-react"
+import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { CRM_COUNT_BADGE } from "../../_lib/crm-theme"
 import {
   Tooltip,
   TooltipContent,
@@ -39,8 +41,11 @@ export const CrmNavItem = ({
         <Icon className="size-5" aria-hidden="true" />
         {badgeCount > 0 ? (
           <Badge
-            variant="default"
-            className="absolute -right-0.5 -top-0.5 min-w-4 px-1 py-0 text-[10px] leading-4"
+            variant="warning"
+            className={cn(
+              "absolute -right-0.5 -top-0.5 min-w-4 px-1 py-0 text-[10px] leading-4",
+              CRM_COUNT_BADGE,
+            )}
             aria-hidden="true"
           >
             {badgeCount > 99 ? "99+" : badgeCount}

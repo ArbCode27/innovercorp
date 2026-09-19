@@ -27,7 +27,7 @@ export const AvatarInitials = ({
 }: AvatarInitialsProps) => (
   <Avatar size={sizeMap[size]} aria-hidden="true">
     <AvatarFallback
-      className={cn(!bg && "bg-primary/20 text-primary-foreground")}
+      className={cn(!bg && "bg-primary/20 text-crm-accent-foreground dark:text-white")}
       style={
         bg || color
           ? { backgroundColor: bg || undefined, color: color || undefined }

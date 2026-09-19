@@ -44,3 +44,7 @@ export const CRM_BUBBLE = {
   incoming:
     "rounded-3xl rounded-bl-lg border border-border bg-card/80 text-foreground backdrop-blur-md",
 } as const;
+
+/** Count pills (inbox unread, nav). White on a darker gold so AA holds. */
+export const CRM_COUNT_BADGE =
+  "border-transparent bg-[oklch(0.55_0.15_75)] font-bold text-white";

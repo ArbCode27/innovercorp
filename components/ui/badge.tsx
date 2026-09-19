@@ -18,10 +18,10 @@ const badgeVariants = cva(
         outline:
           "text-foreground [a&]:hover:bg-accent [a&]:hover:text-accent-foreground",
         success:
-          "border-transparent bg-success/15 text-success-foreground [a&]:hover:bg-success/20",
+          "border-transparent bg-success/15 text-success-foreground dark:bg-success/25 dark:text-white",
         warning:
-          "border-transparent bg-warning/20 text-warning-foreground [a&]:hover:bg-warning/30",
-        info: "border-transparent bg-primary/20 text-primary-foreground [a&]:hover:bg-primary/30",
+          "border-transparent bg-warning/20 text-warning-foreground dark:bg-warning/30 dark:text-white",
+        info: "border-transparent bg-primary/20 text-crm-accent-foreground dark:bg-primary/25 dark:text-white",
       },
     },
     defaultVariants: {

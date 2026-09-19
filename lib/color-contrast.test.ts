@@ -57,6 +57,9 @@ const DARK = {
   ring: [0.78, 0.06, 255] as const,
 };
 
+const WHITE = [1, 0, 0] as const;
+const COUNT_BADGE = [0.55, 0.15, 75] as const;
+
 describe("CRM selector contrast", () => {
   it("meets WCAG AA for light overlay text", () => {
     expect(contrastRatio(LIGHT.popover, LIGHT.foreground)).toBeGreaterThanOrEqual(7);
@@ -75,5 +78,9 @@ describe("CRM selector contrast", () => {
   it("keeps focus rings at UI 3:1 against the overlay", () => {
     expect(contrastRatio(LIGHT.popover, LIGHT.ring)).toBeGreaterThanOrEqual(3);
     expect(contrastRatio(DARK.popover, DARK.ring)).toBeGreaterThanOrEqual(3);
+  });
+
+  it("keeps unread count pills at WCAG AA with white numerals", () => {
+    expect(contrastRatio(COUNT_BADGE, WHITE)).toBeGreaterThanOrEqual(4.5);
   });
 });
