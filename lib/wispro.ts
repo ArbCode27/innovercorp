@@ -1,4 +1,9 @@
 import tecnicosConfig from "@/config/tecnicos.json";
+import { readWisproPagination } from "./wispro-pagination";
+import {
+  isEmployeeActive,
+  selectFieldTechnicians,
+} from "./wispro-technician-filter";
 import type {
   CreateIssueInput,
   CreateOrderInput,
@@ -25,6 +30,8 @@ const LOG_PREFIX = "[WISPRO]";
 const DEFAULT_BASE_URL = "https://www.cloud.wispro.co/api/v1";
 const REQUEST_TIMEOUT_MS = 15_000;
 const MAX_RETRIES = 2;
+const EMPLOYEE_PAGE_SIZE = 100;
+const MAX_EMPLOYEE_PAGES = 40;
 
 export class WisproHttpError extends Error {
   readonly status: number;
@@ -80,6 +87,13 @@ const readNumber = (value: unknown) => {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : null;
   }
+  return null;
+};
+
+const readBoolean = (value: unknown) => {
+  if (typeof value === "boolean") return value;
+  if (value === 1 || value === "1" || value === "true") return true;
+  if (value === 0 || value === "0" || value === "false") return false;
   return null;
 };
 
@@ -247,6 +261,8 @@ const normalizeEmployee = (record: unknown): WisproEmployee | null => {
   const id = readString(row.id);
   const name = readString(row.name);
   if (!id || !name) return null;
+  const blockedAt =
+    readString(row.blocked_at) || readString(row.blockedAt);
   return {
     id,
     name,
@@ -259,6 +275,14 @@ const normalizeEmployee = (record: unknown): WisproEmployee | null => {
       readString(row.document_number) ||
       readString(row.document) ||
       readString(row.dni),
+    blocked: readBoolean(row.blocked) === true,
+    blockedAt,
+    enabled: readBoolean(row.enabled) ?? readBoolean(row.active),
+    gender:
+      readString(row.gender) ||
+      readString(row.sex) ||
+      readString(row.sexo),
+    status: readString(row.status) || readString(row.state),
     created_at: readString(row.created_at),
     updated_at: readString(row.updated_at),
   };
@@ -307,8 +331,61 @@ const normalizeContractHit = (record: unknown): WisproContractHit | null => {
   };
 };
 
-const technicianAllowlist = () =>
-  (tecnicosConfig.employeeIds || []).map((id) => String(id).trim()).filter(Boolean);
+type TecnicosConfig = {
+  employeeIds?: readonly string[];
+  excludeIds?: readonly string[];
+};
+
+const technicianFilterConfig = () => {
+  const config = tecnicosConfig as TecnicosConfig;
+  const ids = (values?: readonly string[]) =>
+    (values || []).map((id) => String(id).trim()).filter(Boolean);
+  return {
+    includeIds: ids(config.employeeIds),
+    excludeIds: ids(config.excludeIds),
+  };
+};
+
+const recordId = (record: unknown) => {
+  if (!record || typeof record !== "object") return null;
+  return readString((record as Record<string, unknown>).id);
+};
+
+const listAllEmployeeRows = async () => {
+  const collected: unknown[] = [];
+  const seen = new Set<string>();
+  let page = 1;
+
+  while (page <= MAX_EMPLOYEE_PAGES) {
+    const payload = await wisproRequest({
+      method: "GET",
+      path: "/employees",
+      query: { page, per_page: EMPLOYEE_PAGE_SIZE },
+    });
+    const rows = unwrapDataArray(payload);
+    let added = 0;
+    for (const row of rows) {
+      const id = recordId(row);
+      if (id) {
+        if (seen.has(id)) continue;
+        seen.add(id);
+      }
+      collected.push(row);
+      added += 1;
+    }
+
+    const paging = readWisproPagination(
+      payload,
+      page,
+      EMPLOYEE_PAGE_SIZE,
+      rows.length,
+    );
+    if (!paging.hasMore || added === 0) break;
+    page = paging.nextPage || page + 1;
+  }
+
+  return collected;
+};
 
 export const listHelpDeskCategories = async (forceRefresh = false) =>
   getCached(
@@ -328,15 +405,10 @@ export const listHelpDeskCategories = async (forceRefresh = false) =>
 export const listEmployees = async (forceRefresh = false) =>
   getCached(
     "employees",
-    async () => {
-      const payload = await wisproRequest({
-        method: "GET",
-        path: "/employees",
-      });
-      return unwrapDataArray(payload)
+    async () =>
+      (await listAllEmployeeRows())
         .map(normalizeEmployee)
-        .filter((item): item is WisproEmployee => Boolean(item));
-    },
+        .filter((item): item is WisproEmployee => Boolean(item)),
     forceRefresh,
   );
 
@@ -345,10 +417,14 @@ export const listTechnicians = async (input?: {
   forceRefresh?: boolean;
 }) => {
   const employees = await listEmployees(Boolean(input?.forceRefresh));
-  const allowlist = technicianAllowlist();
-  if (input?.includeAll || allowlist.length === 0) return employees;
-  const allowed = new Set(allowlist);
-  return employees.filter((employee) => allowed.has(employee.id));
+  const config = technicianFilterConfig();
+  if (input?.includeAll) {
+    const excluded = new Set(config.excludeIds);
+    return employees.filter(
+      (employee) => isEmployeeActive(employee) && !excluded.has(employee.id),
+    );
+  }
+  return selectFieldTechnicians(employees, config);
 };
 
 export const searchWisproClients = async (query: string) => {

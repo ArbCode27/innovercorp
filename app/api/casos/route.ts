@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   createCaso,
-  listEmployees,
+  listTechnicians,
   reassignHelpDeskIssue,
   retryCasoSteps,
   WisproHttpError,
@@ -54,7 +54,7 @@ const resolveStatus = (input: {
 const resolveEmployee = async (employeeId?: string | null) => {
   if (!employeeId) return null;
   try {
-    const employees = await listEmployees();
+    const employees = await listTechnicians();
     return employees.find((item) => item.id === employeeId) || null;
   } catch {
     return null;

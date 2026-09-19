@@ -6,7 +6,7 @@ import {
 } from "./crm-wispro-casos";
 import { documentDigits, phoneLast10 } from "./phone-match";
 import { pickWisproEmployeeFromCatalog } from "./pick-wispro-employee";
-import { listEmployees } from "./wispro";
+import { listTechnicians } from "./wispro";
 import type { WisproEmployee } from "./wispro-types";
 
 export type MatchedWisproEmployee = {
@@ -49,7 +49,7 @@ export const matchWisproEmployee = async (
   }
 
   try {
-    const employees = await listEmployees();
+    const employees = await listTechnicians();
     const live = pickWisproEmployeeFromCatalog(employees, {
       phone: input.phone,
       document,

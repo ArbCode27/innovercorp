@@ -10,11 +10,29 @@ import {
 
 export const dynamic = "force-dynamic";
 
+const catalogEmployees = async (input: {
+  includeAll: boolean;
+  refresh: boolean;
+}) => {
+  const technicians = await listTechnicians({ forceRefresh: input.refresh });
+  const employees = input.includeAll
+    ? await listTechnicians({ includeAll: true, forceRefresh: false })
+    : technicians;
+  const allCount = (await listEmployees(false)).length;
+  void syncCrmTechnicians(getSupabaseAdmin(), {
+    employees: technicians,
+    forceRefresh: input.refresh,
+  }).catch((error) => {
+    console.warn("[TECHNICIANS] catalog_sync_failed", error);
+  });
+  return { employees, allCount };
+};
+
 export async function GET(request: NextRequest) {
   const resource = request.nextUrl.searchParams.get("resource") || "all";
   const refresh = request.nextUrl.searchParams.get("refresh") === "1";
   const includeAllEmployees =
-    request.nextUrl.searchParams.get("allEmployees") !== "0";
+    request.nextUrl.searchParams.get("allEmployees") === "1";
 
   try {
     if (resource === "categories") {
@@ -23,42 +41,21 @@ export async function GET(request: NextRequest) {
     }
 
     if (resource === "employees") {
-      const employees = await listTechnicians({
+      const payload = await catalogEmployees({
         includeAll: includeAllEmployees,
-        forceRefresh: refresh,
+        refresh,
       });
-      const allCount = includeAllEmployees
-        ? employees.length
-        : (await listEmployees(false)).length;
-      void syncCrmTechnicians(getSupabaseAdmin(), {
-        employees,
-        forceRefresh: refresh,
-      }).catch((error) => {
-        console.warn("[TECHNICIANS] catalog_sync_failed", error);
-      });
-      return NextResponse.json({ employees, allCount });
+      return NextResponse.json(payload);
     }
 
-    const [categories, employees, allEmployees] = await Promise.all([
+    const [categories, employeePayload] = await Promise.all([
       listHelpDeskCategories(refresh),
-      listTechnicians({
-        includeAll: includeAllEmployees,
-        forceRefresh: refresh,
-      }),
-      listEmployees(refresh),
+      catalogEmployees({ includeAll: includeAllEmployees, refresh }),
     ]);
-
-    void syncCrmTechnicians(getSupabaseAdmin(), {
-      employees: includeAllEmployees ? allEmployees : employees,
-      forceRefresh: refresh,
-    }).catch((error) => {
-      console.warn("[TECHNICIANS] catalog_sync_failed", error);
-    });
 
     return NextResponse.json({
       categories,
-      employees,
-      allCount: allEmployees.length,
+      ...employeePayload,
     });
   } catch (error) {
     const message =

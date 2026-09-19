@@ -72,7 +72,7 @@ export const WisproIssuesPanel = () => {
 
   const loadEmployees = useCallback(async () => {
     if (employees.length) return employees;
-    const catalog = await wisproCasoClient.loadCatalog({ allEmployees: true });
+    const catalog = await wisproCasoClient.loadCatalog();
     setEmployees(catalog.employees);
     return catalog.employees;
   }, [employees.length]);

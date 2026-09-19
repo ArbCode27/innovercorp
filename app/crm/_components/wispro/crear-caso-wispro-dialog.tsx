@@ -208,10 +208,7 @@ export const CrearCasoWisproDialog = ({
   const loadCatalog = async (refresh = false) => {
     setIsLoadingCatalog(true);
     try {
-      const catalog = await wisproCasoClient.loadCatalog({
-        refresh,
-        allEmployees: true,
-      });
+      const catalog = await wisproCasoClient.loadCatalog({ refresh });
       setCategories(catalog.categories);
       setEmployees(catalog.employees);
       setCatalogError(null);

@@ -14,6 +14,11 @@ export type WisproEmployee = {
   phone: string | null;
   phone_mobile: string | null;
   national_identification_number: string | null;
+  blocked: boolean;
+  blockedAt: string | null;
+  enabled: boolean | null;
+  gender: string | null;
+  status: string | null;
   created_at: string | null;
   updated_at: string | null;
 };
