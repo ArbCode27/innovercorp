@@ -1,5 +1,4 @@
 import type { ClientAccountStatus } from "./types";
-import type { CrmBadgeTone } from "./crm-theme";
 
 export const formatClientPlan = (plan: string | null) => {
   if (!plan || plan === "Sin asignar" || plan === "—") {
@@ -165,7 +164,7 @@ export const getManualPaymentBlockReason = (
 ) => {
   const identity = resolveLinkedClientIdentity(client);
   if (!identity.linked) {
-    return "Vincula el cliente a Wispro antes de registrar el pago";
+    return "Vincula el cliente antes de registrar el pago";
   }
   if (!identity.cedula) {
     return "El cliente vinculado no tiene cédula en la base de datos";
@@ -179,23 +178,6 @@ export const formatClientDebt = (debt: number) =>
     currency: "USD",
     minimumFractionDigits: 2,
   }).format(debt);
-
-export const getAccountTone = (
-  account: ClientAccountStatus | null | undefined,
-): CrmBadgeTone => {
-  switch (account) {
-    case "Al día":
-      return "emerald";
-    case "Con deuda":
-      return "red";
-    case "Suspendido":
-      return "amber";
-    case "Prospecto":
-      return "blue";
-    default:
-      return "neutral";
-  }
-};
 
 export const getAccountTextClass = (
   account: ClientAccountStatus | null | undefined,

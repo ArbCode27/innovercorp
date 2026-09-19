@@ -3,7 +3,7 @@
 import { Pause, Play } from "lucide-react";
 import { useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { cn } from "@/lib/utils";
-import { CRM_FOCUS_RING } from "../../_lib/crm-theme";
+
 
 interface AudioMessageProps {
   src: string;
@@ -170,7 +170,7 @@ export const AudioMessage = ({ src, caption }: AudioMessageProps) => {
         <button
           type="button"
           className={cn(
-            CRM_FOCUS_RING,
+            "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
             "flex size-10 shrink-0 items-center justify-center rounded-full transition",
             isPlaying
               ? "bg-white/85 text-crm-accent shadow-sm dark:bg-white/15 dark:text-crm-accent"
@@ -195,7 +195,7 @@ export const AudioMessage = ({ src, caption }: AudioMessageProps) => {
           aria-valuetext={`${formatAudioTime(currentTime)} de ${formatAudioTime(duration)}`}
           aria-disabled={!duration}
           className={cn(
-            CRM_FOCUS_RING,
+            "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
             "flex h-10 min-w-0 flex-1 cursor-pointer items-center rounded-xl px-0.5",
             !duration && "cursor-default opacity-60",
           )}

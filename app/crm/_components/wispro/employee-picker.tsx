@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Check, ChevronDown, UserRound } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import {
   Command,
   CommandEmpty,
@@ -12,12 +13,7 @@ import {
 } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import {
-  CRM_FOCUS_RING,
-  CRM_MENU,
-  CRM_MENU_ITEM,
-  CRM_SURFACES,
-} from "../../_lib/crm-theme";
+import { CRM_SURFACES } from "../../_lib/crm-theme";
 import { getInitials } from "../../_lib/formatters";
 import { AvatarInitials } from "../shared/avatar-initials";
 import type { WisproEmployee } from "@/lib/wispro-types";
@@ -58,16 +54,14 @@ export const EmployeePicker = ({
   return (
     <Popover modal open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <button
+        <Button
           type="button"
+          variant="outline"
           disabled={disabled}
           aria-label="Seleccionar técnico"
           aria-expanded={open}
-          className={cn(
-            CRM_FOCUS_RING,
-            CRM_SURFACES.input,
-            "flex h-11 w-full items-center gap-2 px-3 text-left text-sm transition disabled:cursor-not-allowed disabled:opacity-50",
-          )}>
+          className="h-11 w-full justify-start gap-2 px-3 text-left font-normal"
+        >
           {selected ? (
             <AvatarInitials name={selectedName || selected.name} size="sm" />
           ) : (
@@ -84,23 +78,19 @@ export const EmployeePicker = ({
             <span className={`block truncate text-[11px] ${CRM_SURFACES.textMuted}`}>
               {selectedPhone ||
                 selected?.national_identification_number ||
-                "Opcional · todos los empleados Wispro"}
+                "Opcional · todos los técnicos"}
             </span>
           </span>
           <ChevronDown
             className={`size-4 shrink-0 ${CRM_SURFACES.textMuted}`}
             aria-hidden="true"
           />
-        </button>
+        </Button>
       </PopoverTrigger>
       <PopoverContent
         align="start"
         sideOffset={6}
-        className={cn(
-          CRM_MENU,
-          CRM_SURFACES.border,
-          "z-[80] w-[var(--radix-popover-trigger-width)] p-0",
-        )}>
+        className="z-[80] w-[var(--radix-popover-trigger-width)] p-0">
         <Command className="bg-transparent">
           <CommandInput placeholder="Buscar técnico, cédula o teléfono..." />
           <CommandList className="max-h-64">
@@ -110,10 +100,7 @@ export const EmployeePicker = ({
             <CommandGroup heading="Técnicos">
               <CommandItem
                 value="sin asignar"
-                className={cn(
-                  CRM_MENU_ITEM,
-                  "data-[selected=true]:bg-crm-accent-muted data-[selected=true]:text-crm-accent-muted-foreground",
-                )}
+                className="data-[selected=true]:bg-accent data-[selected=true]:text-accent-foreground"
                 onSelect={() => {
                   onChange("");
                   setOpen(false);
@@ -142,10 +129,7 @@ export const EmployeePicker = ({
                   <CommandItem
                     key={employee.id}
                     value={`${employee.name} ${phone || ""} ${employee.national_identification_number || ""} ${getInitials(name)}`}
-                    className={cn(
-                      CRM_MENU_ITEM,
-                      "data-[selected=true]:bg-crm-accent-muted data-[selected=true]:text-crm-accent-muted-foreground",
-                    )}
+                    className="data-[selected=true]:bg-accent data-[selected=true]:text-accent-foreground"
                     onSelect={() => {
                       onChange(employee.id);
                       setOpen(false);

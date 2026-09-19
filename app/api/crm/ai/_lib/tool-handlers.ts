@@ -1479,8 +1479,10 @@ const handleFinalizeMyTicket = async (
           })),
           hint:
             matches.length === 0
-              ? "Ese número no está en tus pendientes. Pide el número correcto."
-              : "Hay varios tickets. Pregunta cuál public_id cerrar y vuelve a llamar la tool.",
+              ? pending.length === 1
+                ? "No hubo match de nombre/número, pero solo tiene 1 pendiente. Si la intención es cerrar, vuelve a llamar sin filtro o con ese public_id. No ofrezcas el listado."
+                : "No hay match. Pregunta el nombre o el # en una frase. No reenvíes el listado ni fotos."
+              : "Hay varios tickets. Pregunta cuál nombre o public_id, en una frase. No reenvíes el listado. Vuelve a llamar la tool.",
         },
       };
     }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { CheckCircle2, ExternalLink, RefreshCw, UserRoundPen } from "lucide-react";
+import { CheckCircle2, ExternalLink, Plus, RefreshCw, UserRoundPen } from "lucide-react";
 import { toast } from "sonner";
 import {
   Table,
@@ -19,9 +19,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { CRM_DIALOG, CRM_SURFACES, CRM_TABLE } from "../../_lib/crm-theme";
-import { CrmButton } from "../shared/crm-button";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { CRM_SURFACES } from "../../_lib/crm-theme";
 import { EmployeePicker } from "../wispro/employee-picker";
+import { CrearCasoWisproDialog } from "../wispro/crear-caso-wispro-dialog";
 import { wisproCasoClient } from "../../_lib/wispro-caso-client";
 import type { CrmWisproCaso, WisproEmployee } from "@/lib/wispro-types";
 import { formatCrmDate } from "../../_lib/formatters";
@@ -48,6 +50,7 @@ export const WisproIssuesPanel = () => {
   const [finalizeCaso, setFinalizeCaso] = useState<CrmWisproCaso | null>(null);
   const [reassignCaso, setReassignCaso] = useState<CrmWisproCaso | null>(null);
   const [reassignEmployeeId, setReassignEmployeeId] = useState("");
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
 
   const loadCasos = useCallback(async () => {
     setIsLoading(true);
@@ -98,10 +101,10 @@ export const WisproIssuesPanel = () => {
       if (result.orden?.ok === false) {
         toast.warning(
           result.orden.error ||
-            "El ticket se cerró en CRM y Wispro, pero la orden no se pudo finalizar.",
+            "El ticket se cerró, pero la orden no se pudo finalizar.",
         );
       } else {
-        toast.success("Ticket finalizado en CRM y Wispro.");
+        toast.success("Ticket finalizado.");
       }
       setFinalizeCaso(null);
     } catch (finalizeError) {
@@ -143,7 +146,7 @@ export const WisproIssuesPanel = () => {
         employeeId: reassignEmployeeId,
       });
       if (result.caso) replaceCaso(result.caso);
-      toast.success("Técnico reasignado en CRM y Wispro.");
+      toast.success("Técnico reasignado.");
       setReassignCaso(null);
     } catch (reassignError) {
       toast.error(
@@ -161,21 +164,30 @@ export const WisproIssuesPanel = () => {
       <div className="flex items-center justify-between gap-3">
         <div>
           <h3 className={`text-base font-semibold ${CRM_SURFACES.textPrimary}`}>
-            Tickets Wispro
+            Tickets
           </h3>
           <p className={`text-xs ${CRM_SURFACES.textMuted}`}>
-            Ficha local del chat: fachada, Maps y técnico. Nova usa esta misma ficha.
+            Foto de fachada, Maps y técnico. Nova usa esta misma lista.
           </p>
         </div>
-        <CrmButton
-          type="button"
-          variant="secondary"
-          size="sm"
-          onClick={() => void loadCasos()}
-          disabled={isLoading}>
-          <RefreshCw className="size-3.5" />
-          {isLoading ? "Actualizando..." : "Actualizar"}
-        </CrmButton>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => setIsCreateOpen(true)}>
+            <Plus className="size-3.5" />
+            Nuevo ticket
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={() => void loadCasos()}
+            disabled={isLoading}>
+            <RefreshCw className="size-3.5" />
+            {isLoading ? "Actualizando..." : "Actualizar"}
+          </Button>
+        </div>
       </div>
 
       {error ? (
@@ -184,7 +196,7 @@ export const WisproIssuesPanel = () => {
         </p>
       ) : null}
 
-      <div className={CRM_TABLE}>
+      <Card className="overflow-hidden py-0">
         <div className="overflow-x-auto">
           <Table className="min-w-[1080px]">
             <TableHeader>
@@ -256,7 +268,7 @@ export const WisproIssuesPanel = () => {
                       <TableCell>
                         {open ? (
                           <div className="flex flex-wrap gap-2">
-                            <CrmButton
+                            <Button
                               type="button"
                               variant="success"
                               size="sm"
@@ -265,8 +277,8 @@ export const WisproIssuesPanel = () => {
                               onClick={() => setFinalizeCaso(caso)}>
                               <CheckCircle2 className="size-3.5" />
                               Finalizar
-                            </CrmButton>
-                            <CrmButton
+                            </Button>
+                            <Button
                               type="button"
                               variant="secondary"
                               size="sm"
@@ -275,7 +287,7 @@ export const WisproIssuesPanel = () => {
                               onClick={() => void handleOpenReassign(caso)}>
                               <UserRoundPen className="size-3.5" />
                               Reasignar
-                            </CrmButton>
+                            </Button>
                           </div>
                         ) : (
                           <span className={CRM_SURFACES.textMuted}>—</span>
@@ -291,21 +303,21 @@ export const WisproIssuesPanel = () => {
                     className={`h-20 text-center ${CRM_SURFACES.textMuted}`}>
                     {isLoading
                       ? "Cargando tickets..."
-                      : "Todavía no hay fichas locales. Crea el ticket desde el chat del cliente."}
+                      : "Todavía no hay tickets. Crea uno con Nuevo ticket."}
                   </TableCell>
                 </TableRow>
               )}
             </TableBody>
           </Table>
         </div>
-      </div>
+      </Card>
 
       <Dialog
         open={Boolean(finalizeCaso)}
         onOpenChange={(open) => {
           if (!open) setFinalizeCaso(null);
         }}>
-        <DialogContent className={CRM_DIALOG}>
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>Finalizar ticket</DialogTitle>
             <DialogDescription>
@@ -313,24 +325,24 @@ export const WisproIssuesPanel = () => {
               {finalizeCaso?.wisproPublicId != null
                 ? `#${finalizeCaso.wisproPublicId}`
                 : ""}{" "}
-              en el CRM y en Wispro.
+              en el CRM.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="mt-4 gap-2">
-            <CrmButton
+            <Button
               type="button"
               variant="secondary"
               onClick={() => setFinalizeCaso(null)}
               disabled={Boolean(busyIssueId)}>
               Cancelar
-            </CrmButton>
-            <CrmButton
+            </Button>
+            <Button
               type="button"
               variant="success"
               onClick={() => void handleFinalize()}
               disabled={Boolean(busyIssueId)}>
               {busyIssueId ? "Finalizando..." : "Finalizar"}
-            </CrmButton>
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -340,7 +352,7 @@ export const WisproIssuesPanel = () => {
         onOpenChange={(open) => {
           if (!open) setReassignCaso(null);
         }}>
-        <DialogContent className={CRM_DIALOG}>
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>Reasignar técnico</DialogTitle>
             <DialogDescription>
@@ -348,7 +360,7 @@ export const WisproIssuesPanel = () => {
               {reassignCaso?.wisproPublicId != null
                 ? `#${reassignCaso.wisproPublicId}`
                 : ""}{" "}
-              quedará asignado al técnico elegido en el CRM y en Wispro.
+              quedará asignado al técnico elegido.
             </DialogDescription>
           </DialogHeader>
           <div className="mt-4">
@@ -360,22 +372,28 @@ export const WisproIssuesPanel = () => {
             />
           </div>
           <DialogFooter className="mt-4 gap-2">
-            <CrmButton
+            <Button
               type="button"
               variant="secondary"
               onClick={() => setReassignCaso(null)}
               disabled={Boolean(busyIssueId)}>
               Cancelar
-            </CrmButton>
-            <CrmButton
+            </Button>
+            <Button
               type="button"
               onClick={() => void handleReassign()}
               disabled={Boolean(busyIssueId) || !reassignEmployeeId}>
               {busyIssueId ? "Reasignando..." : "Reasignar"}
-            </CrmButton>
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <CrearCasoWisproDialog
+        open={isCreateOpen}
+        onOpenChange={setIsCreateOpen}
+        onCreated={() => void loadCasos()}
+      />
     </section>
   );
 };

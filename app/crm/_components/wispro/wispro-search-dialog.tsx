@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { CrmButton } from "../shared/crm-button";
+import { Button } from "@/components/ui/button";
 import { LoadingState } from "../shared/loading-state";
 import {
   AlertDialog,
@@ -23,7 +23,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { CRM_DIALOG, CRM_BADGE_TONES, CRM_SURFACES } from "../../_lib/crm-theme";
+import { Badge } from "@/components/ui/badge";
+import { CRM_SURFACES } from "../../_lib/crm-theme";
 import type { WisproCustomer, WisproSearchResult } from "../../_lib/types";
 import { wisproService } from "../../_lib/wispro-service";
 import { formatClientDebt } from "../../_lib/client-profile-utils";
@@ -108,7 +109,7 @@ export const WisproSearchDialog = ({
         setError("No se encontró ningún cliente con ese documento.");
       }
     } catch (searchError) {
-      setError(getErrorMessage(searchError, "Error al consultar Wispro"));
+      setError(getErrorMessage(searchError, "Error al consultar el abonado"));
     } finally {
       setIsSearching(false);
     }
@@ -145,21 +146,21 @@ export const WisproSearchDialog = ({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className={CRM_DIALOG}>
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {isRelink ? "Cambiar vinculación Wispro" : "Buscar cliente en Wispro"}
+              {isRelink ? "Cambiar vinculación" : "Buscar cliente"}
             </DialogTitle>
             <DialogDescription className={CRM_SURFACES.textMuted}>
               {isRelink
-                ? "Busca por cédula o RIF (solo números). El chat de WhatsApp se mantiene; solo se actualiza la ficha Wispro."
+                ? "Busca por cédula o RIF (solo números). El chat de WhatsApp se mantiene; solo se actualiza la ficha del abonado."
                 : "Consulta por cédula o RIF (solo números, sin V ni J) y asocia el resultado a la conversación activa."}
             </DialogDescription>
           </DialogHeader>
 
           {isRelink && currentLink ? (
             <div
-              className={`rounded-2xl border px-3 py-2 text-xs ${CRM_SURFACES.border} ${CRM_SURFACES.input} ${CRM_SURFACES.textSecondary}`}>
+              className={`rounded-2xl border px-3 py-2 text-xs ${CRM_SURFACES.border}  ${CRM_SURFACES.textSecondary}`}>
               Vinculación actual:{" "}
               <span className={`font-medium ${CRM_SURFACES.textPrimary}`}>
                 {currentLink.name}
@@ -171,13 +172,13 @@ export const WisproSearchDialog = ({
           <form onSubmit={handleSearch} className="space-y-4">
             <div className="space-y-2">
               <label
-                htmlFor="wispro-cedula"
+                htmlFor="client-cedula"
                 className={`text-xs font-medium uppercase tracking-wide ${CRM_SURFACES.textLabel}`}>
                 Número de cédula o RIF
               </label>
               <div className="flex gap-2">
                 <Input
-                  id="wispro-cedula"
+                  id="client-cedula"
                   value={cedula}
                   onChange={(event) =>
                     setCedula(event.target.value.replace(/\D/g, ""))
@@ -186,20 +187,19 @@ export const WisproSearchDialog = ({
                   inputMode="numeric"
                   autoComplete="off"
                   disabled={isSearching || isAssociating}
-                  className={`${CRM_SURFACES.border} ${CRM_SURFACES.input} ${CRM_SURFACES.textPrimary}`}
                 />
-                <CrmButton
+                <Button
                   type="submit"
                   disabled={isSearching || isAssociating}
-                  aria-label="Buscar en Wispro">
+                  aria-label="Buscar cliente">
                   <Search className="size-4" aria-hidden="true" />
                   Buscar
-                </CrmButton>
+                </Button>
               </div>
             </div>
           </form>
 
-          {isSearching ? <LoadingState label="Consultando Wispro..." /> : null}
+          {isSearching ? <LoadingState label="Buscando cliente..." /> : null}
 
           {error ? (
             <p className="text-sm text-red-600 dark:text-red-300" role="alert">
@@ -208,7 +208,7 @@ export const WisproSearchDialog = ({
           ) : null}
 
           {results.length ? (
-            <ul className="space-y-2" aria-label="Resultados de Wispro">
+            <ul className="space-y-2" aria-label="Resultados de clientes">
               {results.map((result) => (
                 <li key={result.customer.id}>
                   <button
@@ -238,10 +238,9 @@ export const WisproSearchDialog = ({
                       Estado: {result.invoicing.accountStatus}
                       {result.invoicing.serviceSuspended ? " (suspendido)" : ""}
                     </p>
-                    <span
-                      className={`mt-2 inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${CRM_BADGE_TONES.emerald}`}>
+                    <Badge variant="success" className="mt-2">
                       {isRelink ? "Haz clic para cambiar vinculación" : "Haz clic para asociar"}
-                    </span>
+                    </Badge>
                   </button>
                 </li>
               ))}
@@ -255,13 +254,13 @@ export const WisproSearchDialog = ({
           ) : null}
 
           <DialogFooter>
-            <CrmButton
+            <Button
               type="button"
               variant="secondary"
               onClick={() => onOpenChange(false)}
               disabled={isAssociating}>
               Cerrar
-            </CrmButton>
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -271,10 +270,10 @@ export const WisproSearchDialog = ({
         onOpenChange={(nextOpen) => {
           if (!nextOpen && !isAssociating) setPendingResult(null);
         }}>
-        <AlertDialogContent className={CRM_DIALOG}>
+        <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className={CRM_SURFACES.textPrimary}>
-              ¿Reemplazar vinculación Wispro?
+              ¿Reemplazar vinculación?
             </AlertDialogTitle>
             <AlertDialogDescription className={CRM_SURFACES.textMuted}>
               Vas a reemplazar{" "}
@@ -289,7 +288,7 @@ export const WisproSearchDialog = ({
                   ? ` (${pendingResult.customer.national_identification_number})`
                   : ""}
               </strong>
-              . El chat de WhatsApp se mantiene; solo cambia la ficha Wispro.
+              . El chat de WhatsApp se mantiene; solo cambia la ficha del abonado.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

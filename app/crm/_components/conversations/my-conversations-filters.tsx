@@ -45,7 +45,7 @@ export const MyConversationsFilters = ({
           className={cn(
             "pl-9",
             CRM_SURFACES.border,
-            CRM_SURFACES.input,
+
             CRM_SURFACES.textPrimary,
             CRM_SURFACES.placeholder,
           )}

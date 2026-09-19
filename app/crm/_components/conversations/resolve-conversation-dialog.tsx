@@ -10,7 +10,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { CRM_DIALOG, CRM_SURFACES } from "../../_lib/crm-theme";
+import { CRM_SURFACES } from "../../_lib/crm-theme";
 
 interface ResolveConversationDialogProps {
   open: boolean;
@@ -34,7 +34,7 @@ export const ResolveConversationDialog = ({
 
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent className={CRM_DIALOG}>
+      <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle className={CRM_SURFACES.textPrimary}>
             ¿Resolver conversación?

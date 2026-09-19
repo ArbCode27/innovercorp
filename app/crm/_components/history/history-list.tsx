@@ -4,7 +4,7 @@ import { ChevronLeft, ChevronRight, History } from "lucide-react";
 import type { HistoryDateGroup } from "../../_lib/history-utils";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
 import { EmptyState } from "../shared/empty-state";
-import { CrmButton } from "../shared/crm-button";
+import { Button } from "@/components/ui/button";
 import { HistoryListItem } from "./history-list-item";
 
 interface HistoryListProps {
@@ -91,7 +91,7 @@ export const HistoryList = ({
           {fromItem}–{toItem} de {total}
         </p>
         <div className="flex items-center gap-1">
-          <CrmButton
+          <Button
             type="button"
             variant="ghost"
             size="sm"
@@ -99,11 +99,11 @@ export const HistoryList = ({
             disabled={!canPrev || isRefreshing}
             aria-label="Página anterior">
             <ChevronLeft className="size-4" />
-          </CrmButton>
+          </Button>
           <span className={`min-w-12 text-center text-[11px] ${CRM_SURFACES.textSecondary}`}>
             {page}/{pageCount}
           </span>
-          <CrmButton
+          <Button
             type="button"
             variant="ghost"
             size="sm"
@@ -111,7 +111,7 @@ export const HistoryList = ({
             disabled={!canNext || isRefreshing}
             aria-label="Página siguiente">
             <ChevronRight className="size-4" />
-          </CrmButton>
+          </Button>
         </div>
       </nav>
     </div>

@@ -10,7 +10,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { CRM_DIALOG, CRM_SURFACES } from "../../_lib/crm-theme";
+import { CRM_SURFACES } from "../../_lib/crm-theme";
 
 export type OpenClientChatPrompt = {
   conversationId: number;
@@ -40,7 +40,7 @@ export const OpenClientChatDialog = ({
 
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent className={CRM_DIALOG}>
+      <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle className={CRM_SURFACES.textPrimary}>
             Pago aprobado
@@ -50,7 +50,7 @@ export const OpenClientChatDialog = ({
             <span className="font-medium text-slate-800 dark:text-slate-200">
               {clientName}
             </span>{" "}
-            se registró correctamente en Wispro. ¿Quieres abrir el chat del
+            se registró correctamente. ¿Quieres abrir el chat del
             cliente?
           </AlertDialogDescription>
         </AlertDialogHeader>

@@ -21,7 +21,7 @@ import type {
 } from "../../_lib/office-hours";
 import { isAdminRole } from "../../_lib/agent-role-utils";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
-import { CrmButton } from "../shared/crm-button";
+import { Button } from "@/components/ui/button";
 import { OfficeHoursSettingsSection } from "./office-hours-settings-section";
 import { AiRecoverySettingsSection } from "./ai-recovery-settings-section";
 import { AppearanceSettingsSection } from "./appearance-settings-section";
@@ -310,20 +310,20 @@ export const SettingsView = ({
             </div>
             {isAdmin ? (
               <div className="flex flex-wrap gap-2">
-                <CrmButton
+                <Button
                   type="button"
-                  variant="primary"
+                  variant="default"
                   disabled={!isDirty || isOverLimit || isSavingPrompt}
                   onClick={() => void handleSavePrompt()}>
                   {isSavingPrompt ? "Guardando…" : "Guardar prompt"}
-                </CrmButton>
-                <CrmButton
+                </Button>
+                <Button
                   type="button"
                   variant="secondary"
                   disabled={isSavingPrompt || isUsingDefault}
                   onClick={() => void handleRestoreDefault()}>
                   Restaurar predeterminado
-                </CrmButton>
+                </Button>
               </div>
             ) : null}
           </div>
@@ -336,7 +336,7 @@ export const SettingsView = ({
             value={draftPrompt}
             onChange={(event) => setDraftPrompt(event.target.value)}
             disabled={!isAdmin || isSavingPrompt}
-            className={`crm-scrollbar mt-4 h-56 resize-none overflow-y-auto font-mono text-xs leading-relaxed md:h-64 ${CRM_SURFACES.input}`}
+            className={`crm-scrollbar mt-4 h-56 resize-none overflow-y-auto font-mono text-xs leading-relaxed md:h-64 `}
             aria-describedby="crm-ai-system-prompt-help"
           />
           <div
@@ -351,7 +351,7 @@ export const SettingsView = ({
             </span>
             {showParserWarning ? (
               <span className="text-amber-600 dark:text-amber-400">
-                Incluye referencias a tools (lookup_wispro, submit_payment,
+                Incluye referencias a tools (lookup, submit_payment,
                 escalate_to_human) para mejores resultados.
               </span>
             ) : null}
@@ -373,15 +373,15 @@ export const SettingsView = ({
                 Mensaje de pago aprobado
               </h3>
               <p className={`mt-1 text-sm ${CRM_SURFACES.textMuted}`}>
-                Se envía automáticamente al cliente cuando Wispro confirma el pago.
+                Se envía automáticamente al cliente cuando se confirma el pago.
                 Usa <code>{"{{mes}}"}</code> para insertar el mes del pago.
               </p>
             </div>
             {isAdmin ? (
               <div className="flex flex-wrap gap-2">
-                <CrmButton
+                <Button
                   type="button"
-                  variant="primary"
+                  variant="default"
                   disabled={
                     !isPaymentMessageDirty ||
                     isPaymentOverLimit ||
@@ -389,14 +389,14 @@ export const SettingsView = ({
                   }
                   onClick={() => void handleSavePaymentMessage()}>
                   {isSavingPaymentMessage ? "Guardando…" : "Guardar mensaje"}
-                </CrmButton>
-                <CrmButton
+                </Button>
+                <Button
                   type="button"
                   variant="secondary"
                   disabled={isSavingPaymentMessage || isUsingDefaultPaymentMessage}
                   onClick={() => void handleRestoreDefaultPaymentMessage()}>
                   Restaurar predeterminado
-                </CrmButton>
+                </Button>
               </div>
             ) : null}
           </div>
@@ -409,7 +409,7 @@ export const SettingsView = ({
             value={draftPaymentMessage}
             onChange={(event) => setDraftPaymentMessage(event.target.value)}
             disabled={!isAdmin || isSavingPaymentMessage}
-            className={`crm-scrollbar mt-4 h-56 resize-none overflow-y-auto text-sm leading-relaxed md:h-64 ${CRM_SURFACES.input}`}
+            className={`crm-scrollbar mt-4 h-56 resize-none overflow-y-auto text-sm leading-relaxed md:h-64 `}
             aria-describedby="crm-payment-success-message-help"
           />
           <div

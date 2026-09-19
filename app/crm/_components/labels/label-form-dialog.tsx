@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { CrmButton } from "../shared/crm-button";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -12,7 +12,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label as UiLabel } from "@/components/ui/label";
 import { CRM_COLORS } from "../../_lib/constants";
-import { CRM_DIALOG, CRM_SURFACES } from "../../_lib/crm-theme";
 import type { CreateLabelInput } from "../../_lib/types";
 
 interface LabelFormDialogProps {
@@ -47,7 +46,7 @@ export const LabelFormDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className={CRM_DIALOG}>
+      <DialogContent>
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>Nueva etiqueta</DialogTitle>
@@ -60,7 +59,7 @@ export const LabelFormDialog = ({
                 value={name}
                 onChange={(event) => setName(event.target.value)}
                 placeholder="ej: pago pendiente, VIP, instalación..."
-                className={`${CRM_SURFACES.border} ${CRM_SURFACES.input}`}
+               
               />
             </div>
             <div className="space-y-2">
@@ -82,10 +81,10 @@ export const LabelFormDialog = ({
             </div>
           </div>
           <DialogFooter className="mt-5">
-            <CrmButton type="button" variant="secondary" onClick={() => onOpenChange(false)}>
+            <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>
               Cancelar
-            </CrmButton>
-            <CrmButton type="submit">Crear etiqueta</CrmButton>
+            </Button>
+            <Button type="submit">Crear etiqueta</Button>
           </DialogFooter>
         </form>
       </DialogContent>

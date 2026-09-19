@@ -26,7 +26,7 @@ export const wisproService = {
     const payload = (await response.json()) as WisproApiPayload;
 
     if (!response.ok) {
-      parseApiError(payload, "Error al consultar Wispro");
+      parseApiError(payload, "Error al consultar el abonado");
     }
 
     return payload.data || [];
@@ -82,7 +82,7 @@ export const wisproService = {
     const payload = (await response.json()) as WisproApiPayload;
 
     if (!response.ok) {
-      parseApiError(payload, "No se pudo desvincular Wispro");
+      parseApiError(payload, "No se pudo desvincular el cliente");
     }
 
     if (!payload.client) {
@@ -124,7 +124,7 @@ export const wisproService = {
     }
 
     if (!payload.validUntil || !payload.contractId || !payload.promise?.id) {
-      throw new Error("Wispro no devolvió los datos de la promesa");
+      throw new Error("No se recibieron los datos de la promesa");
     }
 
     return {

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Plus } from "lucide-react";
-import { CrmButton } from "../shared/crm-button";
+import { Button } from "@/components/ui/button";
 import type { Client, CreateClientInput, Ticket } from "../../_lib/types";
 import { ClientFormDialog } from "./client-form-dialog";
 import { ClientsStats } from "./clients-stats";
@@ -25,10 +25,10 @@ export const ClientsView = ({ clients, tickets, onCreateClient }: ClientsViewPro
           <h2 className={`text-xl font-semibold md:text-2xl ${CRM_SURFACES.textPrimary}`}>Clientes</h2>
           <p className={`text-sm ${CRM_SURFACES.textMuted}`}>Base de datos de suscriptores</p>
         </div>
-        <CrmButton type="button" onClick={() => setIsDialogOpen(true)} className="w-full sm:w-auto">
+        <Button type="button" onClick={() => setIsDialogOpen(true)} className="w-full sm:w-auto">
           <Plus className="mr-2 size-4" aria-hidden="true" />
           Nuevo cliente
-        </CrmButton>
+        </Button>
       </div>
       <div className="space-y-5">
         <ClientsStats clients={clients} tickets={tickets} />

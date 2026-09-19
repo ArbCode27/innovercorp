@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Plus } from "lucide-react";
-import { CrmButton } from "../shared/crm-button";
+import { Button } from "@/components/ui/button";
 import type { Agent, Client, CreateTicketInput, Ticket } from "../../_lib/types";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
 import { TicketFormDialog } from "./ticket-form-dialog";
@@ -34,10 +34,10 @@ export const TicketsView = ({
           <h2 className={`text-xl font-semibold md:text-2xl ${CRM_SURFACES.textPrimary}`}>Tickets</h2>
           <p className={`text-sm ${CRM_SURFACES.textMuted}`}>Seguimiento de casos</p>
         </div>
-        <CrmButton type="button" onClick={() => setIsDialogOpen(true)} className="w-full sm:w-auto">
+        <Button type="button" onClick={() => setIsDialogOpen(true)} className="w-full sm:w-auto">
           <Plus className="mr-2 size-4" aria-hidden="true" />
           Nuevo ticket interno
-        </CrmButton>
+        </Button>
       </div>
       <div className="space-y-8">
         <WisproIssuesPanel />
@@ -47,7 +47,7 @@ export const TicketsView = ({
               Tickets internos CRM
             </h3>
             <p className={`text-xs ${CRM_SURFACES.textMuted}`}>
-              Los tickets de mesa de ayuda de Wispro (con foto, Maps y técnico) están arriba.
+              Los tickets de campo (foto, Maps y técnico) están arriba.
             </p>
           </div>
           <TicketsStats tickets={tickets} />

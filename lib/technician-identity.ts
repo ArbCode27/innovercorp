@@ -43,7 +43,7 @@ const TECHNICIAN_ROLE_RE =
   /\b(soy (el |la )?t[eé]cnic[oa]s?|mis (tickets|pendientes|casos)|mi ruta)\b/i;
 
 const OFFER_ACCEPT_RE =
-  /^(s[ií]+|dale|ok+|okay|va|claro|listo|por favor)([!.,\s].*)?$/i;
+  /^(s[ií]+|dale|ok+|okay|va|claro|por favor)([!.,\s].*)?$/i;
 
 const OFFER_ACCEPT_ACTION_RE =
   /\b(env[ií]a(me|los|las)?|p[aá]sa(me|los|las)?|m[aá]nda(me|los|las)?|d[aá]me(los|las)?)\b/i;
@@ -61,6 +61,11 @@ const FINALIZE_LEADING_FILLER_RE =
   /^(?:el|la|los|las|de|del|al|a|un|una|mi|su|este|esta|ese|esa|por\s+favor|please)[\s,]+/i;
 
 const FINALIZE_NAME_RE = /^[\p{L}][\p{L}\s.'’-]{1,79}$/u;
+
+const TECHNICIAN_LIST_OFFER_RE = /listado de tickets pendientes/i;
+
+const TECHNICIAN_GREETING_RE =
+  /^(hola|buenas|buen(os|as)\s+(d[ií]as|tardes|noches)|saludos)([!.,\s].*)?$/i;
 
 const stripFinalizeFillers = (value: string) => {
   let rest = value.replace(/\s+/g, " ").trim();
@@ -110,11 +115,35 @@ export const looksLikeTechnicianOfferAccept = (
   return OFFER_ACCEPT_RE.test(text) || OFFER_ACCEPT_ACTION_RE.test(text);
 };
 
+export const looksLikeTechnicianListOffer = (
+  value: string | null | undefined,
+) => TECHNICIAN_LIST_OFFER_RE.test(String(value || ""));
+
+export const looksLikeBareTechnicianGreeting = (
+  value: string | null | undefined,
+) => {
+  const text = String(value || "").trim();
+  if (!text || text.length > 40) return false;
+  return TECHNICIAN_GREETING_RE.test(text);
+};
+
 export const formatTechnicianWelcome = (name: string | null | undefined) =>
   `Hola ${technicianFirstName(name)}. Te identifiqué como técnico. ¿Quieres que te envíe tu listado de tickets pendientes?`;
 
-export const formatTechnicianOffer = (name: string | null | undefined) =>
-  `Hola ${technicianFirstName(name)}. ¿Quieres que te envíe tu listado de tickets pendientes?`;
+export const formatTechnicianAgentQueue = (
+  items: Array<{
+    publicId: number | null;
+    clientName: string | null;
+    cause: string | null;
+  }>,
+) =>
+  items
+    .slice(0, 8)
+    .map(
+      (item) =>
+        `- #${item.publicId ?? "s/n"} · ${item.clientName || "sin nombre"} · ${item.cause || "sin causa"}`,
+    )
+    .join("\n");
 
 export const looksLikeCustomerPaymentOverride = (
   value: string | null | undefined,
@@ -201,13 +230,36 @@ export const shouldDeliverTechnicianTickets = (input: {
   justVerified: boolean;
   inboundText: string | null | undefined;
   inboundIsCedula: boolean;
+  listOfferPending?: boolean;
 }) => {
   if (looksLikeTechnicianFinalizeRequest(input.inboundText)) return false;
   if (looksLikeTechnicianTicketRequest(input.inboundText)) return true;
   if (looksLikeTechnicianNextPage(input.inboundText)) return true;
   if (looksLikeTechnicianResend(input.inboundText)) return true;
-  if (looksLikeTechnicianOfferAccept(input.inboundText)) return true;
+  if (looksLikeTechnicianOfferAccept(input.inboundText)) {
+    return Boolean(input.listOfferPending);
+  }
   if (input.inboundIsCedula && !input.justVerified) return true;
+  return false;
+};
+
+export const shouldUseCannedTechnicianWelcome = (input: {
+  justVerified: boolean;
+  inboundText: string | null | undefined;
+  inboundIsCedula: boolean;
+}) => {
+  if (!input.justVerified) return false;
+  if (
+    shouldDeliverTechnicianTickets({
+      ...input,
+      listOfferPending: false,
+    })
+  ) {
+    return false;
+  }
+  if (input.inboundIsCedula) return true;
+  const text = String(input.inboundText || "").trim();
+  if (!text || looksLikeBareTechnicianGreeting(text)) return true;
   return false;
 };
 

@@ -12,7 +12,7 @@ import type {
 } from "../../_lib/types";
 import { formatCrmDate } from "../../_lib/formatters";
 import { AvatarInitials } from "../shared/avatar-initials";
-import { CrmButton } from "../shared/crm-button";
+import { Button } from "@/components/ui/button";
 import { LabelChip } from "../shared/label-chip";
 import { StatusBadge } from "../shared/status-badge";
 import { ClientProfileSection } from "./client-profile-section";
@@ -81,13 +81,13 @@ export const ConversationDetails = ({
         ) : (
           <div className="space-y-3">
             <p className="text-sm text-amber-700 dark:text-amber-300">
-              Número desconocido. Busca al cliente en Wispro para asociarlo a esta
+              Número desconocido. Busca al cliente por cédula o nombre para asociarlo a esta
               conversación.
             </p>
             {onOpenWispro ? (
-              <CrmButton type="button" variant="secondary" size="sm" onClick={onOpenWispro}>
-                Buscar en Wispro
-              </CrmButton>
+              <Button type="button" variant="secondary" size="sm" onClick={onOpenWispro}>
+                Buscar cliente
+              </Button>
             ) : null}
           </div>
         )}
@@ -139,14 +139,14 @@ export const ConversationDetails = ({
           <p className={`text-xs ${CRM_SURFACES.textLabel}`}>Sin tickets activos</p>
         )}
         {onOpenCreateCaso ? (
-          <CrmButton
+          <Button
             type="button"
             variant="secondary"
             size="sm"
             className="mt-2 w-full"
             onClick={onOpenCreateCaso}>
-            Crear ticket Wispro
-          </CrmButton>
+            Crear ticket
+          </Button>
         ) : null}
       </section>
 

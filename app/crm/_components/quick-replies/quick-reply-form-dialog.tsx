@@ -11,8 +11,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label as UiLabel } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { CrmButton } from "../shared/crm-button";
-import { CRM_DIALOG, CRM_SURFACES } from "../../_lib/crm-theme";
+import { Button } from "@/components/ui/button";
 import type { CreateQuickReplyInput, QuickReply, UpdateQuickReplyInput } from "../../_lib/types";
 
 interface QuickReplyFormDialogProps {
@@ -72,7 +71,7 @@ export const QuickReplyFormDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className={CRM_DIALOG}>
+      <DialogContent>
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>
@@ -87,7 +86,7 @@ export const QuickReplyFormDialog = ({
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
                 placeholder="Ej: saludo inicial"
-                className={`${CRM_SURFACES.border} ${CRM_SURFACES.input}`}
+               
               />
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
@@ -98,7 +97,7 @@ export const QuickReplyFormDialog = ({
                   value={shortcut}
                   onChange={(event) => setShortcut(event.target.value)}
                   placeholder="saludo"
-                  className={`${CRM_SURFACES.border} ${CRM_SURFACES.input}`}
+                 
                 />
               </div>
               <div className="space-y-2">
@@ -108,7 +107,7 @@ export const QuickReplyFormDialog = ({
                   value={category}
                   onChange={(event) => setCategory(event.target.value)}
                   placeholder="Atención"
-                  className={`${CRM_SURFACES.border} ${CRM_SURFACES.input}`}
+                 
                 />
               </div>
             </div>
@@ -119,17 +118,17 @@ export const QuickReplyFormDialog = ({
                 value={content}
                 onChange={(event) => setContent(event.target.value)}
                 placeholder="Mensaje que se insertará en el chat..."
-                className={`min-h-28 ${CRM_SURFACES.border} ${CRM_SURFACES.input}`}
+                className="min-h-28"
               />
             </div>
           </div>
           <DialogFooter className="mt-5">
-            <CrmButton type="button" variant="secondary" onClick={() => onOpenChange(false)}>
+            <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>
               Cancelar
-            </CrmButton>
-            <CrmButton type="submit">
+            </Button>
+            <Button type="submit">
               {editingQuickReply ? "Guardar cambios" : "Crear respuesta"}
-            </CrmButton>
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

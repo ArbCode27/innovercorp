@@ -18,7 +18,7 @@ import {
   DrawerTitle,
   DrawerTrigger,
 } from "@/components/ui/drawer";
-import { CrmButton } from "../shared/crm-button";
+import { Button } from "@/components/ui/button";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
 
 interface ConversationActionsDrawerProps {
@@ -48,14 +48,14 @@ export const ConversationActionsDrawer = ({
 }: ConversationActionsDrawerProps) => (
   <Drawer>
     <DrawerTrigger asChild>
-      <CrmButton
+      <Button
         type="button"
         variant="ghost"
         size="icon"
         className="md:hidden"
         aria-label="Abrir acciones de conversación">
         <EllipsisVertical className="size-4" aria-hidden="true" />
-      </CrmButton>
+      </Button>
     </DrawerTrigger>
 
     <DrawerContent className={`rounded-t-3xl ${CRM_SURFACES.elevatedTranslucent} ${CRM_SURFACES.textPrimary}`}>
@@ -71,30 +71,30 @@ export const ConversationActionsDrawer = ({
       <div className="grid gap-2 p-4 pt-0">
         {isHumanMode ? (
           <DrawerClose asChild>
-            <CrmButton
+            <Button
               type="button"
-              variant="violet"
+              variant="outline"
               className="w-full justify-start"
               onClick={onReactivateBot}>
               <RotateCcw className="size-4" aria-hidden="true" />
               Reactivar bot
-            </CrmButton>
+            </Button>
           </DrawerClose>
         ) : (
           <DrawerClose asChild>
-            <CrmButton
+            <Button
               type="button"
-              variant="danger"
+              variant="destructive"
               className="w-full justify-start"
               onClick={onTakeControl}>
               <UserCheck className="size-4" aria-hidden="true" />
               Tomar control
-            </CrmButton>
+            </Button>
           </DrawerClose>
         )}
 
         <DrawerClose asChild>
-          <CrmButton
+          <Button
             type="button"
             variant="success"
             className="w-full justify-start"
@@ -102,43 +102,43 @@ export const ConversationActionsDrawer = ({
             onClick={onResolve}>
             <Check className="size-4" aria-hidden="true" />
             {isResolving ? "Archivando..." : "Resolver"}
-          </CrmButton>
+          </Button>
         </DrawerClose>
 
         <DrawerClose asChild>
-          <CrmButton
+          <Button
             type="button"
             variant="secondary"
             className="w-full justify-start"
             onClick={onOpenNote}>
             <FileText className="size-4" aria-hidden="true" />
             Agregar nota
-          </CrmButton>
+          </Button>
         </DrawerClose>
 
         {canAssignAgent ? (
           <DrawerClose asChild>
-            <CrmButton
+            <Button
               type="button"
               variant="secondary"
               className="w-full justify-start"
               onClick={onOpenAssign}>
               <UserPlus className="size-4" aria-hidden="true" />
               {assignLabel}
-            </CrmButton>
+            </Button>
           </DrawerClose>
         ) : null}
 
         {onOpenCreateCaso ? (
           <DrawerClose asChild>
-            <CrmButton
+            <Button
               type="button"
               variant="secondary"
               className="w-full justify-start"
               onClick={onOpenCreateCaso}>
               <Wrench className="size-4" aria-hidden="true" />
-              Ticket Wispro
-            </CrmButton>
+              Ticket
+            </Button>
           </DrawerClose>
         ) : null}
       </div>

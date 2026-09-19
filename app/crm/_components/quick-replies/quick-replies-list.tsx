@@ -1,7 +1,7 @@
 "use client";
 
 import { Pencil, Power, Trash2 } from "lucide-react";
-import { CrmButton } from "../shared/crm-button";
+import { Button } from "@/components/ui/button";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
 import { isAdminRole } from "../../_lib/agent-role-utils";
 import type { Agent, QuickReply } from "../../_lib/types";
@@ -49,7 +49,7 @@ export const QuickRepliesList = ({
                 </span>
               ) : null}
               {quickReply.category ? (
-                <span className={`rounded-md px-2 py-0.5 text-xs ${CRM_SURFACES.input} ${CRM_SURFACES.textSecondary}`}>
+                <span className={`rounded-md px-2 py-0.5 text-xs  ${CRM_SURFACES.textSecondary}`}>
                   {quickReply.category}
                 </span>
               ) : null}
@@ -69,30 +69,30 @@ export const QuickRepliesList = ({
 
             {isAdmin ? (
               <div className="flex flex-wrap items-center gap-2">
-                <CrmButton
+                <Button
                   type="button"
                   variant="secondary"
                   className="h-8 px-3"
                   onClick={() => onEdit(quickReply)}>
                   <Pencil className="mr-1.5 size-3.5" aria-hidden="true" />
                   Editar
-                </CrmButton>
-                <CrmButton
+                </Button>
+                <Button
                   type="button"
                   variant="ghost"
                   className="h-8 px-3"
                   onClick={() => onToggleStatus(quickReply)}>
                   <Power className="mr-1.5 size-3.5" aria-hidden="true" />
                   {quickReply.is_active ? "Desactivar" : "Activar"}
-                </CrmButton>
-                <CrmButton
+                </Button>
+                <Button
                   type="button"
                   variant="ghost"
                   className="h-8 px-3 text-red-700 hover:bg-red-50 hover:text-red-800 dark:text-red-200 dark:hover:bg-red-950/40"
                   onClick={() => onDelete(quickReply)}>
                   <Trash2 className="mr-1.5 size-3.5" aria-hidden="true" />
                   Eliminar
-                </CrmButton>
+                </Button>
               </div>
             ) : null}
           </div>

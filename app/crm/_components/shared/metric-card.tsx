@@ -1,21 +1,22 @@
-import type { LucideIcon } from "lucide-react";
-import { CRM_SURFACES } from "../../_lib/crm-theme";
+import type { LucideIcon } from "lucide-react"
+import { Card, CardContent } from "@/components/ui/card"
+import { cn } from "@/lib/utils"
 
 interface MetricCardProps {
-  title: string;
-  value: string | number;
-  description?: string;
-  icon?: LucideIcon;
-  tone?: "blue" | "green" | "amber" | "red" | "purple";
+  title: string
+  value: string | number
+  description?: string
+  icon?: LucideIcon
+  tone?: "blue" | "green" | "amber" | "red" | "purple"
 }
 
 const tones = {
-  blue: "text-blue-700 dark:text-blue-100",
-  green: "text-emerald-700 dark:text-emerald-100",
-  amber: "text-amber-700 dark:text-amber-100",
-  red: "text-red-700 dark:text-red-100",
-  purple: "text-violet-700 dark:text-violet-100",
-};
+  blue: "text-primary",
+  green: "text-success-foreground",
+  amber: "text-warning-foreground",
+  red: "text-destructive",
+  purple: "text-primary",
+}
 
 export const MetricCard = ({
   title,
@@ -24,16 +25,16 @@ export const MetricCard = ({
   icon: Icon,
   tone = "blue",
 }: MetricCardProps) => (
-  <article className={`rounded-2xl p-4 ${CRM_SURFACES.elevated} ${CRM_SURFACES.textPrimary}`}>
-    <div className="flex items-start justify-between">
+  <Card className="py-4">
+    <CardContent className="flex items-start justify-between px-4">
       <div>
-        <p className={`text-xs ${CRM_SURFACES.textMuted}`}>{title}</p>
-        <p className={`mt-1 text-2xl font-semibold ${tones[tone]}`}>{value}</p>
+        <p className="text-muted-foreground text-xs">{title}</p>
+        <p className={cn("mt-1 text-2xl font-semibold", tones[tone])}>{value}</p>
         {description ? (
-          <p className={`mt-1 text-[11px] ${CRM_SURFACES.textMuted}`}>{description}</p>
+          <p className="text-muted-foreground mt-1 text-[11px]">{description}</p>
         ) : null}
       </div>
-      {Icon ? <Icon className={`size-5 ${tones[tone]}`} aria-hidden="true" /> : null}
-    </div>
-  </article>
-);
+      {Icon ? <Icon className={cn("size-5", tones[tone])} aria-hidden="true" /> : null}
+    </CardContent>
+  </Card>
+)

@@ -1,5 +1,6 @@
 "use client";
 
+import { Card } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -8,7 +9,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { CRM_SURFACES, CRM_TABLE } from "../../_lib/crm-theme";
+import { CRM_SURFACES } from "../../_lib/crm-theme";
 import {
   canRejectPayment,
   formatPaymentAmount,
@@ -22,7 +23,7 @@ import {
 import { StatusBadge } from "../shared/status-badge";
 import { EmptyState } from "../shared/empty-state";
 import { CheckCircle2, MessageCircle, Wallet, XCircle } from "lucide-react";
-import { CrmButton } from "../shared/crm-button";
+import { Button } from "@/components/ui/button";
 
 interface PaymentsTableProps {
   payments: CrmPayment[];
@@ -58,18 +59,18 @@ export const PaymentsTable = ({
 }: PaymentsTableProps) => {
   if (!payments.length) {
     return (
-      <div className={CRM_TABLE}>
+      <Card className="overflow-hidden py-0">
         <EmptyState
           icon={Wallet}
           title="Sin comprobantes"
           description="Cuando un asesor o Nova registre un comprobante, aparecerá aquí aunque falten datos."
         />
-      </div>
+      </Card>
     );
   }
 
   return (
-    <div className={`overflow-hidden ${CRM_TABLE}`}>
+    <Card className="overflow-hidden py-0">
       <div className="overflow-x-auto">
         <Table className="min-w-[1080px]">
           <TableHeader>
@@ -156,7 +157,7 @@ export const PaymentsTable = ({
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-wrap items-center gap-2">
-                      <CrmButton
+                      <Button
                         type="button"
                         size="icon"
                         variant="ghost"
@@ -177,11 +178,11 @@ export const PaymentsTable = ({
                           onOpenChat(conversationId);
                         }}>
                         <MessageCircle className="size-4" aria-hidden="true" />
-                      </CrmButton>
+                      </Button>
 
                       {canReject ? (
                         <>
-                          <CrmButton
+                          <Button
                             type="button"
                             size="sm"
                             variant="success"
@@ -194,17 +195,17 @@ export const PaymentsTable = ({
                               aria-hidden="true"
                             />
                             Aprobar
-                          </CrmButton>
-                          <CrmButton
+                          </Button>
+                          <Button
                             type="button"
                             size="sm"
-                            variant="danger"
+                            variant="destructive"
                             disabled={isUpdating}
                             onClick={() => onReject(payment.id)}
                             aria-label={`Rechazar pago de ${clientName}`}>
                             <XCircle className="size-4" aria-hidden="true" />
                             Rechazar
-                          </CrmButton>
+                          </Button>
                         </>
                       ) : (
                         <span className={`text-xs ${CRM_SURFACES.textMuted}`}>
@@ -219,6 +220,6 @@ export const PaymentsTable = ({
           </TableBody>
         </Table>
       </div>
-    </div>
+    </Card>
   );
 };

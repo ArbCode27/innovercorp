@@ -10,9 +10,10 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { CRM_FOCUS_RING, CRM_SURFACES } from "../../_lib/crm-theme";
+import { CRM_SURFACES } from "../../_lib/crm-theme";
 import type { Label } from "../../_lib/types";
 
 interface ConversationLabelFilterProps {
@@ -35,24 +36,19 @@ export const ConversationLabelFilter = ({
   return (
     <Popover open={isLabelMenuOpen} onOpenChange={setIsLabelMenuOpen}>
       <PopoverTrigger asChild>
-        <button
+        <Button
           type="button"
+          variant="outline"
           aria-label="Filtrar por etiqueta"
-          className={cn(
-            CRM_FOCUS_RING,
-            "inline-flex h-9 w-full items-center justify-between rounded-2xl border px-3 text-sm font-medium transition",
-            "border-slate-700/70 bg-[#111827] text-slate-100 hover:border-slate-500/80",
-          )}>
+          className="h-9 w-full justify-between rounded-xl px-3 font-medium"
+        >
           <span className="truncate">
             {selectedLabel
               ? `Etiqueta: ${selectedLabel.name}`
               : "Todas las etiquetas"}
           </span>
-          <ChevronDown
-            className="size-4 shrink-0 text-slate-400"
-            aria-hidden="true"
-          />
-        </button>
+          <ChevronDown className="size-4 shrink-0 opacity-50" aria-hidden="true" />
+        </Button>
       </PopoverTrigger>
 
       <PopoverContent

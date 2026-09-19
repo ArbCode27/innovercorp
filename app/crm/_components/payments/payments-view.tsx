@@ -11,7 +11,7 @@ import type {
 } from "../../_lib/payments";
 import { formatPaymentField } from "../../_lib/payments";
 import type { Agent } from "../../_lib/types";
-import { CrmButton } from "../shared/crm-button";
+import { Button } from "@/components/ui/button";
 import { LoadingState } from "../shared/loading-state";
 import {
   PaymentsFilters,
@@ -384,7 +384,7 @@ export const PaymentsView = ({
             extracción
           </p>
         </div>
-        <CrmButton
+        <Button
           type="button"
           variant="secondary"
           onClick={() => void loadPayments("refresh")}
@@ -396,7 +396,7 @@ export const PaymentsView = ({
             aria-hidden="true"
           />
           Actualizar
-        </CrmButton>
+        </Button>
       </div>
 
       <div className="space-y-5">

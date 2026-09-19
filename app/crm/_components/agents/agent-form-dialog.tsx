@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { CrmButton } from "../shared/crm-button";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -19,7 +19,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { getInitials } from "../../_lib/formatters";
-import { CRM_DIALOG, CRM_SURFACES } from "../../_lib/crm-theme";
 import type { Agent, AgentRole, UpsertAgentInput } from "../../_lib/types";
 
 interface AgentFormDialogProps {
@@ -74,7 +73,7 @@ export const AgentFormDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className={CRM_DIALOG}>
+      <DialogContent>
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>{editingAgent ? "Editar agente" : "Nuevo agente"}</DialogTitle>
@@ -82,24 +81,24 @@ export const AgentFormDialog = ({
           <div className="mt-5 grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="agent-name">Nombre completo</Label>
-              <Input id="agent-name" value={name} onChange={(event) => setName(event.target.value)} className={`${CRM_SURFACES.border} ${CRM_SURFACES.input}`} />
+              <Input id="agent-name" value={name} onChange={(event) => setName(event.target.value)} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="agent-initials">Iniciales</Label>
-              <Input id="agent-initials" value={initials} onChange={(event) => setInitials(event.target.value)} maxLength={2} className={`${CRM_SURFACES.border} ${CRM_SURFACES.input}`} />
+              <Input id="agent-initials" value={initials} onChange={(event) => setInitials(event.target.value)} maxLength={2} />
             </div>
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="agent-email">Correo electrónico</Label>
-              <Input id="agent-email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} className={`${CRM_SURFACES.border} ${CRM_SURFACES.input}`} />
+              <Input id="agent-email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} />
             </div>
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="agent-password">Contraseña</Label>
-              <Input id="agent-password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder={editingAgent ? "Deja vacío para mantenerla" : "Mínimo 6 caracteres"} className={`${CRM_SURFACES.border} ${CRM_SURFACES.input}`} />
+              <Input id="agent-password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder={editingAgent ? "Deja vacío para mantenerla" : "Mínimo 6 caracteres"} />
             </div>
             <div className="space-y-2">
               <Label>Rol</Label>
               <Select value={role} onValueChange={(value) => setRole(value as AgentRole)}>
-                <SelectTrigger className={`w-full ${CRM_SURFACES.border} ${CRM_SURFACES.input}`}>
+                <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -110,14 +109,14 @@ export const AgentFormDialog = ({
             </div>
             <div className="space-y-2">
               <Label htmlFor="agent-max">Máx. conversaciones</Label>
-              <Input id="agent-max" type="number" min={1} max={20} value={maxConversations} onChange={(event) => setMaxConversations(event.target.value)} className={`${CRM_SURFACES.border} ${CRM_SURFACES.input}`} />
+              <Input id="agent-max" type="number" min={1} max={20} value={maxConversations} onChange={(event) => setMaxConversations(event.target.value)} />
             </div>
           </div>
           <DialogFooter className="mt-5">
-            <CrmButton type="button" variant="secondary" onClick={() => onOpenChange(false)}>
+            <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>
               Cancelar
-            </CrmButton>
-            <CrmButton type="submit">Guardar agente</CrmButton>
+            </Button>
+            <Button type="submit">Guardar agente</Button>
           </DialogFooter>
         </form>
       </DialogContent>

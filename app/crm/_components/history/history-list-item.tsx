@@ -2,12 +2,8 @@
 
 import { Archive, Bot, Headphones } from "lucide-react";
 import { cn } from "@/lib/utils";
-import {
-  CRM_BADGE_TONES,
-  CRM_FOCUS_RING,
-  CRM_HISTORY_ITEM,
-  CRM_SURFACES,
-} from "../../_lib/crm-theme";
+import { Badge } from "@/components/ui/badge";
+import { CRM_HISTORY_ITEM, CRM_SURFACES } from "../../_lib/crm-theme";
 import { formatCrmTime } from "../../_lib/formatters";
 import { getHistoryMessageCount } from "../../_lib/history-utils";
 import type { ConversationHistory } from "../../_lib/types";
@@ -33,7 +29,7 @@ export const HistoryListItem = ({
       type="button"
       onClick={() => onSelect(entry.id)}
       className={cn(
-        CRM_FOCUS_RING,
+        "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
         "group w-full rounded-2xl p-3 text-left transition",
         isActive
           ? CRM_HISTORY_ITEM.active
@@ -58,26 +54,18 @@ export const HistoryListItem = ({
           </div>
 
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
-            <span
-              className={cn(
-                "inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-medium",
-                isHuman ? CRM_BADGE_TONES.rose : CRM_BADGE_TONES.violet,
-              )}>
+            <Badge variant={isHuman ? "destructive" : "secondary"} className="gap-1 text-[10px]">
               {isHuman ? (
                 <Headphones className="size-3" aria-hidden="true" />
               ) : (
                 <Bot className="size-3" aria-hidden="true" />
               )}
               {isHuman ? "Humano" : "Bot"}
-            </span>
-            <span
-              className={cn(
-                "inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-medium",
-                CRM_BADGE_TONES.emerald,
-              )}>
+            </Badge>
+            <Badge variant="success" className="gap-1 text-[10px]">
               <Archive className="size-3" aria-hidden="true" />
               Resuelta
-            </span>
+            </Badge>
             <span className={`text-[10px] ${CRM_SURFACES.textMuted}`}>
               {getHistoryMessageCount(entry)} msg
             </span>

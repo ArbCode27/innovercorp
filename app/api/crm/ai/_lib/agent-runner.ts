@@ -28,19 +28,21 @@ import { resolveTechnicianSession } from "@/lib/crm-technicians";
 import { listOpenCasosForConversation, listPendingCasosForEmployee } from "@/lib/crm-wispro-casos";
 import { documentLast4 } from "@/lib/technician-crypto";
 import {
-  formatTechnicianOffer,
+  formatTechnicianAgentQueue,
   formatTechnicianWelcome,
   looksLikeCustomerPaymentOverride,
-  looksLikeTechnicianFinalizeRequest,
+  looksLikeTechnicianListOffer,
   looksLikeTechnicianRoleClaim,
   looksLikeTechnicianTicketRequest,
   shouldDeliverTechnicianTickets,
+  shouldUseCannedTechnicianWelcome,
 } from "@/lib/technician-identity";
 import { deliverTechnicianPendingTickets, TECHNICIAN_TOOL_NAMES } from "@/lib/technician-tickets";
 import {
   collectBurstInbound,
   extractLatestInboundCedula,
   getLatestInboundMessage,
+  getLatestOutboundMessage,
   inboundHasImage,
   looksLikeCedula,
 } from "./inbound-intent";
@@ -114,6 +116,11 @@ const buildIdentityBlock = (input: {
   client: AgentClientSnapshot | null;
   employee: MatchedWisproEmployee | null;
   pendingCount: number | null;
+  pendingQueue: Array<{
+    publicId: number | null;
+    clientName: string | null;
+    cause: string | null;
+  }>;
   clientTickets: Array<{
     publicId: number | null;
     status: string;
@@ -152,8 +159,12 @@ const buildIdentityBlock = (input: {
           .join(" | ")}`
       : `- rol: cliente\n- ticket_activo: ninguno`;
 
+  const queue = formatTechnicianAgentQueue(input.pendingQueue);
   const techLine = input.employee
-    ? `- tickets_pendientes: ${input.pendingCount ?? 0} (solo tickets asignados a este empleado; el sistema envía foto y Maps)`
+    ? [
+        `- tickets_pendientes: ${input.pendingCount ?? 0} (solo asignados a este empleado)`,
+        queue ? `- cola:\n${queue}` : "- cola: ninguna",
+      ].join("\n")
     : null;
 
   return [
@@ -556,11 +567,18 @@ export const runAiAgent = async (input: {
   }
 
   if (employee) {
-    const wantsFinalize = looksLikeTechnicianFinalizeRequest(inboundText);
+    const lastOutbound = getLatestOutboundMessage(input.messages);
+    const listOfferPending = looksLikeTechnicianListOffer(
+      [lastOutbound?.content, lastOutbound?.caption]
+        .map((value) => String(value || "").trim())
+        .filter(Boolean)
+        .join(" "),
+    );
     const shouldDeliver = shouldDeliverTechnicianTickets({
       justVerified: Boolean(session?.justVerified),
       inboundText,
       inboundIsCedula: looksLikeCedula(inboundText) || Boolean(inboundCedula),
+      listOfferPending,
     });
 
     if (shouldDeliver) {
@@ -595,13 +613,17 @@ export const runAiAgent = async (input: {
       };
     }
 
-    if (!wantsFinalize) {
+    if (
+      shouldUseCannedTechnicianWelcome({
+        justVerified: Boolean(session?.justVerified),
+        inboundText,
+        inboundIsCedula: looksLikeCedula(inboundText) || Boolean(inboundCedula),
+      })
+    ) {
       return {
         action: "reply",
-        message: session?.justVerified
-          ? formatTechnicianWelcome(employee.name)
-          : formatTechnicianOffer(employee.name),
-        reason: session?.justVerified ? "technician_welcome" : "technician_offer",
+        message: formatTechnicianWelcome(employee.name),
+        reason: "technician_welcome",
         runId,
         clientId: input.client?.id ?? null,
       };
@@ -615,6 +637,11 @@ export const runAiAgent = async (input: {
   }
 
   let pendingCount: number | null = null;
+  let pendingQueue: Array<{
+    publicId: number | null;
+    clientName: string | null;
+    cause: string | null;
+  }> = [];
   let clientTickets: Array<{
     publicId: number | null;
     status: string;
@@ -628,6 +655,11 @@ export const runAiAgent = async (input: {
         employee.id,
       );
       pendingCount = pending.length;
+      pendingQueue = pending.slice(0, 8).map((caso) => ({
+        publicId: caso.wisproPublicId,
+        clientName: caso.clientName,
+        cause: caso.cause || caso.title,
+      }));
     } else {
       const open = await listOpenCasosForConversation(input.supabase, {
         conversationId: input.conversationId,
@@ -665,6 +697,7 @@ export const runAiAgent = async (input: {
       client: input.client,
       employee,
       pendingCount,
+      pendingQueue,
       clientTickets,
     }),
   ]

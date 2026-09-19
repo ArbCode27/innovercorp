@@ -11,7 +11,7 @@ import {
 } from "react";
 import dynamic from "next/dynamic";
 import { ImagePlus, Mic, Send, Smile, Square, Trash2, X } from "lucide-react";
-import { CrmButton } from "../shared/crm-button";
+import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -436,12 +436,12 @@ export const MessageComposer = ({
       />
 
       {selectedImage && selectedImageUrl ? (
-        <div className={`mb-3 rounded-2xl border p-3 ${CRM_SURFACES.border} ${CRM_SURFACES.input}`}>
+        <div className={`mb-3 rounded-2xl border p-3 ${CRM_SURFACES.border} `}>
           <div className="mb-2 flex items-center justify-between gap-2">
             <p className={`text-sm font-medium ${CRM_SURFACES.textPrimary}`}>
               Imagen lista para enviar
             </p>
-            <CrmButton
+            <Button
               type="button"
               variant="secondary"
               className="h-8 px-3"
@@ -450,7 +450,7 @@ export const MessageComposer = ({
               aria-label="Quitar imagen adjunta">
               <X className="size-3.5" aria-hidden="true" />
               Quitar
-            </CrmButton>
+            </Button>
           </div>
           <img
             src={selectedImageUrl}
@@ -465,7 +465,7 @@ export const MessageComposer = ({
 
       {recorder.status === "recording" ? (
         <div
-          className={`mb-3 rounded-2xl border px-3 py-2 ${CRM_SURFACES.border} ${CRM_SURFACES.input}`}
+          className={`mb-3 rounded-2xl border px-3 py-2 ${CRM_SURFACES.border} `}
           role="status"
           aria-live="polite">
           <div className="flex items-center justify-between gap-3">
@@ -473,7 +473,7 @@ export const MessageComposer = ({
               Grabando nota de voz... {formatDuration(recorder.durationMs)}
             </p>
             <div className="flex items-center gap-2">
-              <CrmButton
+              <Button
                 type="button"
                 variant="secondary"
                 className="h-8 px-3"
@@ -481,8 +481,8 @@ export const MessageComposer = ({
                 disabled={isInputLocked}
                 aria-label="Cancelar grabación">
                 Cancelar
-              </CrmButton>
-              <CrmButton
+              </Button>
+              <Button
                 type="button"
                 variant="destructive"
                 className="h-8 px-3"
@@ -491,20 +491,20 @@ export const MessageComposer = ({
                 aria-label="Detener grabación">
                 <Square className="size-3.5" aria-hidden="true" />
                 Detener
-              </CrmButton>
+              </Button>
             </div>
           </div>
         </div>
       ) : null}
 
       {recorder.status === "recorded" && recorder.audioUrl ? (
-        <div className={`mb-3 rounded-2xl border p-3 ${CRM_SURFACES.border} ${CRM_SURFACES.input}`}>
+        <div className={`mb-3 rounded-2xl border p-3 ${CRM_SURFACES.border} `}>
           <div className="mb-2 flex items-center justify-between gap-2">
             <p className={`text-sm font-medium ${CRM_SURFACES.textPrimary}`}>
               Nota lista ({formatDuration(recorder.durationMs)})
             </p>
             <div className="flex items-center gap-2">
-              <CrmButton
+              <Button
                 type="button"
                 variant="secondary"
                 className="h-8 px-3"
@@ -513,8 +513,8 @@ export const MessageComposer = ({
                 aria-label="Descartar nota de voz">
                 <Trash2 className="size-3.5" aria-hidden="true" />
                 Descartar
-              </CrmButton>
-              <CrmButton
+              </Button>
+              <Button
                 type="button"
                 className="h-8 px-3"
                 onClick={handleSendVoiceNote}
@@ -526,7 +526,7 @@ export const MessageComposer = ({
                   <Send className="size-4" aria-hidden="true" />
                 )}
                 Enviar audio
-              </CrmButton>
+              </Button>
             </div>
           </div>
           <audio
@@ -597,7 +597,7 @@ export const MessageComposer = ({
       ) : null}
 
       <div className="flex items-end gap-2">
-        <CrmButton
+        <Button
           type="button"
           variant="secondary"
           onClick={() => fileInputRef.current?.click()}
@@ -605,7 +605,7 @@ export const MessageComposer = ({
           className="size-11 rounded-full p-0"
           aria-label="Adjuntar imagen">
           <ImagePlus className="size-4" aria-hidden="true" />
-        </CrmButton>
+        </Button>
         <Popover
           open={isEmojiPickerOpen}
           onOpenChange={(open) => {
@@ -614,7 +614,7 @@ export const MessageComposer = ({
             setIsEmojiPickerOpen(open);
           }}>
           <PopoverTrigger asChild>
-            <CrmButton
+            <Button
               type="button"
               variant="secondary"
               disabled={!canOpenEmojiPicker}
@@ -623,7 +623,7 @@ export const MessageComposer = ({
               aria-expanded={isEmojiPickerOpen}
               aria-haspopup="dialog">
               <Smile className="size-4" aria-hidden="true" />
-            </CrmButton>
+            </Button>
           </PopoverTrigger>
           <PopoverContent
             side="top"
@@ -661,21 +661,20 @@ export const MessageComposer = ({
             selectedImage ? "Escribe un pie de foto (opcional)..." : placeholder
           }
           className={cn(
-            "min-h-11 max-h-28 resize-none rounded-3xl focus-visible:ring-crm-accent md:max-h-32",
+            "min-h-11 max-h-28 resize-none rounded-3xl md:max-h-32",
             CRM_SURFACES.border,
             readOnly
-              ? `${CRM_SURFACES.inputReadonly} ${CRM_SURFACES.textMuted} cursor-not-allowed`
-              : CRM_SURFACES.input,
-            CRM_SURFACES.textPrimary,
+              ? `${CRM_SURFACES.textMuted} cursor-not-allowed`
+              : CRM_SURFACES.textPrimary,
             CRM_SURFACES.placeholder,
           )}
           aria-label="Mensaje"
           aria-readonly={readOnly}
         />
         {/* WhatsApp-style: one trailing action — Mic when empty, Send when content. */}
-        <CrmButton
+        <Button
           type="button"
-          variant={showSendAction ? "primary" : "secondary"}
+          variant={showSendAction ? "default" : "secondary"}
           onClick={showSendAction ? handleSendMessage : handleStartRecording}
           disabled={
             showSendAction
@@ -701,7 +700,7 @@ export const MessageComposer = ({
           ) : (
             <Mic className="size-4 transition-opacity duration-150" aria-hidden="true" />
           )}
-        </CrmButton>
+        </Button>
       </div>
       {!recorder.supportsRecording ? (
         <p className={`mt-2 text-xs ${CRM_SURFACES.textMuted}`}>

@@ -80,6 +80,23 @@ describe("matchPendingCasosForTechnician", () => {
     ).toEqual(["c"]);
   });
 
+  it("matches informal phrasing against the known client name", () => {
+    expect(
+      matchPendingCasosForTechnician(pending, {
+        clientName: "esa de sandra",
+      }).map((item) => item.wisproIssueId),
+    ).toEqual(["c"]);
+  });
+
+  it("closes the only pending ticket when the name is informal and unique", () => {
+    const onlySandra = pending.filter((item) => item.wisproIssueId === "c");
+    expect(
+      matchPendingCasosForTechnician(onlySandra, { clientName: "ya esa" }).map(
+        (item) => item.wisproIssueId,
+      ),
+    ).toEqual(["c"]);
+  });
+
   it("returns all pending tickets when there is no filter", () => {
     expect(matchPendingCasosForTechnician(pending, {})).toHaveLength(3);
   });

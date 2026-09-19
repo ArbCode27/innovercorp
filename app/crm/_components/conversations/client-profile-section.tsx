@@ -1,7 +1,8 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { CRM_BADGE_TONES, CRM_SURFACES } from "../../_lib/crm-theme";
+import { Badge } from "@/components/ui/badge";
+import { CRM_SURFACES } from "../../_lib/crm-theme";
 import {
   formatClientDebt,
   getAccountTextClass,
@@ -10,7 +11,7 @@ import {
 } from "../../_lib/client-profile-utils";
 import type { Client, WisproCustomer } from "../../_lib/types";
 import { AvatarInitials } from "../shared/avatar-initials";
-import { CrmButton } from "../shared/crm-button";
+import { Button } from "@/components/ui/button";
 
 interface ClientProfileSectionProps {
   client: Client;
@@ -74,22 +75,19 @@ export const ClientProfileSection = ({
           </p>
           {client.wispro_id ? (
             <div className="mt-1 flex flex-wrap items-center gap-1.5">
-              <span
-                className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${CRM_BADGE_TONES.emerald}`}>
-                Wispro
-              </span>
+              <Badge variant="success">Vinculado</Badge>
               {onOpenWispro ? (
-                <CrmButton
+                <Button
                   type="button"
                   variant="secondary"
                   size="sm"
                   className="h-7 px-2 text-[11px]"
                   onClick={onOpenWispro}>
                   Cambiar vinculación
-                </CrmButton>
+                </Button>
               ) : null}
               {onUnlinkWispro ? (
-                <CrmButton
+                <Button
                   type="button"
                   variant="ghost"
                   size="sm"
@@ -97,18 +95,18 @@ export const ClientProfileSection = ({
                   disabled={isUnlinkingWispro}
                   onClick={onUnlinkWispro}>
                   {isUnlinkingWispro ? "Desvinculando..." : "Desvincular"}
-                </CrmButton>
+                </Button>
               ) : null}
             </div>
           ) : onOpenWispro ? (
-            <CrmButton
+            <Button
               type="button"
               variant="secondary"
               size="sm"
               className="mt-1 h-7 px-2 text-[11px]"
               onClick={onOpenWispro}>
-              Vincular Wispro
-            </CrmButton>
+              Vincular cliente
+            </Button>
           ) : null}
         </div>
       </div>
@@ -183,18 +181,18 @@ export const ClientProfileSection = ({
 
       {client.wispro_id && onCreatePaymentPromise ? (
         <div className="space-y-1.5 pt-1">
-          <CrmButton
+          <Button
             type="button"
             variant="secondary"
             size="sm"
             className="w-full"
             disabled={isCreatingPaymentPromise}
             onClick={onCreatePaymentPromise}
-            aria-label="Crear promesa de pago por 48 horas en Wispro">
+            aria-label="Crear promesa de pago por 48 horas">
             {isCreatingPaymentPromise
               ? "Creando promesa..."
               : "Crear promesa 48h"}
-          </CrmButton>
+          </Button>
           <p className={`text-[11px] leading-snug ${CRM_SURFACES.textMuted}`}>
             Solo si el servicio está suspendido. No se notifica por WhatsApp.
           </p>

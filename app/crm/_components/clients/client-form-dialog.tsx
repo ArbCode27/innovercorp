@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { CrmButton } from "../shared/crm-button";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -19,7 +19,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ACCOUNT_STATUSES, INTERNET_PLANS } from "../../_lib/constants";
-import { CRM_DIALOG, CRM_SURFACES } from "../../_lib/crm-theme";
 import type { ClientAccountStatus, CreateClientInput } from "../../_lib/types";
 
 interface ClientFormDialogProps {
@@ -59,7 +58,7 @@ export const ClientFormDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className={CRM_DIALOG}>
+      <DialogContent>
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>Nuevo cliente</DialogTitle>
@@ -67,16 +66,16 @@ export const ClientFormDialog = ({
           <div className="mt-5 grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="client-name">Nombre</Label>
-              <Input id="client-name" value={name} onChange={(event) => setName(event.target.value)} className={`${CRM_SURFACES.border} ${CRM_SURFACES.input}`} />
+              <Input id="client-name" value={name} onChange={(event) => setName(event.target.value)} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="client-phone">Teléfono</Label>
-              <Input id="client-phone" value={phone} onChange={(event) => setPhone(event.target.value)} className={`${CRM_SURFACES.border} ${CRM_SURFACES.input}`} />
+              <Input id="client-phone" value={phone} onChange={(event) => setPhone(event.target.value)} />
             </div>
             <div className="space-y-2">
               <Label>Plan</Label>
               <Select value={plan} onValueChange={setPlan}>
-                <SelectTrigger className={`w-full ${CRM_SURFACES.border} ${CRM_SURFACES.input}`}>
+                <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -90,12 +89,12 @@ export const ClientFormDialog = ({
             </div>
             <div className="space-y-2">
               <Label htmlFor="client-zone">Zona / Nodo</Label>
-              <Input id="client-zone" value={zone} onChange={(event) => setZone(event.target.value)} className={`${CRM_SURFACES.border} ${CRM_SURFACES.input}`} />
+              <Input id="client-zone" value={zone} onChange={(event) => setZone(event.target.value)} />
             </div>
             <div className="space-y-2 sm:col-span-2">
               <Label>Estado de cuenta</Label>
               <Select value={account} onValueChange={(value) => setAccount(value as ClientAccountStatus)}>
-                <SelectTrigger className={`w-full ${CRM_SURFACES.border} ${CRM_SURFACES.input}`}>
+                <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -109,10 +108,10 @@ export const ClientFormDialog = ({
             </div>
           </div>
           <DialogFooter className="mt-5">
-            <CrmButton type="button" variant="secondary" onClick={() => onOpenChange(false)}>
+            <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>
               Cancelar
-            </CrmButton>
-            <CrmButton type="submit">Guardar</CrmButton>
+            </Button>
+            <Button type="submit">Guardar</Button>
           </DialogFooter>
         </form>
       </DialogContent>

@@ -4,6 +4,7 @@ import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 export const metadata: Metadata = {
   title: "CRM · Conexiones Innover",
@@ -20,8 +21,10 @@ export default function RootLayout({
       <body
         suppressHydrationWarning
         className={`font-sans ${GeistSans.variable} ${GeistMono.variable}`}>
-        {children}
-        <Toaster />
+        <TooltipProvider>
+          {children}
+          <Toaster />
+        </TooltipProvider>
       </body>
     </html>
   );

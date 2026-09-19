@@ -1,7 +1,7 @@
 "use client";
 
 import { Trash2 } from "lucide-react";
-import { CrmButton } from "../shared/crm-button";
+import { Button } from "@/components/ui/button";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
 import type { Conversation, Label } from "../../_lib/types";
 import { LabelChip } from "../shared/label-chip";
@@ -34,7 +34,7 @@ export const LabelsList = ({ labels, conversations, onDeleteLabel }: LabelsListP
               <span className={`flex-1 text-sm ${CRM_SURFACES.textSecondary}`}>{label.name}</span>
               <span className={`text-xs ${CRM_SURFACES.textMuted}`}>{usage} conv.</span>
               <LabelChip label={label} />
-              <CrmButton
+              <Button
                 type="button"
                 variant="ghost"
                 size="icon"
@@ -42,7 +42,7 @@ export const LabelsList = ({ labels, conversations, onDeleteLabel }: LabelsListP
                 className={`size-8 ${CRM_SURFACES.textMuted} hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950/60 dark:hover:text-red-100`}
                 aria-label={`Eliminar ${label.name}`}>
                 <Trash2 className="size-4" aria-hidden="true" />
-              </CrmButton>
+              </Button>
             </div>
           );
         })

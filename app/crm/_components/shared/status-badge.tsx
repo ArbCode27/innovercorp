@@ -1,40 +1,36 @@
-import { Badge } from "@/components/ui/badge";
-import { STATUS_LABELS } from "../../_lib/constants";
-import { CRM_BADGE_TONES, type CrmBadgeTone } from "../../_lib/crm-theme";
+import { Badge, type badgeVariants } from "@/components/ui/badge"
+import type { VariantProps } from "class-variance-authority"
+import { STATUS_LABELS } from "../../_lib/constants"
 
 interface StatusBadgeProps {
-  status: string;
+  status: string
 }
 
-const statusTones: Record<string, CrmBadgeTone> = {
-  abierto: "blue",
-  Abierto: "blue",
-  proceso: "amber",
-  "En proceso": "amber",
-  resuelto: "emerald",
-  Resuelto: "emerald",
-  online: "emerald",
-  busy: "amber",
-  offline: "slate",
-  inactive: "red",
-  bot: "violet",
-  human: "rose",
-  RECIBIDO: "blue",
-  EN_PROCESO: "amber",
-  APROBADO: "emerald",
-  RECHAZADO: "red",
-  DUPLICADO: "slate",
-  ERROR: "red",
-};
+type BadgeVariant = NonNullable<VariantProps<typeof badgeVariants>["variant"]>
 
-export const StatusBadge = ({ status }: StatusBadgeProps) => {
-  const tone = statusTones[status] || "neutral";
+const statusVariants: Record<string, BadgeVariant> = {
+  abierto: "info",
+  Abierto: "info",
+  proceso: "warning",
+  "En proceso": "warning",
+  resuelto: "success",
+  Resuelto: "success",
+  online: "success",
+  busy: "warning",
+  offline: "outline",
+  inactive: "destructive",
+  bot: "secondary",
+  human: "destructive",
+  RECIBIDO: "info",
+  EN_PROCESO: "warning",
+  APROBADO: "success",
+  RECHAZADO: "destructive",
+  DUPLICADO: "outline",
+  ERROR: "destructive",
+}
 
-  return (
-    <Badge
-      variant="outline"
-      className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${CRM_BADGE_TONES[tone]}`}>
-      {STATUS_LABELS[status] || status}
-    </Badge>
-  );
-};
+export const StatusBadge = ({ status }: StatusBadgeProps) => (
+  <Badge variant={statusVariants[status] || "outline"}>
+    {STATUS_LABELS[status] || status}
+  </Badge>
+)

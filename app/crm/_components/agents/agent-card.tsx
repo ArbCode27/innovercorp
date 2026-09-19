@@ -1,6 +1,6 @@
 "use client";
 
-import { CrmButton } from "../shared/crm-button";
+import { Button } from "@/components/ui/button";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
 import type { Agent, Conversation } from "../../_lib/types";
 import { AvatarInitials } from "../shared/avatar-initials";
@@ -58,16 +58,16 @@ export const AgentCard = ({
       </p>
       {isAdmin && agent.id !== currentAgent.id ? (
         <div className="mt-4 flex flex-wrap gap-2">
-          <CrmButton type="button" variant="secondary" size="sm" onClick={() => onEdit(agent)}>
+          <Button type="button" variant="secondary" size="sm" onClick={() => onEdit(agent)}>
             Editar
-          </CrmButton>
-          <CrmButton
+          </Button>
+          <Button
             type="button"
-            variant="danger"
+            variant="destructive"
             size="sm"
             onClick={() => onToggleStatus(agent)}>
             {agent.status === "inactive" ? "Activar" : "Desactivar"}
-          </CrmButton>
+          </Button>
         </div>
       ) : null}
     </article>

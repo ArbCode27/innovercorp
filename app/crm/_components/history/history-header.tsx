@@ -1,11 +1,11 @@
 "use client";
 
 import { ArrowLeft, Bot, CreditCard, Headphones, MapPin, Phone } from "lucide-react";
-import { CRM_BADGE_TONES, CRM_SURFACES } from "../../_lib/crm-theme";
+import { Badge } from "@/components/ui/badge";
+import { CRM_SURFACES } from "../../_lib/crm-theme";
 import { formatCrmDate } from "../../_lib/formatters";
 import { getHistoryMessageCount } from "../../_lib/history-utils";
 import type { Agent, ConversationHistory, Label } from "../../_lib/types";
-import { cn } from "@/lib/utils";
 import { AvatarInitials } from "../shared/avatar-initials";
 import { LabelChip } from "../shared/label-chip";
 
@@ -51,18 +51,16 @@ export const HistoryHeader = ({
               <h2 className={`truncate text-base font-semibold ${CRM_SURFACES.textPrimary}`}>
                 {displayName}
               </h2>
-              <span
-                className={cn(
-                  "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium",
-                  entry.human_mode ? CRM_BADGE_TONES.rose : CRM_BADGE_TONES.violet,
-                )}>
+              <Badge
+                variant={entry.human_mode ? "destructive" : "secondary"}
+                className="gap-1 text-[10px]">
                 {entry.human_mode ? (
                   <Headphones className="size-3" aria-hidden="true" />
                 ) : (
                   <Bot className="size-3" aria-hidden="true" />
                 )}
                 {entry.human_mode ? "Atención humana" : "Atención bot"}
-              </span>
+              </Badge>
             </div>
 
             <dl className={`mt-2 grid gap-1 text-xs ${CRM_SURFACES.textMuted}`}>

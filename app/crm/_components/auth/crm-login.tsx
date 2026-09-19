@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { Layers, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
-import { CrmButton } from "../shared/crm-button";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
@@ -46,7 +46,7 @@ export const CrmLogin = ({ isSubmitting, onLogin }: CrmLoginProps) => {
   return (
     <main className={`relative flex min-h-screen items-center justify-center p-4 ${CRM_SURFACES.page}`}>
       {mounted ? (
-        <CrmButton
+        <Button
           type="button"
           variant="ghost"
           size="icon"
@@ -59,7 +59,7 @@ export const CrmLogin = ({ isSubmitting, onLogin }: CrmLoginProps) => {
           ) : (
             <Moon className="size-5" aria-hidden="true" />
           )}
-        </CrmButton>
+        </Button>
       ) : null}
 
       <form
@@ -92,7 +92,7 @@ export const CrmLogin = ({ isSubmitting, onLogin }: CrmLoginProps) => {
               value={email}
               onChange={(event) => setEmail(event.target.value)}
               placeholder="tu@email.com"
-              className={`${CRM_SURFACES.border} ${CRM_SURFACES.input} ${CRM_SURFACES.textPrimary} ${CRM_SURFACES.placeholder}`}
+              className={`${CRM_SURFACES.border}  ${CRM_SURFACES.textPrimary} ${CRM_SURFACES.placeholder}`}
             />
           </div>
           <div className="space-y-2">
@@ -105,14 +105,14 @@ export const CrmLogin = ({ isSubmitting, onLogin }: CrmLoginProps) => {
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               placeholder="••••••••"
-              className={`${CRM_SURFACES.border} ${CRM_SURFACES.input} ${CRM_SURFACES.textPrimary} ${CRM_SURFACES.placeholder}`}
+              className={`${CRM_SURFACES.border}  ${CRM_SURFACES.textPrimary} ${CRM_SURFACES.placeholder}`}
             />
           </div>
         </div>
 
-        <CrmButton type="submit" disabled={isSubmitting} className="mt-6 w-full">
+        <Button type="submit" disabled={isSubmitting} className="mt-6 w-full">
           {isSubmitting ? "Entrando..." : "Entrar"}
-        </CrmButton>
+        </Button>
         <p
           className="mt-3 min-h-5 text-center text-xs text-red-600 dark:text-red-200"
           aria-live="polite">

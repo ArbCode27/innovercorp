@@ -2,13 +2,16 @@ import { describe, expect, it } from "vitest";
 import {
   decideTechnicianVerification,
   formatTechnicianWelcome,
+  looksLikeBareTechnicianGreeting,
   looksLikeOtpCode,
   looksLikeTechnicianFinalizeRequest,
+  looksLikeTechnicianListOffer,
   looksLikeTechnicianNextPage,
   looksLikeTechnicianOfferAccept,
   looksLikeTechnicianResend,
   looksLikeTechnicianTicketRequest,
   shouldDeliverTechnicianTickets,
+  shouldUseCannedTechnicianWelcome,
   technicianFirstName,
   type TechnicianIdentityRow,
 } from "./technician-identity";
@@ -143,7 +146,12 @@ describe("technician inbound helpers", () => {
     );
     expect(looksLikeTechnicianOfferAccept("sí")).toBe(true);
     expect(looksLikeTechnicianOfferAccept("dale")).toBe(true);
+    expect(looksLikeTechnicianOfferAccept("listo")).toBe(false);
     expect(looksLikeTechnicianOfferAccept("hola")).toBe(false);
+    expect(looksLikeBareTechnicianGreeting("hola")).toBe(true);
+    expect(looksLikeTechnicianListOffer(formatTechnicianWelcome("José Pérez"))).toBe(
+      true,
+    );
     expect(
       shouldDeliverTechnicianTickets({
         justVerified: true,
@@ -153,11 +161,41 @@ describe("technician inbound helpers", () => {
     ).toBe(false);
     expect(
       shouldDeliverTechnicianTickets({
-        justVerified: true,
+        justVerified: false,
         inboundText: "sí",
+        inboundIsCedula: false,
+        listOfferPending: true,
+      }),
+    ).toBe(true);
+    expect(
+      shouldDeliverTechnicianTickets({
+        justVerified: false,
+        inboundText: "sí",
+        inboundIsCedula: false,
+        listOfferPending: false,
+      }),
+    ).toBe(false);
+    expect(
+      shouldUseCannedTechnicianWelcome({
+        justVerified: true,
+        inboundText: "hola",
         inboundIsCedula: false,
       }),
     ).toBe(true);
+    expect(
+      shouldUseCannedTechnicianWelcome({
+        justVerified: true,
+        inboundText: "esa de sandra",
+        inboundIsCedula: false,
+      }),
+    ).toBe(false);
+    expect(
+      shouldUseCannedTechnicianWelcome({
+        justVerified: false,
+        inboundText: "esa de sandra",
+        inboundIsCedula: false,
+      }),
+    ).toBe(false);
     expect(
       shouldDeliverTechnicianTickets({
         justVerified: false,
@@ -209,6 +247,14 @@ describe("technician inbound helpers", () => {
         justVerified: false,
         inboundText: "Finaliza Sandra key",
         inboundIsCedula: false,
+      }),
+    ).toBe(false);
+    expect(
+      shouldDeliverTechnicianTickets({
+        justVerified: false,
+        inboundText: "esa de sandra",
+        inboundIsCedula: false,
+        listOfferPending: false,
       }),
     ).toBe(false);
   });

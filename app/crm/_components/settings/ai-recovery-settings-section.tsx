@@ -11,7 +11,7 @@ import {
   type AiRecoveryMessages,
 } from "../../_lib/ai-recovery-messages";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
-import { CrmButton } from "../shared/crm-button";
+import { Button } from "@/components/ui/button";
 
 interface AiRecoverySettingsSectionProps {
   isAdmin: boolean;
@@ -118,20 +118,20 @@ export const AiRecoverySettingsSection = ({
         </div>
         {isAdmin ? (
           <div className="flex flex-wrap gap-2">
-            <CrmButton
+            <Button
               type="button"
-              variant="primary"
+              variant="default"
               disabled={!isDirty || isOverLimit || isSaving}
               onClick={() => void handleSave()}>
               {isSaving ? "Guardando…" : "Guardar mensajes"}
-            </CrmButton>
-            <CrmButton
+            </Button>
+            <Button
               type="button"
               variant="secondary"
               disabled={isSaving || isUsingDefaults}
               onClick={() => void handleRestoreDefault()}>
               Restaurar predeterminados
-            </CrmButton>
+            </Button>
           </div>
         ) : null}
       </div>
@@ -148,7 +148,7 @@ export const AiRecoverySettingsSection = ({
             value={draftAck}
             onChange={(event) => setDraftAck(event.target.value)}
             disabled={!isAdmin || isSaving}
-            className={`crm-scrollbar h-32 resize-none overflow-y-auto text-sm leading-relaxed ${CRM_SURFACES.input}`}
+            className={`crm-scrollbar h-32 resize-none overflow-y-auto text-sm leading-relaxed `}
             aria-describedby="crm-ai-ack-message-help"
           />
           <p
@@ -174,7 +174,7 @@ export const AiRecoverySettingsSection = ({
             value={draftSoft}
             onChange={(event) => setDraftSoft(event.target.value)}
             disabled={!isAdmin || isSaving}
-            className={`crm-scrollbar h-32 resize-none overflow-y-auto text-sm leading-relaxed ${CRM_SURFACES.input}`}
+            className={`crm-scrollbar h-32 resize-none overflow-y-auto text-sm leading-relaxed `}
             aria-describedby="crm-ai-soft-hold-message-help"
           />
           <p
@@ -200,7 +200,7 @@ export const AiRecoverySettingsSection = ({
             value={draftHard}
             onChange={(event) => setDraftHard(event.target.value)}
             disabled={!isAdmin || isSaving}
-            className={`crm-scrollbar h-32 resize-none overflow-y-auto text-sm leading-relaxed ${CRM_SURFACES.input}`}
+            className={`crm-scrollbar h-32 resize-none overflow-y-auto text-sm leading-relaxed `}
             aria-describedby="crm-ai-hard-fallback-message-help"
           />
           <p

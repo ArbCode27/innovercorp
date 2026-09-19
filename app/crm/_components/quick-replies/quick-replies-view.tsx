@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Plus } from "lucide-react";
-import { CrmButton } from "../shared/crm-button";
+import { Button } from "@/components/ui/button";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
 import { isAdminRole } from "../../_lib/agent-role-utils";
 import type {
@@ -66,10 +66,10 @@ export const QuickRepliesView = ({
           </p>
         </div>
         {isAdmin ? (
-          <CrmButton type="button" onClick={handleCreate} className="w-full sm:w-auto">
+          <Button type="button" onClick={handleCreate} className="w-full sm:w-auto">
             <Plus className="mr-2 size-4" aria-hidden="true" />
             Nueva respuesta
-          </CrmButton>
+          </Button>
         ) : null}
       </div>
 

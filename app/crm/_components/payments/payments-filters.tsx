@@ -19,14 +19,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { CRM_MENU, CRM_MENU_ITEM, CRM_SURFACES } from "../../_lib/crm-theme";
+import { CRM_SURFACES } from "../../_lib/crm-theme";
 import {
   CRM_KNOWN_PAYMENT_BANKS,
   CRM_PAYMENT_STATUSES,
   CRM_PAYMENT_STATUS_LABELS,
   type CrmPaymentStatus,
 } from "../../_lib/payments";
-import { CrmButton } from "../shared/crm-button";
+import { Button } from "@/components/ui/button";
 
 export type PaymentsDateRange = {
   from: string | null;
@@ -46,7 +46,7 @@ interface PaymentsFiltersProps {
   onClearFilters: () => void;
 }
 
-const selectClass = `w-full ${CRM_SURFACES.border} ${CRM_SURFACES.input} ${CRM_SURFACES.textPrimary}`;
+const selectClass = `w-full ${CRM_SURFACES.border}  ${CRM_SURFACES.textPrimary}`;
 
 const parseIsoDateLocal = (value: string | null): Date | undefined => {
   if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined;
@@ -151,28 +151,28 @@ export const PaymentsFilters = ({
               value={searchTerm}
               onChange={(event) => onSearchChange(event.target.value)}
               placeholder="Buscar cédula o nombre..."
-              className={`pl-9 ${CRM_SURFACES.border} ${CRM_SURFACES.input} ${CRM_SURFACES.textPrimary} ${CRM_SURFACES.placeholder}`}
+              className={`pl-9 ${CRM_SURFACES.border}  ${CRM_SURFACES.textPrimary} ${CRM_SURFACES.placeholder}`}
             />
           </div>
         </div>
 
         <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
           <PopoverTrigger asChild>
-            <CrmButton
+            <Button
               type="button"
               variant="secondary"
-              className={`h-9 w-full cursor-pointer justify-start gap-2 px-3 font-normal ${CRM_SURFACES.border} ${CRM_SURFACES.input} ${CRM_SURFACES.textPrimary}`}
+              className={`h-9 w-full cursor-pointer justify-start gap-2 px-3 font-normal ${CRM_SURFACES.border}  ${CRM_SURFACES.textPrimary}`}
               aria-label="Filtrar por fecha o rango">
               <CalendarIcon
                 className="size-4 shrink-0 text-crm-accent-muted-foreground"
                 aria-hidden="true"
               />
               <span className="truncate">{formatRangeLabel(dateRange)}</span>
-            </CrmButton>
+            </Button>
           </PopoverTrigger>
           <PopoverContent
             align="start"
-            className={`w-auto overflow-hidden rounded-2xl border p-0 shadow-lg ${CRM_SURFACES.border} ${CRM_MENU}`}
+            className={`w-auto overflow-hidden rounded-2xl border p-0 shadow-lg ${CRM_SURFACES.border} `}
             sideOffset={8}>
             <Calendar
               mode="range"
@@ -188,7 +188,7 @@ export const PaymentsFilters = ({
               <p className={`text-xs ${CRM_SURFACES.textMuted}`}>
                 Elige un día o un rango
               </p>
-              <CrmButton
+              <Button
                 type="button"
                 variant="ghost"
                 size="sm"
@@ -199,7 +199,7 @@ export const PaymentsFilters = ({
                   setCalendarOpen(false);
                 }}>
                 Limpiar fechas
-              </CrmButton>
+              </Button>
             </div>
           </PopoverContent>
         </Popover>
@@ -208,12 +208,12 @@ export const PaymentsFilters = ({
           <SelectTrigger className={selectClass} aria-label="Filtrar por estado">
             <SelectValue placeholder="Estado" />
           </SelectTrigger>
-          <SelectContent className={CRM_MENU}>
-            <SelectItem value="all" className={CRM_MENU_ITEM}>
+          <SelectContent >
+            <SelectItem value="all" className="cursor-pointer">
               Todos los estados
             </SelectItem>
             {CRM_PAYMENT_STATUSES.map((item) => (
-              <SelectItem key={item} value={item} className={CRM_MENU_ITEM}>
+              <SelectItem key={item} value={item} className="cursor-pointer">
                 {CRM_PAYMENT_STATUS_LABELS[item]}
               </SelectItem>
             ))}
@@ -224,12 +224,12 @@ export const PaymentsFilters = ({
           <SelectTrigger className={selectClass} aria-label="Filtrar por banco">
             <SelectValue placeholder="Banco" />
           </SelectTrigger>
-          <SelectContent className={CRM_MENU}>
-            <SelectItem value="all" className={CRM_MENU_ITEM}>
+          <SelectContent >
+            <SelectItem value="all" className="cursor-pointer">
               Todos los bancos
             </SelectItem>
             {bankOptions.map((item) => (
-              <SelectItem key={item} value={item} className={CRM_MENU_ITEM}>
+              <SelectItem key={item} value={item} className="cursor-pointer">
                 {item}
               </SelectItem>
             ))}
@@ -239,14 +239,14 @@ export const PaymentsFilters = ({
 
       {hasActiveFilters ? (
         <div className="mt-3 flex justify-end">
-          <CrmButton
+          <Button
             type="button"
             variant="ghost"
             size="sm"
             onClick={onClearFilters}>
             <X className="mr-1 size-4" aria-hidden="true" />
             Limpiar filtros
-          </CrmButton>
+          </Button>
         </div>
       ) : null}
     </div>
@@ -281,7 +281,7 @@ export const PaymentsPagination = ({
         Mostrando {from}–{to} de {total}
       </p>
       <div className="flex items-center gap-2">
-        <CrmButton
+        <Button
           type="button"
           variant="secondary"
           size="sm"
@@ -291,11 +291,11 @@ export const PaymentsPagination = ({
           aria-label="Página anterior">
           <ChevronLeft className="size-4" aria-hidden="true" />
           Anterior
-        </CrmButton>
+        </Button>
         <span className={`min-w-24 text-center text-xs ${CRM_SURFACES.textSecondary}`}>
           Página {currentPage} de {totalPages}
         </span>
-        <CrmButton
+        <Button
           type="button"
           variant="secondary"
           size="sm"
@@ -305,7 +305,7 @@ export const PaymentsPagination = ({
           aria-label="Página siguiente">
           Siguiente
           <ChevronRight className="size-4" aria-hidden="true" />
-        </CrmButton>
+        </Button>
       </div>
     </div>
   );

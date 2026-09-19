@@ -22,7 +22,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { CRM_MENU, CRM_MENU_ITEM, CRM_PANEL, CRM_SURFACES } from "../../_lib/crm-theme";
+import { CRM_PANEL, CRM_SURFACES } from "../../_lib/crm-theme";
 import { CRM_NAV_ITEMS } from "../../_lib/constants";
 import type { Agent, CrmView } from "../../_lib/types";
 import { AvatarInitials } from "../shared/avatar-initials";
@@ -105,7 +105,7 @@ export const CrmSidebar = ({
             />
           </button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent side="right" align="end" className={`w-60 ${CRM_MENU}`}>
+        <DropdownMenuContent side="right" align="end" className={`w-60 `}>
           <DropdownMenuLabel>
             <span className={`block truncate text-sm font-medium ${CRM_SURFACES.textPrimary}`}>
               {agent.name}
@@ -115,7 +115,7 @@ export const CrmSidebar = ({
             </span>
           </DropdownMenuLabel>
           <DropdownMenuSeparator className="bg-slate-200 dark:bg-white/10" />
-          <DropdownMenuItem onClick={onToggleStatus} className={CRM_MENU_ITEM}>
+          <DropdownMenuItem onClick={onToggleStatus} className="cursor-pointer">
             Cambiar mi estado
           </DropdownMenuItem>
           <DropdownMenuItem

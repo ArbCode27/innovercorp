@@ -61,6 +61,17 @@ export const extractLatestInboundCedula = (
   return null;
 };
 
+export const getLatestOutboundMessage = (
+  messages: AgentHistoryMessage[],
+): AgentHistoryMessage | null => {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (isUserMessage(message) || isAckOutbound(message)) continue;
+    return message;
+  }
+  return null;
+};
+
 export const getLatestInboundMessage = (
   messages: AgentHistoryMessage[],
 ): AgentHistoryMessage | null => {

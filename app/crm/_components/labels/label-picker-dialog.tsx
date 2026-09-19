@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CrmButton } from "../shared/crm-button";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -11,7 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import type { Label } from "../../_lib/types";
-import { CRM_DIALOG, CRM_SURFACES } from "../../_lib/crm-theme";
+import { CRM_SURFACES } from "../../_lib/crm-theme";
 import { LabelChip } from "../shared/label-chip";
 
 interface LabelPickerDialogProps {
@@ -50,7 +50,7 @@ export const LabelPickerDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className={CRM_DIALOG}>
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>Asignar etiquetas</DialogTitle>
           <DialogDescription className={CRM_SURFACES.textMuted}>
@@ -68,12 +68,12 @@ export const LabelPickerDialog = ({
           ))}
         </div>
         <DialogFooter>
-          <CrmButton type="button" variant="secondary" onClick={() => onOpenChange(false)}>
+          <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>
             Cancelar
-          </CrmButton>
-          <CrmButton type="button" onClick={handleSubmit}>
+          </Button>
+          <Button type="button" onClick={handleSubmit}>
             Guardar
-          </CrmButton>
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

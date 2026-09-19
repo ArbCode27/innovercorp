@@ -69,7 +69,7 @@ export const wisproCasoClient = {
       error?: string;
     };
     if (!response.ok) {
-      throw new Error(payload.error || "No se cargó el cliente Wispro");
+      throw new Error(payload.error || "No se cargó el cliente");
     }
     return payload.clients?.[0] || null;
   },
@@ -108,7 +108,7 @@ export const wisproCasoClient = {
       error?: string;
     };
     if (!response.ok) {
-      throw new Error(payload.error || "No se cargaron los tickets Wispro");
+      throw new Error(payload.error || "No se cargaron los tickets");
     }
     return payload.issues || [];
   },

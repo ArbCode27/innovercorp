@@ -13,7 +13,7 @@ import { CRM_BUBBLE, CRM_SURFACES } from "../../_lib/crm-theme";
 import type { Message } from "../../_lib/types";
 import { formatCrmTime } from "../../_lib/formatters";
 import { MessageContent } from "./message-content";
-import { CrmButton } from "../shared/crm-button";
+import { Button } from "@/components/ui/button";
 
 interface MessageBubbleProps {
   message: Message;
@@ -83,7 +83,7 @@ export const MessageBubble = ({
     if (!canRegisterManualPayment) {
       toast.error(
         manualPaymentBlockReason ||
-          "Vincula el cliente a Wispro antes de registrar el pago",
+          "Vincula el cliente antes de registrar el pago",
       );
       return;
     }
@@ -162,7 +162,7 @@ export const MessageBubble = ({
         ) : null}
       </span>
       {canResendMessage ? (
-        <CrmButton
+        <Button
           type="button"
           size="sm"
           variant="secondary"
@@ -172,10 +172,10 @@ export const MessageBubble = ({
           aria-label="Reenviar mensaje fallido">
           <RotateCcw className="size-3" aria-hidden="true" />
           {isResendingMessage ? "Reenviando..." : "Reenviar"}
-        </CrmButton>
+        </Button>
       ) : null}
       {canProcessPaymentReceipt ? (
-        <CrmButton
+        <Button
           type="button"
           size="sm"
           variant="secondary"
@@ -202,7 +202,7 @@ export const MessageBubble = ({
             : isProcessingPaymentReceipt
               ? "Procesando..."
               : "Registrar pago"}
-        </CrmButton>
+        </Button>
       ) : null}
     </div>
   );

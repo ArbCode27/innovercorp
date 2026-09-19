@@ -9,7 +9,8 @@ import {
 } from "../../_lib/conversation-inbox-utils";
 import type { Client, Conversation, Label } from "../../_lib/types";
 import { formatCrmTime } from "../../_lib/formatters";
-import { CRM_BADGE_TONES, CRM_FOCUS_RING, CRM_INBOX_ITEM, CRM_SURFACES } from "../../_lib/crm-theme";
+import { Badge } from "@/components/ui/badge";
+import { CRM_INBOX_ITEM, CRM_SURFACES } from "../../_lib/crm-theme";
 import { AvatarInitials } from "../shared/avatar-initials";
 import { LabelChip } from "../shared/label-chip";
 import { StatusBadge } from "../shared/status-badge";
@@ -51,7 +52,7 @@ export const ConversationListItem = ({
           : displayName
       }
       className={cn(
-        CRM_FOCUS_RING,
+        "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
         "group w-full rounded-2xl p-3 text-left transition",
         isActive
           ? CRM_INBOX_ITEM.active
@@ -91,39 +92,26 @@ export const ConversationListItem = ({
             </div>
           </div>
           <div className="mt-1 flex items-center gap-1.5">
-            <span
-              className={cn(
-                "inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-medium",
-                isHuman ? CRM_BADGE_TONES.rose : CRM_BADGE_TONES.violet,
-              )}>
+            <Badge variant={isHuman ? "destructive" : "secondary"} className="gap-1 text-[10px]">
               {isHuman ? (
                 <Headphones className="size-3" aria-hidden="true" />
               ) : (
                 <Bot className="size-3" aria-hidden="true" />
               )}
               {isHuman ? "Humano" : "Bot"}
-            </span>
+            </Badge>
             {isResolved ? (
-              <span
-                className={cn(
-                  "inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-medium",
-                  CRM_BADGE_TONES.emerald,
-                )}>
+              <Badge variant="success" className="gap-1 text-[10px]">
                 <CheckCircle2 className="size-3" aria-hidden="true" />
                 Resuelto
-              </span>
+              </Badge>
             ) : shouldShowStatusBadge ? (
               <StatusBadge status={conversation.status} />
             ) : null}
             {agentControlName ? (
-              <span
-                className={cn(
-                  "inline-flex max-w-[9rem] items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium",
-                  CRM_BADGE_TONES.slate,
-                )}
-                title={agentControlName}>
+              <Badge variant="outline" className="max-w-[9rem] text-[10px]" title={agentControlName}>
                 <span className="truncate">{agentControlName}</span>
-              </span>
+              </Badge>
             ) : null}
           </div>
           <p

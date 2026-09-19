@@ -34,8 +34,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
-import { CRM_DIALOG, CRM_SURFACES } from "../../_lib/crm-theme";
-import { CrmButton } from "../shared/crm-button";
+import { CRM_SURFACES } from "../../_lib/crm-theme";
+import { Button } from "@/components/ui/button";
 import { humanizeReporteKey, suggestCategoryId } from "@/lib/parseReporte";
 import { casoFieldsFromReporte } from "@/lib/caso-from-reporte";
 import type {
@@ -118,6 +118,7 @@ interface CrearCasoWisproDialogProps {
   clientName?: string | null;
   clientPhone?: string | null;
   messages?: Message[];
+  onCreated?: () => void;
 }
 
 export const CrearCasoWisproDialog = ({
@@ -129,6 +130,7 @@ export const CrearCasoWisproDialog = ({
   clientName,
   clientPhone,
   messages = [],
+  onCreated,
 }: CrearCasoWisproDialogProps) => {
   const defaults = defaultWindow();
   const [reporte, setReporte] = useState("");
@@ -215,7 +217,7 @@ export const CrearCasoWisproDialog = ({
       setCatalogError(null);
     } catch (error) {
       setCatalogError(
-        error instanceof Error ? error.message : "No se cargó el catálogo Wispro",
+        error instanceof Error ? error.message : "No se cargó el catálogo",
       );
     } finally {
       setIsLoadingCatalog(false);
@@ -300,7 +302,7 @@ export const CrearCasoWisproDialog = ({
       } catch (error) {
         if (!cancelled) {
           toast.error(
-            error instanceof Error ? error.message : "No se cargó el cliente Wispro",
+            error instanceof Error ? error.message : "No se cargó el cliente",
           );
         }
       }
@@ -317,10 +319,22 @@ export const CrearCasoWisproDialog = ({
       return;
     }
     const timer = window.setTimeout(() => {
+      const compact = clientQuery.replace(/[\s.-]/g, "");
+      const digits = compact.replace(/\D/g, "");
+      const isDocumentQuery =
+        digits.length >= 5 &&
+        digits.length <= 12 &&
+        /^[VEJGvejg]?\d+$/.test(compact);
       setIsSearchingClients(true);
       void wisproCasoClient
         .searchClients(clientQuery)
-        .then(setClientHits)
+        .then((hits) => {
+          if (isDocumentQuery && hits.length === 1 && hits[0]) {
+            void handleSelectClient(hits[0]);
+            return;
+          }
+          setClientHits(hits);
+        })
         .catch((error: unknown) => {
           toast.error(
             error instanceof Error ? error.message : "Error al buscar clientes",
@@ -329,6 +343,7 @@ export const CrearCasoWisproDialog = ({
         .finally(() => setIsSearchingClients(false));
     }, 400);
     return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientQuery, selectedClient?.name]);
 
   const applyContractGps = (contract: WisproContractHit) => {
@@ -386,14 +401,22 @@ export const CrearCasoWisproDialog = ({
     setIsSubmitting(true);
     try {
       const parsedValues = createCasoSchema.parse(values);
+      if (!parsedValues.clientId) {
+        toast.error("Selecciona un cliente por nombre o cédula");
+        return;
+      }
       const payload = {
         ...parsedValues,
         startAt: toIso(values.startAt || "") || parsedValues.startAt,
         endAt: toIso(values.endAt || "") || parsedValues.endAt,
         conversationId: conversationId || parsedValues.conversationId,
         crmClientId: crmClientId || parsedValues.crmClientId,
-        clientName: clientName || parsedValues.clientName,
-        clientPhone: clientPhone || parsedValues.clientPhone,
+        clientName:
+          selectedClient?.name || clientName || parsedValues.clientName,
+        clientPhone:
+          selectedClient?.phone_mobile ||
+          clientPhone ||
+          parsedValues.clientPhone,
         gps:
           parsedValues.gps &&
           Number.isFinite(Number(parsedValues.gps.latitude)) &&
@@ -423,10 +446,11 @@ export const CrearCasoWisproDialog = ({
         const technicianName = selectedEmployee?.name;
         toast.success(
           technicianName
-            ? `${ticketLabel}. Técnico asignado en CRM: ${technicianName}`
+            ? `${ticketLabel}. Técnico asignado: ${technicianName}`
             : ticketLabel,
         );
       }
+      onCreated?.();
       onOpenChange(false);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "No se pudo crear el caso");
@@ -444,12 +468,14 @@ export const CrearCasoWisproDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className={`${CRM_DIALOG} flex max-h-[92vh] w-[min(96vw,72rem)] max-w-6xl flex-col overflow-hidden sm:max-w-6xl`}>
+      <DialogContent className={`flex max-h-[92vh] w-[min(96vw,72rem)] max-w-6xl flex-col overflow-hidden sm:max-w-6xl`}>
         <DialogHeader>
-          <DialogTitle>Crear ticket y orden en Wispro</DialogTitle>
+          <DialogTitle>Crear ticket</DialogTitle>
           <DialogDescription className={CRM_SURFACES.textMuted}>
-            Se crea desde este chat. El número público del ticket es el que le pasás al cliente.
-            {clientName ? ` Cliente CRM: ${clientName}.` : ""}
+            {conversationId
+              ? "Se crea desde este chat. El número del ticket es el que se le pasa al cliente."
+              : "Busca el cliente por nombre o cédula. El número del ticket es el que se le pasa al cliente."}
+            {clientName ? ` Cliente: ${clientName}.` : ""}
           </DialogDescription>
           </DialogHeader>
 
@@ -478,10 +504,14 @@ export const CrearCasoWisproDialog = ({
                     </p>
                   )}
                 </div>
-              ) : (
+              ) : conversationId ? (
                 <p className={`text-xs ${CRM_SURFACES.textMuted}`}>
                   No hay un reporte técnico de Nova en este chat. Completá título, descripción y
                   categoría a mano.
+                </p>
+              ) : (
+                <p className={`text-xs ${CRM_SURFACES.textMuted}`}>
+                  Busca el cliente por nombre o cédula y completa título, descripción y categoría.
                 </p>
               )}
               {catalogError ? (
@@ -496,16 +526,17 @@ export const CrearCasoWisproDialog = ({
                 title="Cliente y contrato"
                 open={openSections.cliente}
                 onToggle={() => toggleSection("cliente")}>
-                <Label htmlFor="wispro-client-search">Buscar en Wispro</Label>
+                <Label htmlFor="ticket-client-search">Buscar cliente</Label>
                 <Input
-                  id="wispro-client-search"
+                  id="ticket-client-search"
                   value={clientQuery}
                   onChange={(event) => {
                     setClientQuery(event.target.value);
                     setSelectedClient(null);
                   }}
                   placeholder="Nombre o cédula"
-                  className={CRM_SURFACES.input}
+                  autoComplete="off"
+                  
                 />
                 {isSearchingClients ? (
                   <p className={`text-xs ${CRM_SURFACES.textMuted}`}>Buscando...</p>
@@ -519,8 +550,15 @@ export const CrearCasoWisproDialog = ({
                           className={`w-full rounded-xl border px-3 py-2 text-left text-sm ${CRM_SURFACES.border} ${CRM_SURFACES.hover}`}
                           onClick={() => void handleSelectClient(client)}>
                           <span className={CRM_SURFACES.textPrimary}>{client.name}</span>
-                          <span className={`mt-0.5 block font-mono text-[11px] ${CRM_SURFACES.textMuted}`}>
-                            {client.id}
+                          <span className={`mt-0.5 block text-[11px] ${CRM_SURFACES.textMuted}`}>
+                            {[
+                              client.national_identification_number
+                                ? `CI ${client.national_identification_number}`
+                                : null,
+                              client.phone_mobile,
+                            ]
+                              .filter(Boolean)
+                              .join(" · ") || "Sin documento"}
                           </span>
                         </button>
                       </li>
@@ -528,10 +566,13 @@ export const CrearCasoWisproDialog = ({
                   </ul>
                 ) : null}
                 {selectedClient ? (
-                  <p className={`font-mono text-[11px] ${CRM_SURFACES.textMuted}`}>
-                    client_id: {selectedClient.id}
+                  <p className={`text-[11px] ${CRM_SURFACES.textMuted}`}>
+                    {selectedClient.name}
                     {selectedClient.national_identification_number
-                      ? ` · doc ${selectedClient.national_identification_number}`
+                      ? ` · CI ${selectedClient.national_identification_number}`
+                      : ""}
+                    {selectedClient.phone_mobile
+                      ? ` · ${selectedClient.phone_mobile}`
                       : ""}
                   </p>
                 ) : null}
@@ -545,7 +586,7 @@ export const CrearCasoWisproDialog = ({
                         const contract = contracts.find((item) => item.id === value);
                         if (contract) applyContractGps(contract);
                       }}>
-                      <SelectTrigger className={CRM_SURFACES.input}>
+                      <SelectTrigger >
                         <SelectValue placeholder="Selecciona un contrato" />
                       </SelectTrigger>
                       <SelectContent>
@@ -574,7 +615,7 @@ export const CrearCasoWisproDialog = ({
                   <Input
                     id="caso-title"
                     maxLength={80}
-                    className={`${CRM_SURFACES.input} ${missingMotivo ? "border-red-400" : ""}`}
+                    className={`${missingMotivo ? "border-red-400" : ""}`}
                     {...form.register("title")}
                   />
                   {missingMotivo ? (
@@ -587,21 +628,21 @@ export const CrearCasoWisproDialog = ({
                   <Label htmlFor="caso-description">Descripción</Label>
                   <Textarea
                     id="caso-description"
-                    className={`min-h-28 ${CRM_SURFACES.input}`}
+                    className={`min-h-28 `}
                     {...form.register("description")}
                   />
                 </div>
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
                     <Label>Categoría</Label>
-                    <CrmButton
+                    <Button
                       type="button"
                       variant="ghost"
                       size="sm"
                       onClick={() => void loadCatalog(true)}
                       disabled={isLoadingCatalog}>
                       Refrescar
-                    </CrmButton>
+                    </Button>
                     {suggestedCategory ? (
                       <span className={`text-[11px] ${CRM_SURFACES.textMuted}`}>
                         sugerida automáticamente
@@ -614,7 +655,7 @@ export const CrearCasoWisproDialog = ({
                       form.setValue("categoryId", value, { shouldDirty: true });
                       setSuggestedCategory(false);
                     }}>
-                    <SelectTrigger className={CRM_SURFACES.input}>
+                    <SelectTrigger >
                       <SelectValue placeholder="Selecciona categoría" />
                     </SelectTrigger>
                     <SelectContent>
@@ -658,7 +699,7 @@ export const CrearCasoWisproDialog = ({
                           shouldDirty: true,
                         })
                       }>
-                      <SelectTrigger className={CRM_SURFACES.input}>
+                      <SelectTrigger >
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -670,7 +711,7 @@ export const CrearCasoWisproDialog = ({
                       </SelectContent>
                     </Select>
                     <Textarea
-                      className={`min-h-20 ${CRM_SURFACES.input}`}
+                      className={`min-h-20 `}
                       placeholder="Descripción de la orden"
                       {...form.register("orderDescription")}
                     />
@@ -680,7 +721,7 @@ export const CrearCasoWisproDialog = ({
                         <Input
                           id="start-at"
                           type="datetime-local"
-                          className={CRM_SURFACES.input}
+                          
                           {...form.register("startAt")}
                         />
                       </div>
@@ -689,7 +730,7 @@ export const CrearCasoWisproDialog = ({
                         <Input
                           id="end-at"
                           type="datetime-local"
-                          className={CRM_SURFACES.input}
+                          
                           {...form.register("endAt")}
                         />
                       </div>
@@ -731,7 +772,7 @@ export const CrearCasoWisproDialog = ({
                     }
                   }}
                   placeholder="https://maps.app.goo.gl/... o pin del chat"
-                  className={CRM_SURFACES.input}
+                  
                 />
                 {mapsUrl ? (
                   <a
@@ -751,7 +792,7 @@ export const CrearCasoWisproDialog = ({
                   id="caso-address"
                   {...form.register("addressText")}
                   placeholder="Calle, sector, referencia"
-                  className={CRM_SURFACES.input}
+                  
                 />
                 <p className={`text-xs ${CRM_SURFACES.textMuted}`}>
                   Foto de fachada (se reenvía al técnico con el reporte)
@@ -809,26 +850,25 @@ export const CrearCasoWisproDialog = ({
                   disabled={isLoadingCatalog}
                 />
                 <p className={`text-xs ${CRM_SURFACES.textMuted}`}>
-                  Se asigna en el CRM. El técnico ve estos tickets cuando envía su cédula a Nova.
-                  No se agenda en Wispro.
+                  Se asigna en el CRM. El técnico ve estos tickets cuando escribe a Nova.
                 </p>
               </CollapsibleBlock>
 
-              <CrmButton
+              <Button
                 type="submit"
                 disabled={Boolean(catalogError) || isLoadingCatalog || isSubmitting}
                 className="w-full">
                 <TicketPlus className="size-4" />
                 Crear ticket y orden
-              </CrmButton>
+              </Button>
             </section>
           </form>
       </DialogContent>
 
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <AlertDialogContent className={CRM_DIALOG}>
+        <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Confirmar creación en Wispro</AlertDialogTitle>
+            <AlertDialogTitle>Confirmar creación</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className={`space-y-1 text-sm ${CRM_SURFACES.textSecondary}`}>
                 <p>Título: {title || "—"}</p>
@@ -846,7 +886,7 @@ export const CrearCasoWisproDialog = ({
                 <p>
                   Ventana: {startAt || "—"} → {endAt || "—"}
                 </p>
-                <p>Técnico CRM: {selectedEmployee?.name || "sin asignar"}</p>
+                <p>Técnico: {selectedEmployee?.name || "sin asignar"}</p>
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>

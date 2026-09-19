@@ -2,7 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { toast } from "sonner";
-import { CrmButton } from "../shared/crm-button";
+import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,7 +28,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
-import { CRM_DIALOG, CRM_SURFACES } from "../../_lib/crm-theme";
+import { CRM_SURFACES } from "../../_lib/crm-theme";
 import { getManualPaymentBlockReason } from "../../_lib/client-profile-utils";
 import type { Agent, Client, Conversation, Label, Message, QuickReply, Ticket, WisproCustomer, WisproSearchResult } from "../../_lib/types";
 import { AssignAgentDialog } from "../agents/assign-agent-dialog";
@@ -171,7 +171,7 @@ export const ConversationPanel = ({
       toast.error(
         error instanceof Error
           ? error.message
-          : "No se pudo desvincular Wispro",
+          : "No se pudo desvincular el cliente",
       );
     } finally {
       setIsUnlinkingWispro(false);
@@ -351,13 +351,13 @@ export const ConversationPanel = ({
         onOpenChange={(open) => {
           if (!isUnlinkingWispro) setIsUnlinkDialogOpen(open);
         }}>
-        <AlertDialogContent className={CRM_DIALOG}>
+        <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className={CRM_SURFACES.textPrimary}>
-              ¿Desvincular de Wispro?
+              ¿Desvincular cliente?
             </AlertDialogTitle>
             <AlertDialogDescription className={CRM_SURFACES.textMuted}>
-              Se quitará la ficha Wispro de{" "}
+              Se quitará la ficha del abonado de{" "}
               <span className={`font-medium ${CRM_SURFACES.textPrimary}`}>
                 {clientDisplayName}
               </span>
@@ -387,13 +387,13 @@ export const ConversationPanel = ({
         onOpenChange={(open) => {
           if (!isCreatingPaymentPromise) setIsPromiseDialogOpen(open);
         }}>
-        <AlertDialogContent className={CRM_DIALOG}>
+        <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className={CRM_SURFACES.textPrimary}>
               ¿Crear promesa de pago (48h)?
             </AlertDialogTitle>
             <AlertDialogDescription className={CRM_SURFACES.textMuted}>
-              Se creará una promesa de pago en Wispro para{" "}
+              Se creará una promesa de pago para{" "}
               <span className={`font-medium ${CRM_SURFACES.textPrimary}`}>
                 {clientDisplayName}
               </span>
@@ -435,7 +435,7 @@ export const ConversationPanel = ({
       />
 
       <Dialog open={isNoteDialogOpen} onOpenChange={setIsNoteDialogOpen}>
-        <DialogContent className={CRM_DIALOG}>
+        <DialogContent>
           <form onSubmit={handleSubmitNote}>
             <DialogHeader>
               <DialogTitle>Nota interna</DialogTitle>
@@ -444,16 +444,16 @@ export const ConversationPanel = ({
               value={note}
               onChange={(event) => setNote(event.target.value)}
               placeholder="Solo visible para agentes"
-              className={`mt-4 min-h-28 ${CRM_SURFACES.border} ${CRM_SURFACES.input} ${CRM_SURFACES.textPrimary}`}
+              className="mt-4 min-h-28"
             />
             <DialogFooter className="mt-4">
-              <CrmButton
+              <Button
                 type="button"
                 variant="secondary"
                 onClick={() => setIsNoteDialogOpen(false)}>
                 Cancelar
-              </CrmButton>
-              <CrmButton type="submit">Agregar nota</CrmButton>
+              </Button>
+              <Button type="submit">Agregar nota</Button>
             </DialogFooter>
           </form>
         </DialogContent>

@@ -16,7 +16,7 @@ import { DateDivider } from "../shared/date-divider";
 import { LoadingState } from "../shared/loading-state";
 import { MessageBubble } from "../conversations/message-bubble";
 import { LabelChip } from "../shared/label-chip";
-import { CrmButton } from "../shared/crm-button";
+import { Button } from "@/components/ui/button";
 
 interface HistoryMessagesProps {
   entry: ConversationHistory;
@@ -156,7 +156,7 @@ export const HistoryMessages = ({
 
           {hasMore ? (
             <div className="flex justify-center">
-              <CrmButton
+              <Button
                 type="button"
                 variant="secondary"
                 size="sm"
@@ -165,7 +165,7 @@ export const HistoryMessages = ({
                 aria-label="Cargar mensajes anteriores">
                 <ChevronUp className="size-3.5" />
                 {isLoadingOlder ? "Cargando..." : "Cargar mensajes anteriores"}
-              </CrmButton>
+              </Button>
             </div>
           ) : null}
 

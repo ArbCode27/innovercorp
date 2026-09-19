@@ -8,7 +8,7 @@ import {
   type CrmAccentId,
   type CrmColorMode,
 } from "../../_lib/crm-accents";
-import { CRM_FOCUS_RING, CRM_SURFACES } from "../../_lib/crm-theme";
+import { CRM_SURFACES } from "../../_lib/crm-theme";
 import { cn } from "@/lib/utils";
 
 interface AppearanceSettingsSectionProps {
@@ -98,7 +98,7 @@ export const AppearanceSettingsSection = ({
                 disabled={isSaving}
                 onClick={() => onColorModeChange(option.id)}
                 className={cn(
-                  CRM_FOCUS_RING,
+                  "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
                   "inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border px-3 py-2 text-sm font-medium transition",
                   isSelected
                     ? "border-crm-accent bg-crm-accent-muted text-crm-accent-muted-foreground"
@@ -141,7 +141,7 @@ export const AppearanceSettingsSection = ({
                   )
                 }
                 className={cn(
-                  CRM_FOCUS_RING,
+                  "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
                   "flex size-11 items-center justify-center rounded-full border-2 transition",
                   isSelected
                     ? "border-slate-900 ring-2 ring-crm-accent ring-offset-2 ring-offset-slate-50 dark:border-white dark:ring-offset-[#161922]"
@@ -189,7 +189,7 @@ export const AppearanceSettingsSection = ({
                   disabled={isSaving}
                   onClick={() => onOfficeAccentChange(option.id)}
                   className={cn(
-                    CRM_FOCUS_RING,
+                    "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
                     "flex size-10 items-center justify-center rounded-full border-2 transition",
                     isSelected
                       ? "border-slate-900 ring-2 ring-crm-accent ring-offset-2 ring-offset-slate-50 dark:border-white dark:ring-offset-[#161922]"

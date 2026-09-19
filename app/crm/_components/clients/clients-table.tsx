@@ -1,3 +1,4 @@
+import { Card } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -6,7 +7,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { CRM_SURFACES, CRM_TABLE } from "../../_lib/crm-theme";
+import { CRM_SURFACES } from "../../_lib/crm-theme";
 import type { Client, Ticket } from "../../_lib/types";
 import { AvatarInitials } from "../shared/avatar-initials";
 import { StatusBadge } from "../shared/status-badge";
@@ -17,7 +18,7 @@ interface ClientsTableProps {
 }
 
 export const ClientsTable = ({ clients, tickets }: ClientsTableProps) => (
-  <div className={CRM_TABLE}>
+  <Card className="overflow-hidden py-0">
     <div className="overflow-x-auto">
       <Table className="min-w-[720px]">
       <TableHeader>
@@ -77,5 +78,5 @@ export const ClientsTable = ({ clients, tickets }: ClientsTableProps) => (
       </TableBody>
       </Table>
     </div>
-  </div>
+  </Card>
 );

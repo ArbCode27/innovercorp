@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { CrmButton } from "../shared/crm-button";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -15,7 +15,7 @@ import {
   sortAgentsForAssignment,
 } from "../../_lib/agent-utils";
 import type { Agent, Conversation } from "../../_lib/types";
-import { CRM_DIALOG, CRM_FOCUS_RING, CRM_SURFACES } from "../../_lib/crm-theme";
+import { CRM_SURFACES } from "../../_lib/crm-theme";
 import { AvatarInitials } from "../shared/avatar-initials";
 import { StatusBadge } from "../shared/status-badge";
 
@@ -46,7 +46,7 @@ export const AssignAgentDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className={CRM_DIALOG}>
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>Asignar conversación</DialogTitle>
           <DialogDescription className={CRM_SURFACES.textMuted}>
@@ -67,7 +67,7 @@ export const AssignAgentDialog = ({
                   key={agent.id}
                   type="button"
                   onClick={() => handleAssignAgent(agent.id)}
-                  className={`flex w-full items-center gap-3 rounded-2xl p-3 text-left transition hover:border-crm-accent/40 ${CRM_FOCUS_RING} ${CRM_SURFACES.card}`}>
+                  className={`flex w-full items-center gap-3 rounded-2xl p-3 text-left transition hover:border-crm-accent/40 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 ${CRM_SURFACES.card}`}>
                   <AvatarInitials
                     name={agent.name}
                     initials={agent.initials}
@@ -92,9 +92,9 @@ export const AssignAgentDialog = ({
             </div>
           )}
         </div>
-        <CrmButton type="button" variant="secondary" onClick={() => onOpenChange(false)}>
+        <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>
           Cancelar
-        </CrmButton>
+        </Button>
       </DialogContent>
     </Dialog>
   );

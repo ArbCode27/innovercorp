@@ -1,6 +1,6 @@
 "use client";
 
-import { CRM_SURFACES } from "../../_lib/crm-theme";
+import { Badge } from "@/components/ui/badge";
 
 interface DateDividerProps {
   label: string;
@@ -12,9 +12,8 @@ export const DateDivider = ({ label }: DateDividerProps) => (
     role="separator"
     aria-label={label}
     className="flex justify-center py-1">
-    <time
-      className={`rounded-full px-3 py-1 text-[11px] font-medium shadow-sm ${CRM_SURFACES.card} ${CRM_SURFACES.border} border ${CRM_SURFACES.textSecondary}`}>
-      {label}
-    </time>
+    <Badge variant="secondary" className="px-3 py-1 text-[11px] font-medium" asChild>
+      <time>{label}</time>
+    </Badge>
   </div>
 );

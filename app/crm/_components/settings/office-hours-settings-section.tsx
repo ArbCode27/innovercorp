@@ -15,7 +15,7 @@ import {
   type WeekdayKey,
 } from "../../_lib/office-hours";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
-import { CrmButton } from "../shared/crm-button";
+import { Button } from "@/components/ui/button";
 
 interface OfficeHoursSettingsSectionProps {
   isAdmin: boolean;
@@ -217,7 +217,7 @@ export const OfficeHoursSettingsSection = ({
           </div>
         </div>
         <p
-          className={`rounded-full px-2.5 py-1 text-xs font-medium ${CRM_SURFACES.input} ${CRM_SURFACES.textSecondary}`}>
+          className={`rounded-full px-2.5 py-1 text-xs font-medium  ${CRM_SURFACES.textSecondary}`}>
           {openDaysCount}/7 días abiertos
         </p>
       </div>
@@ -226,7 +226,7 @@ export const OfficeHoursSettingsSection = ({
         {/* Left: policy controls */}
         <aside className="flex flex-col gap-3">
           <div
-            className={`rounded-2xl border p-3 ${CRM_SURFACES.border} ${CRM_SURFACES.input}`}>
+            className={`rounded-2xl border p-3 ${CRM_SURFACES.border} `}>
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p
@@ -252,7 +252,7 @@ export const OfficeHoursSettingsSection = ({
           </div>
 
           <div
-            className={`rounded-2xl border p-3 ${CRM_SURFACES.border} ${CRM_SURFACES.input}`}>
+            className={`rounded-2xl border p-3 ${CRM_SURFACES.border} `}>
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p
@@ -273,7 +273,7 @@ export const OfficeHoursSettingsSection = ({
           </div>
 
           <div
-            className={`rounded-2xl border p-3 ${CRM_SURFACES.border} ${CRM_SURFACES.input}`}>
+            className={`rounded-2xl border p-3 ${CRM_SURFACES.border} `}>
             <label
               htmlFor="crm-office-timezone"
               className={`text-xs font-medium uppercase tracking-wide ${CRM_SURFACES.textLabel}`}>
@@ -306,20 +306,20 @@ export const OfficeHoursSettingsSection = ({
             </p>
           ) : (
             <div className="mt-auto flex flex-col gap-2 pt-1">
-              <CrmButton
+              <Button
                 type="button"
-                variant="primary"
+                variant="default"
                 disabled={!isDirty || isSaving}
                 onClick={() => void handleSave()}>
                 {isSaving ? "Guardando…" : "Guardar horarios"}
-              </CrmButton>
-              <CrmButton
+              </Button>
+              <Button
                 type="button"
                 variant="secondary"
                 disabled={isSaving}
                 onClick={handleRestoreDefaults}>
                 Restaurar predeterminados
-              </CrmButton>
+              </Button>
             </div>
           )}
         </aside>
@@ -351,7 +351,7 @@ export const OfficeHoursSettingsSection = ({
                 <li
                   key={key}
                   className={`rounded-2xl border p-3 transition-colors ${CRM_SURFACES.border} ${
-                    isOpen ? CRM_SURFACES.elevated : CRM_SURFACES.input
+                    isOpen ? CRM_SURFACES.elevated : ""
                   }`}>
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
@@ -390,7 +390,7 @@ export const OfficeHoursSettingsSection = ({
                         handleTimeChange(key, "start", event.target.value)
                       }
                       aria-label={`${label} apertura`}
-                      className={`h-8 min-w-0 flex-1 px-1.5 text-xs ${CRM_SURFACES.border} ${CRM_SURFACES.input} ${CRM_SURFACES.textPrimary}`}
+                      className={`h-8 min-w-0 flex-1 px-1.5 text-xs ${CRM_SURFACES.border}  ${CRM_SURFACES.textPrimary}`}
                     />
                     <span
                       className={`shrink-0 text-[11px] ${CRM_SURFACES.textMuted}`}>
@@ -406,7 +406,7 @@ export const OfficeHoursSettingsSection = ({
                         handleTimeChange(key, "end", event.target.value)
                       }
                       aria-label={`${label} cierre`}
-                      className={`h-8 min-w-0 flex-1 px-1.5 text-xs ${CRM_SURFACES.border} ${CRM_SURFACES.input} ${CRM_SURFACES.textPrimary}`}
+                      className={`h-8 min-w-0 flex-1 px-1.5 text-xs ${CRM_SURFACES.border}  ${CRM_SURFACES.textPrimary}`}
                     />
                   </div>
                 </li>

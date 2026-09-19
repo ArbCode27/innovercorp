@@ -250,7 +250,7 @@ export const associateWisproClient = async (
     .eq("wispro_id", customer.id)
     .limit(50);
 
-  throwDbError(lookupError, "No se pudo buscar el cliente en Wispro", {
+  throwDbError(lookupError, "No se pudo buscar el cliente", {
     linkId,
     step: "lookup_by_wispro_id",
     wisproId: customer.id,
@@ -447,7 +447,7 @@ export const associateWisproClient = async (
       clientId: client.id,
       expectedWisproId: customer.id,
     });
-    throw new Error("La vinculación no persistió el wispro_id del cliente");
+    throw new Error("La vinculación no persistió");
   }
 
   // 4) Keep conversation on the chat anchor (never switch to a Wispro-only row).
@@ -566,13 +566,13 @@ export const unlinkWisproClient = async (
     .select()
     .single<Client>();
 
-  throwDbError(error, "No se pudo desvincular Wispro", {
+  throwDbError(error, "No se pudo desvincular el cliente", {
     linkId,
     clientId,
     step: "unlink_update",
   });
 
-  const unlinked = ensureClient(data, "No se pudo desvincular Wispro");
+  const unlinked = ensureClient(data, "No se pudo desvincular el cliente");
   console.log(`${LOG_PREFIX} unlink_completed`, {
     linkId,
     clientId: unlinked.id,

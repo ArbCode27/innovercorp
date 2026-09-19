@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Check, Copy, RefreshCw } from "lucide-react";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
-import { CrmButton } from "../shared/crm-button";
+import { Button } from "@/components/ui/button";
 import type { ResultadoCaso } from "@/lib/wispro-types";
 
 interface ResultadoCasoPanelProps {
@@ -82,10 +82,10 @@ export const ResultadoCasoPanel = ({
               #{publicId}
             </p>
           </div>
-          <CrmButton type="button" variant="secondary" onClick={() => void handleCopy()}>
+          <Button type="button" variant="secondary" onClick={() => void handleCopy()}>
             {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
             {copied ? "Copiado" : "Copiar"}
-          </CrmButton>
+          </Button>
         </div>
       ) : null}
 
@@ -131,14 +131,14 @@ export const ResultadoCasoPanel = ({
       ) : null}
 
       {canRetry && onRetryFailed ? (
-        <CrmButton
+        <Button
           type="button"
           variant="secondary"
           disabled={isRetrying}
           onClick={onRetryFailed}>
           <RefreshCw className="size-4" />
           {isRetrying ? "Reintentando pasos fallidos..." : "Reintentar solo los pasos fallidos"}
-        </CrmButton>
+        </Button>
       ) : null}
     </div>
   );

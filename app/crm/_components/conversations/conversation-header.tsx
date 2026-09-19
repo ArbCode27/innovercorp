@@ -11,9 +11,10 @@ import {
 } from "lucide-react";
 import type { Agent, Client, Conversation } from "../../_lib/types";
 import { canAssignConversation } from "../../_lib/conversation-permissions";
-import { CRM_BADGE_TONES, CRM_SURFACES } from "../../_lib/crm-theme";
+import { Badge } from "@/components/ui/badge";
+import { CRM_SURFACES } from "../../_lib/crm-theme";
 import { AvatarInitials } from "../shared/avatar-initials";
-import { CrmButton } from "../shared/crm-button";
+import { Button } from "@/components/ui/button";
 import { StatusBadge } from "../shared/status-badge";
 import { CrmThemeToggle } from "../shell/crm-theme-toggle";
 import { ConversationActionsDrawer } from "./conversation-actions-drawer";
@@ -69,7 +70,7 @@ export const ConversationHeader = ({
       <div className="flex flex-col gap-3 p-4 xl:flex-row xl:items-start">
         <div className="flex min-w-0 flex-1 gap-3">
           {onBackToList ? (
-            <CrmButton
+            <Button
               type="button"
               variant="ghost"
               size="icon"
@@ -77,7 +78,7 @@ export const ConversationHeader = ({
               onClick={onBackToList}
               aria-label="Volver a conversaciones">
               <ArrowLeft className="size-4" aria-hidden="true" />
-            </CrmButton>
+            </Button>
           ) : null}
           {onOpenDetails ? (
             <button
@@ -116,11 +117,9 @@ export const ConversationHeader = ({
               ) : null}
               <StatusBadge status={conversation.human_mode ? "human" : "bot"} />
               {agentControlName ? (
-                <span
-                  className={`inline-flex max-w-[10rem] items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${CRM_BADGE_TONES.slate}`}
-                  title={agentControlName}>
+                <Badge variant="outline" className="max-w-[10rem]" title={agentControlName}>
                   <span className="truncate">{agentControlName}</span>
-                </span>
+                </Badge>
               ) : null}
             </div>
           </div>
@@ -143,17 +142,17 @@ export const ConversationHeader = ({
           role="toolbar"
           aria-label="Acciones de conversación">
           {conversation.human_mode ? (
-            <CrmButton type="button" variant="violet" size="sm" onClick={onReactivateBot}>
+            <Button type="button" variant="outline" size="sm" onClick={onReactivateBot}>
               <RotateCcw className="size-3" aria-hidden="true" />
               Reactivar bot
-            </CrmButton>
+            </Button>
           ) : (
-            <CrmButton type="button" variant="danger" size="sm" onClick={onTakeControl}>
+            <Button type="button" variant="destructive" size="sm" onClick={onTakeControl}>
               <UserCheck className="size-3" aria-hidden="true" />
               Tomar control
-            </CrmButton>
+            </Button>
           )}
-          <CrmButton
+          <Button
             type="button"
             variant="success"
             size="sm"
@@ -161,22 +160,22 @@ export const ConversationHeader = ({
             onClick={onResolve}>
             <Check className="size-3" aria-hidden="true" />
             {isResolving ? "Archivando..." : "Resolver"}
-          </CrmButton>
-          <CrmButton type="button" variant="secondary" size="sm" onClick={onOpenNote}>
+          </Button>
+          <Button type="button" variant="secondary" size="sm" onClick={onOpenNote}>
             <FileText className="size-3" aria-hidden="true" />
             Agregar nota
-          </CrmButton>
+          </Button>
           {canAssignAgent ? (
-            <CrmButton type="button" variant="secondary" size="sm" onClick={onOpenAssign}>
+            <Button type="button" variant="secondary" size="sm" onClick={onOpenAssign}>
               <UserPlus className="size-3" aria-hidden="true" />
               {assignLabel}
-            </CrmButton>
+            </Button>
           ) : null}
           {onOpenCreateCaso ? (
-            <CrmButton type="button" variant="secondary" size="sm" onClick={onOpenCreateCaso}>
+            <Button type="button" variant="secondary" size="sm" onClick={onOpenCreateCaso}>
               <Wrench className="size-3" aria-hidden="true" />
-              Ticket Wispro
-            </CrmButton>
+              Ticket
+            </Button>
           ) : null}
         </div>
       </div>

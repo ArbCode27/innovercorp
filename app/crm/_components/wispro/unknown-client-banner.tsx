@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertCircle } from "lucide-react";
-import { CrmButton } from "../shared/crm-button";
+import { Button } from "@/components/ui/button";
 
 interface UnknownClientBannerProps {
   onOpenWispro: () => void;
@@ -14,15 +14,15 @@ export const UnknownClientBanner = ({ onOpenWispro }: UnknownClientBannerProps) 
       aria-hidden="true"
     />
     <p className="min-w-0 flex-1 text-xs text-amber-900 dark:text-amber-100">
-      Cliente sin vincular a Wispro. Puedes responder por WhatsApp; asócialo para ver su ficha.
+      Cliente sin vincular. Puedes responder por WhatsApp; asócialo para ver su ficha.
     </p>
-    <CrmButton
+    <Button
       type="button"
       variant="secondary"
       size="sm"
       className="shrink-0 border-amber-300 bg-amber-100 text-amber-900 hover:bg-amber-200 dark:border-amber-500/40 dark:bg-amber-950/70 dark:text-amber-100 dark:hover:bg-amber-900/60"
       onClick={onOpenWispro}>
-      Buscar en Wispro
-    </CrmButton>
+      Buscar cliente
+    </Button>
   </div>
 );

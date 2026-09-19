@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Plus } from "lucide-react";
-import { CrmButton } from "../shared/crm-button";
+import { Button } from "@/components/ui/button";
 import type { Conversation, CreateLabelInput, Label } from "../../_lib/types";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
 import { LabelFormDialog } from "./label-form-dialog";
@@ -32,10 +32,10 @@ export const LabelsView = ({
             Organiza tus conversaciones por categoría
           </p>
         </div>
-        <CrmButton type="button" onClick={() => setIsDialogOpen(true)} className="w-full sm:w-auto">
+        <Button type="button" onClick={() => setIsDialogOpen(true)} className="w-full sm:w-auto">
           <Plus className="mr-2 size-4" aria-hidden="true" />
           Nueva etiqueta
-        </CrmButton>
+        </Button>
       </div>
       <LabelsList labels={labels} conversations={conversations} onDeleteLabel={onDeleteLabel} />
       <LabelFormDialog

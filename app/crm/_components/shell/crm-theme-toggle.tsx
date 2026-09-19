@@ -4,7 +4,7 @@ import { Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
-import { CrmButton } from "../shared/crm-button";
+import { Button } from "@/components/ui/button";
 
 interface CrmThemeToggleProps {
   className?: string;
@@ -25,7 +25,7 @@ export const CrmThemeToggle = ({ className }: CrmThemeToggleProps) => {
   const isDark = resolvedTheme === "dark";
 
   return (
-    <CrmButton
+    <Button
       type="button"
       variant="ghost"
       size="icon"
@@ -38,6 +38,6 @@ export const CrmThemeToggle = ({ className }: CrmThemeToggleProps) => {
       ) : (
         <Moon className="size-5" aria-hidden="true" />
       )}
-    </CrmButton>
+    </Button>
   );
 };

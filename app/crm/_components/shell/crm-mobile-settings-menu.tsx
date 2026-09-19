@@ -15,9 +15,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { CRM_MENU, CRM_MENU_ITEM, CRM_SURFACES } from "../../_lib/crm-theme";
+import { CRM_SURFACES } from "../../_lib/crm-theme";
 import type { CrmView } from "../../_lib/types";
-import { CrmButton } from "../shared/crm-button";
+import { Button } from "@/components/ui/button";
 
 interface CrmMobileSettingsMenuProps {
   onSelectView: (view: CrmView) => void;
@@ -38,25 +38,25 @@ export const CrmMobileSettingsMenu = ({
 }: CrmMobileSettingsMenuProps) => (
   <DropdownMenu>
     <DropdownMenuTrigger asChild>
-      <CrmButton
+      <Button
         type="button"
         variant="secondary"
         size="icon"
         className="size-8 md:hidden"
         aria-label="Abrir configuración del CRM">
         <Settings2 className="size-4" aria-hidden="true" />
-      </CrmButton>
+      </Button>
     </DropdownMenuTrigger>
     <DropdownMenuContent
       align="end"
-      className={`w-48 ${CRM_MENU} ${CRM_SURFACES.textPrimary}`}>
+      className={`w-48 ${CRM_SURFACES.textPrimary}`}>
       {SETTINGS_ITEMS.map((item) => {
         const Icon = item.icon;
         return (
           <DropdownMenuItem
             key={item.id}
             onClick={() => onSelectView(item.id)}
-            className={CRM_MENU_ITEM}>
+            className="cursor-pointer">
             <Icon className="size-4" aria-hidden="true" />
             {item.label}
           </DropdownMenuItem>
