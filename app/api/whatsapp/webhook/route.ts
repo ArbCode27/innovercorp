@@ -1154,11 +1154,12 @@ export async function POST(req: NextRequest) {
       // human_mode is enforced inside replyToConversationWithAi via
       // resolveBotReplyPolicy (after-hours payments may still run).
       if (!messageResult.ignored && messageResult.conversationId) {
-        // Text + image/audio (multimodal). Video/document remain deferred.
+        // Text + image/audio + location (support tickets). Video/document remain deferred.
         const aiEligible =
           messageType === "text" ||
           messageType === "image" ||
-          messageType === "audio";
+          messageType === "audio" ||
+          messageType === "location";
 
         if (aiEligible) {
           const conversationIdForAi = messageResult.conversationId;

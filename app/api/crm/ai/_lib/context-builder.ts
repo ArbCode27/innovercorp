@@ -1,3 +1,4 @@
+import { formatLocationForAi } from "@/lib/location-message";
 import type { AiContent, AiContentPart } from "./ai-client";
 import { describeImageWithGroq, transcribeAudioWithGroq } from "./ai-client";
 
@@ -38,6 +39,10 @@ export type AgentHistoryMessage = {
   mime_type?: string | null;
   caption?: string | null;
   metadata?: Record<string, unknown> | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  location_name?: string | null;
+  location_address?: string | null;
 };
 
 const isUserMessage = (message: AgentHistoryMessage) =>
@@ -107,7 +112,7 @@ export const formatMessageTextForHistory = (message: AgentHistoryMessage) => {
   }
 
   if (mediaType === "location" || content.toLowerCase().includes("ubicación")) {
-    return content || "[Ubicación compartida]";
+    return formatLocationForAi(message);
   }
 
   return content;
@@ -335,9 +340,10 @@ export const buildAgentContents = async (input: {
   };
 };
 
-export const AI_MEDIA_CONTRACT_PROMPT = `Media (imagen/audio):
-- Las imágenes llegan como texto "[Imagen] análisis: ..." (visión previa). Úsalo como si vieras el comprobante/cédula.
+export const AI_MEDIA_CONTRACT_PROMPT = `Media (imagen/audio/ubicación):
+- Las imágenes llegan como texto "[Imagen] análisis: ..." (visión previa). Úsalo como si vieras el comprobante/cédula/fachada.
 - Los audios llegan como "[Audio] transcripción: ...". Responde como si fuera texto del cliente.
+- Los pines de WhatsApp llegan como "[Ubicación] nombre · dirección · lat, lng · URL de Maps". Eso ES el GPS del ticket: no pidas otra ubicación.
 - Usa caption + análisis juntos cuando existan.
 - Si el análisis trae cédula legible, puedes usar lookup_wispro_by_cedula.
 - Si parece comprobante de pago:
@@ -345,4 +351,5 @@ export const AI_MEDIA_CONTRACT_PROMPT = `Media (imagen/audio):
   2) Si NO tienes cédula del abonado: PÍDELA. No uses escalate_to_human todavía.
   3) Con cédula: lookup_wispro_by_cedula (con 1 match el sistema vincula ESTE chat) y luego submit_payment_receipt.
   4) Tras submit, el sistema hace handoff; confirma según el resultado. NUNCA digas que el pago está aprobado.
-- No digas que no puedes ver imágenes o audios: en este sistema sí los recibes (como texto enriquecido).`;
+- Si llega ubicación en un caso de soporte: confirma que la recibiste, úsala para la visita y sigue el diagnóstico / escalate_to_human category=support.
+- No digas que no puedes ver imágenes, audios o ubicaciones: en este sistema sí los recibes (como texto enriquecido).`;

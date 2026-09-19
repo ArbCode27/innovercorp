@@ -38,7 +38,7 @@ const GRAPH_API_VERSION = "v19.0";
 const HISTORY_LIMIT = 24;
 const ACK_DELAY_MS = 5000;
 const HISTORY_SELECT =
-  "id, type, content, sender_type, created_at, media_url, media_type, mime_type, caption, metadata";
+  "id, type, content, sender_type, created_at, media_url, media_type, mime_type, caption, metadata, latitude, longitude, location_name, location_address";
 
 type ConversationRow = {
   id: number;
@@ -385,7 +385,8 @@ export const replyToConversationWithAi = async (
       latestInbound &&
         (latestInbound.content?.trim() ||
           latestInbound.media_url ||
-          latestInbound.caption?.trim()),
+          latestInbound.caption?.trim() ||
+          (latestInbound.latitude != null && latestInbound.longitude != null)),
     );
 
     if (!hasInboundSignal) {

@@ -5,6 +5,7 @@ export type InboundIntent =
   | "receipt_image"
   | "cedula"
   | "cedula_and_image"
+  | "location"
   | "general";
 
 const HUMAN_REQUEST_RE =
@@ -36,6 +37,18 @@ export const looksLikeHumanRequest = (value: string | null | undefined) =>
 
 export const inboundHasImage = (message: AgentHistoryMessage | null | undefined) =>
   String(message?.media_type || "").toLowerCase() === "image";
+
+export const inboundHasLocation = (
+  message: AgentHistoryMessage | null | undefined,
+) => {
+  if (String(message?.media_type || "").toLowerCase() === "location") return true;
+  return (
+    typeof message?.latitude === "number" &&
+    Number.isFinite(message.latitude) &&
+    typeof message?.longitude === "number" &&
+    Number.isFinite(message.longitude)
+  );
+};
 
 export const recentInboundHasImage = (messages: AgentHistoryMessage[]) =>
   messages.some(
@@ -112,6 +125,7 @@ export const classifyBurstIntent = (
   burst: AgentHistoryMessage[],
 ): InboundIntent => {
   const hasImage = burst.some((message) => inboundHasImage(message));
+  const hasLocation = burst.some((message) => inboundHasLocation(message));
   const hasCedula = burst.some(
     (message) =>
       looksLikeCedula(message.content) ||
@@ -121,6 +135,7 @@ export const classifyBurstIntent = (
   const hasHumanRequest = looksLikeHumanRequest(joinedText);
 
   if (hasCedula && hasImage) return "cedula_and_image";
+  if (hasLocation) return "location";
   if (hasImage) return "receipt_image";
   if (hasHumanRequest) return "human_request";
   if (hasCedula) return "cedula";

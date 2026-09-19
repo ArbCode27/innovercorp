@@ -44,6 +44,11 @@ const INTENT_MESSAGES: Partial<
   human_request: {
     hard: "Claro. Un asesor continuará contigo en este chat en breve 😊",
   },
+  location: {
+    ack: "Recibí tu ubicación. La estoy registrando para la visita 😊",
+    soft: "Recibí tu ubicación. Dame un momento y continúo contigo 😊",
+    hard: "Recibí tu ubicación. Un asesor continuará con el ticket en breve 😊",
+  },
 };
 
 const DEFAULT_BY_KIND: Record<"ack" | "soft" | "hard", string> = {
