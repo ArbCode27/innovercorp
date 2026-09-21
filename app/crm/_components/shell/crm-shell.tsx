@@ -15,6 +15,7 @@ import { HistoryView } from "../history/history-view";
 import { LabelsView } from "../labels/labels-view";
 import { QuickRepliesView } from "../quick-replies/quick-replies-view";
 import { SettingsView } from "../settings/settings-view";
+import { SupervisorsView } from "../supervisors/supervisors-view";
 import { PaymentsView } from "../payments/payments-view";
 import { TicketsView } from "../tickets/tickets-view";
 import { CrmAppearanceHydrator } from "./crm-appearance-hydrator";
@@ -251,6 +252,9 @@ export const CrmShell = () => {
                 onSaveAgent={crm.upsertAgent}
                 onToggleAgentStatus={crm.toggleAgentStatus}
               />
+            ) : null}
+            {activeView === "supervisors" && auth.agent ? (
+              <SupervisorsView currentAgent={auth.agent} />
             ) : null}
             {activeView === "settings" ? (
               <SettingsView

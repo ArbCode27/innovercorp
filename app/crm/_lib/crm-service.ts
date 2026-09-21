@@ -22,6 +22,8 @@ import type {
   HistoryMessage,
   UpdateQuickReplyInput,
   UpsertAgentInput,
+  Supervisor,
+  UpsertSupervisorInput,
 } from "./types";
 import {
   EMPTY_AI_RECOVERY_MESSAGES,
@@ -672,5 +674,61 @@ export const crmService = {
       });
 
     throwIfError(error);
+  },
+
+  async listSupervisors(agentId: number): Promise<Supervisor[]> {
+    const response = await fetch(`/api/crm/supervisors?agent_id=${agentId}`);
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "No se pudieron cargar los gerentes");
+    }
+    return (data.supervisors || []) as Supervisor[];
+  },
+
+  async upsertSupervisor(
+    input: UpsertSupervisorInput,
+    agentId: number,
+  ): Promise<Supervisor> {
+    const isEditing = Boolean(input.id);
+    const method = isEditing ? "PATCH" : "POST";
+    const response = await fetch("/api/crm/supervisors", {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        agent_id: agentId,
+        id: input.id,
+        name: input.name,
+        phone: input.phone,
+        wispro_employee_id: input.wisproEmployeeId,
+        active: input.active,
+      }),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "No se pudo guardar el gerente");
+    }
+    return data.supervisor as Supervisor;
+  },
+
+  async toggleSupervisorStatus(
+    supervisor: Supervisor,
+    agentId: number,
+  ): Promise<Supervisor> {
+    const response = await fetch("/api/crm/supervisors", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        agent_id: agentId,
+        id: supervisor.id,
+        active: !supervisor.active,
+      }),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "No se pudo cambiar el estado del gerente");
+    }
+    return data.supervisor as Supervisor;
   },
 };

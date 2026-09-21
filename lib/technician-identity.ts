@@ -36,7 +36,7 @@ const TICKET_REQUEST_RE =
   /\b(pendiente(s)?|ticket(s)?|ruta|visita(s)?|casos?|lote|asignad[oa]s?|listado)\b/i;
 
 const TICKET_MONITOR_CAPTURE_RE =
-  /\b(?:tickets?|casos?|pendientes?|cola|ruta|visitas?)\s+(?:asignad[oa]s?\s+)?(?:de|del|a|para)\s+(.+)$/i;
+  /\b(?:tickets?|casos?|pendientes?|cola|ruta|visitas?)\s+(?:(?:asignad[oa]s?|resuelt[oa]s?|cerrad[oa]s?|finalizad[oa]s?|terminad[oa]s?|completad[oa]s?|solucionad[oa]s?|atendid[oa]s?|pendientes?|abiert[oa]s?|todos)\s+)*(?:de|del|a|para)\s+(.+)$/i;
 
 const TICKET_MONITOR_ASSIGNED_RE =
   /\b(?:asignad[oa]s?)\s+(?:a|de|para)\s+(.+)$/i;
@@ -52,7 +52,7 @@ const TICKET_LIST_VERB_RE =
 const OWN_TICKETS_RE = /\bmis\s+(tickets?|pendientes?|casos?|rutas?)\b/i;
 
 const MONITOR_NAME_TRAIL_RE =
-  /\b(por\s+favor|please|hoy|ahora|pendientes?|tickets?|casos?|asignad[oa]s?)\b/gi;
+  /\b(por\s+favor|please|hoy|ahora|pendientes?|tickets?|casos?|asignad[oa]s?|resuelt[oa]s?|cerrad[oa]s?|finalizad[oa]s?|terminad[oa]s?|completad[oa]s?|solucionad[oa]s?|atendid[oa]s?|abiert[oa]s?|todos)\b/gi;
 
 const TICKET_LIST_SCOPE_RE =
   /\b(pendiente(s)?|ruta|lote|asignad[oa]s?|listado|todos(?:\s+los)?(?:\s+tickets)?|mis\s+(tickets|casos|pendientes)|los\s+tickets)\b/i;
@@ -102,7 +102,7 @@ const DETAIL_NAME_NOISE_RE =
   /\b(?:detalle|ficha|completo|foto(?:s)?|fachada|p[aá]sa(?:me)?|m[aá]nda(?:me)?|env[ií]a(?:me)?|dame|por\s+favor|el|la|los|las|de|del|al|a|un|una|ticket|caso|visita|n[uú]mero|nro|pendiente(?:s)?|m[aá]s|datos|info|informaci[oó]n)\b/gi;
 
 const BARE_CLIENT_NAME_BLOCKLIST_RE =
-  /^(hola|gracias|ok+|okay|dale|va|claro|listo|bueno|espera|ahora|ya|bien|perfecto|entendido|pendientes?|tickets?|casos?|visitas?|ruta|siguiente|reenviar|saludos|buenas?|d[ií]as|tardes|noches|ayuda|men[uú]|t[eé]cnic[oa]s?)$/i;
+  /^(hola|gracias|ok+|okay|dale|va|claro|listo|bueno|espera|ahora|ya|bien|perfecto|entendido|pendientes?|tickets?|casos?|visitas?|ruta|siguiente|reenviar|saludos|buenas?|d[ií]as|tardes|noches|ayuda|men[uú]|t[eé]cnic[oa]s?|audio|imagen|video|foto|fotos|documento|ubicaci[oó]n|nota de voz|voz|sticker)$/i;
 
 const stripFinalizeFillers = (value: string) => {
   let rest = value.replace(/\s+/g, " ").trim();
@@ -238,6 +238,13 @@ export const looksLikeTechnicianTicketDetailRequest = (
   const text = String(value || "").replace(/\s+/g, " ").trim();
   if (!text) return false;
   if (/^(los\s+)?(tickets?|pendientes?|casos?|visitas?|ruta)$/i.test(text)) {
+    return false;
+  }
+  if (
+    /^(audio|imagen|video|foto|fotos|documento|ubicaci[oó]n|nota de voz|voz|sticker)$/i.test(
+      text,
+    )
+  ) {
     return false;
   }
   const hasListScope = TICKET_LIST_SCOPE_RE.test(text);
@@ -447,7 +454,15 @@ export const shouldUseCannedTechnicianWelcome = (input: {
   }
   if (input.inboundIsCedula) return true;
   const text = String(input.inboundText || "").trim();
-  if (!text || looksLikeBareTechnicianGreeting(text)) return true;
+  if (
+    !text ||
+    looksLikeBareTechnicianGreeting(text) ||
+    /^(audio|imagen|video|foto|fotos|documento|ubicaci[oó]n|nota de voz|voz|sticker)$/i.test(
+      text,
+    )
+  ) {
+    return true;
+  }
   return false;
 };
 

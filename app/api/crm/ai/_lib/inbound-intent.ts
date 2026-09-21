@@ -55,11 +55,37 @@ export const recentInboundHasImage = (messages: AgentHistoryMessage[]) =>
     (message) => isUserMessage(message) && inboundHasImage(message),
   );
 
-const resolveInboundText = (message: AgentHistoryMessage | null | undefined) =>
-  [message?.content, message?.caption]
+export const resolveInboundText = (
+  message: AgentHistoryMessage | null | undefined,
+) => {
+  if (!message) return "";
+  const mediaType = String(message.media_type || "").toLowerCase();
+  const transcript =
+    typeof message.metadata?.transcript === "string"
+      ? message.metadata.transcript.trim()
+      : "";
+
+  if (mediaType === "audio") {
+    if (transcript) {
+      return [transcript, message.caption]
+        .map((value) => String(value || "").trim())
+        .filter(Boolean)
+        .join(" ");
+    }
+    const rawContent = String(message.content || "").trim();
+    const effectiveContent =
+      rawContent.toLowerCase() === "audio" ? "" : rawContent;
+    return [effectiveContent, message.caption]
+      .map((value) => String(value || "").trim())
+      .filter(Boolean)
+      .join(" ");
+  }
+
+  return [message.content, message.caption]
     .map((value) => String(value || "").trim())
     .filter(Boolean)
     .join(" ");
+};
 
 export const extractLatestInboundCedula = (
   messages: AgentHistoryMessage[],

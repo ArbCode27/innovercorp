@@ -1,31 +1,23 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { listAssignedEmployeesWithPendingCasos } from "./crm-wispro-casos";
+import { getTechnicianDirectory } from "./technician-directory";
 import {
+  logTechnicianNameMatch,
   matchEmployeesByName,
-  toNamedEmployee,
-  type NamedEmployee,
-} from "./ticket-supervisor";
-import { listTechnicians } from "./wispro";
+  type TechnicianNameResolution,
+} from "./technician-name-match";
+import type { NamedEmployee } from "./ticket-supervisor";
 
-export type TechnicianNameMatch = {
-  matches: NamedEmployee[];
-};
+export type TechnicianNameMatch = TechnicianNameResolution<NamedEmployee>;
 
 export const resolveTechnicianByName = async (
   supabase: SupabaseClient,
   name: string,
 ): Promise<TechnicianNameMatch> => {
   const query = String(name || "").trim();
-  if (query.length < 3) return { matches: [] };
-
-  try {
-    const catalog = await listTechnicians();
-    const fromCatalog = matchEmployeesByName(catalog.map(toNamedEmployee), query);
-    if (fromCatalog.length) return { matches: fromCatalog };
-  } catch (error) {
-    console.warn("[SUPERVISOR] technician_catalog_failed", error);
-  }
-
-  const assigned = await listAssignedEmployeesWithPendingCasos(supabase);
-  return { matches: matchEmployeesByName(assigned, query) };
+  const directory = query
+    ? await getTechnicianDirectory(supabase)
+    : [];
+  const result = matchEmployeesByName(directory, query);
+  logTechnicianNameMatch(query, result);
+  return result;
 };

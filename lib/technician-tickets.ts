@@ -13,6 +13,10 @@ import {
   technicianFirstName,
 } from "./technician-identity";
 import {
+  formatTechnicianNameMatchMessage,
+  technicianResolvedListHeading,
+} from "./technician-name-match";
+import {
   formatTechnicianCaption,
   formatTechnicianList,
   type TechnicianReportCaso,
@@ -341,6 +345,10 @@ export type MonitoredTechnicianQueue = TechnicianTicketDelivery & {
   technicianName: string | null;
   technicianId: string | null;
   candidates: Array<{ id: string; name: string }>;
+  suggestions: Array<{ id: string; name: string; score: number }>;
+  matchStatus: "resolved" | "ambiguous" | "not_found" | null;
+  matchedBy: string | null;
+  score: number | null;
   tickets: Array<{
     public_id: number | null;
     client_name: string | null;
@@ -362,6 +370,10 @@ const emptyMonitoredQueue = (
   technicianName: null,
   technicianId: null,
   candidates: [],
+  suggestions: [],
+  matchStatus: null,
+  matchedBy: null,
+  score: null,
   tickets: [],
   ...input,
 });
@@ -388,21 +400,38 @@ export const deliverMonitoredTechnicianTickets = async (input: {
     });
   }
 
-  if (resolved.matches.length !== 1) {
-    const names = resolved.matches.map((item) => item.name);
+  if (resolved.status !== "resolved") {
+    const names =
+      resolved.status === "ambiguous"
+        ? resolved.candidates.map((item) => item.employee.name)
+        : [];
     return emptyMonitoredQueue({
       ok: true,
-      candidates: resolved.matches.map((item) => ({
-        id: item.id,
-        name: item.name,
-      })),
-      message: resolved.matches.length
-        ? `Hay varios técnicos: ${names.join(", ")}. ¿Cuál quieres consultar?`
-        : `No encontré un técnico llamado ${input.technicianName.trim()}.`,
+      matchStatus: resolved.status,
+      candidates:
+        resolved.status === "ambiguous"
+          ? resolved.candidates.map((item) => ({
+              id: item.employee.id,
+              name: item.employee.name,
+            }))
+          : [],
+      suggestions:
+        resolved.status === "not_found"
+          ? resolved.suggestions.map((item) => ({
+              id: item.employee.id,
+              name: item.employee.name,
+              score: item.score,
+            }))
+          : [],
+      message:
+        formatTechnicianNameMatchMessage(input.technicianName, resolved) ||
+        (names.length
+          ? `Hay varios: ${names.join(", ")}. ¿Cuál?`
+          : `No encontré «${input.technicianName.trim()}».`),
     });
   }
 
-  const target = resolved.matches[0];
+  const target = resolved.employee;
   const loaded = await loadPendingCasos(input.supabase, target.id);
   if (!loaded.casos) {
     return emptyMonitoredQueue({
@@ -420,6 +449,10 @@ export const deliverMonitoredTechnicianTickets = async (input: {
     status: caso.status,
   }));
   const firstName = target.name.trim() || "el técnico";
+  const officialHeading = technicianResolvedListHeading(
+    firstName,
+    resolved.matchedBy,
+  );
 
   if (!loaded.casos.length) {
     return {
@@ -433,14 +466,21 @@ export const deliverMonitoredTechnicianTickets = async (input: {
       technicianName: target.name,
       technicianId: target.id,
       candidates: [],
+      suggestions: [],
+      matchStatus: "resolved",
+      matchedBy: resolved.matchedBy,
+      score: resolved.score,
       tickets,
     };
   }
 
-  const heading =
+  const countHeading =
     loaded.casos.length === 1
       ? `${firstName} tiene 1 ticket pendiente:`
       : `${firstName} tiene ${loaded.casos.length} tickets pendientes:`;
+  const heading = officialHeading
+    ? `${officialHeading}\n${countHeading}`
+    : countHeading;
   const body = formatTechnicianList(loaded.casos.map(toTechnicianReport), {
     heading,
     hint: null,
@@ -497,6 +537,10 @@ export const deliverMonitoredTechnicianTickets = async (input: {
     technicianName: target.name,
     technicianId: target.id,
     candidates: [],
+    suggestions: [],
+    matchStatus: "resolved",
+    matchedBy: resolved.matchedBy,
+    score: resolved.score,
     tickets,
   };
 };

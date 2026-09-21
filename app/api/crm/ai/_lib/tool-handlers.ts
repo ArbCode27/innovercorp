@@ -1714,18 +1714,26 @@ const handleGetTechnicianAssignedTickets = async (
     response: {
       ok: delivery.ok,
       identified: delivery.identified,
+      status: delivery.matchStatus,
+      matchedBy: delivery.matchedBy,
+      score: delivery.score,
       technician: delivery.technicianName,
       technician_id: delivery.technicianId,
       count: delivery.count,
       delivered: delivery.delivered,
       candidates: delivery.candidates,
+      suggestions: delivery.suggestions,
       tickets: delivery.tickets,
       hint: delivery.ok
         ? delivery.delivered > 0
           ? "El listado ya se envió por WhatsApp. No escribas nada más."
-          : delivery.tickets.length
-            ? "Resume el conteo o el listado en un mensaje corto. No inventes tickets."
-            : delivery.message
+          : delivery.matchStatus === "ambiguous"
+            ? "Hay varios técnicos. Pregunta cuál; no inventes el nombre."
+            : delivery.matchStatus === "not_found"
+              ? "No hay match único. Ofrece suggestions si existen; no inventes nombres."
+              : delivery.tickets.length
+                ? "Resume el conteo o el listado en un mensaje corto. No inventes tickets."
+                : delivery.message
         : undefined,
     },
   };

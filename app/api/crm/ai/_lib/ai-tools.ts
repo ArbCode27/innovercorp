@@ -334,13 +334,14 @@ export const AI_TOOL_DECLARATIONS = [
   {
     name: GET_TECHNICIAN_ASSIGNED_TICKETS_TOOL,
     description:
-      "SOLO supervisores/gerentes identificados. Consulta los tickets pendientes asignados a un técnico por nombre (joel, alan). mode=list envía el listado por WhatsApp; mode=summary solo devuelve el conteo y el detalle para que respondas. Si preguntan por varios técnicos, llama una vez por cada nombre.",
+      "SOLO supervisores/gerentes identificados. Consulta los tickets asignados a un técnico por nombre. Pasa technician_name TAL CUAL lo dijo el gerente (texto o transcripción); no lo corrijas, completes, traduzcas ni normalices. El sistema resuelve el nombre contra el catálogo y devuelve status resolved|ambiguous|not_found: usa technician/candidates/suggestions, no inventes nombres. mode=list envía el listado por WhatsApp; mode=summary solo devuelve el conteo. Si preguntan por varios técnicos, llama una vez por cada nombre.",
     parameters: {
       type: "object",
       properties: {
         technician_name: {
           type: "string",
-          description: "Nombre o fragmento del técnico (joel, alan gómez).",
+          description:
+            "Nombre tal como lo dijo el gerente (jonathan, jhonathan abreu). No lo corrijas ni traduzcas.",
         },
         mode: {
           type: "string",
@@ -364,7 +365,7 @@ export const AI_TOOLS_CONTRACT_PROMPT = `Herramientas disponibles (obligatorio r
 7) list_my_pending_tickets — SOLO técnicos identificados. Envía un listado de texto (nombre, título, ubicación). SIN fotos ni ficha. Si delivered=true, no escribas nada más.
 8) get_my_ticket_detail — SOLO técnicos identificados. Envía la ficha completa de UN caso (con foto). Pasa public_id, client_name o list_index. Si delivered=true, no escribas nada más.
 9) finalize_my_ticket — SOLO técnicos identificados. Cierra en CRM y Wispro. Pasa public_id o client_name (aunque el técnico hable informal). Si hay 1 pendiente o 1 match en la cola, cierra sin preguntar. No ofrezcas el listado.
-10) get_technician_assigned_tickets — SOLO supervisores (rol=supervisor_wispro). Consulta la cola de un técnico por nombre. mode=list envía el listado; mode=summary para conteos o comparar varios. Si delivered=true, no escribas nada más.
+10) get_technician_assigned_tickets — SOLO supervisores (rol=supervisor_wispro). Pasa el nombre TAL CUAL lo dijo el gerente (no lo corrijas). El sistema resuelve contra el catálogo (resolved/ambiguous/not_found). No inventes nombres. mode=list envía el listado; mode=summary para conteos. Si delivered=true, no escribas nada más.
 
 Tasa BCV / bolívares (CRÍTICO):
 - NUNCA inventes ni recalcules la tasa.

@@ -253,22 +253,11 @@ export const listPendingCasosForEmployee = async (
   return (data || []).map((row) => fromRow(row as Record<string, unknown>));
 };
 
-export const listAssignedEmployeesWithPendingCasos = async (
-  supabase: SupabaseClient,
+const rowsToNamedEmployees = (
+  rows: Array<{ employee_id?: unknown; employee_name?: unknown }> | null,
 ) => {
-  const { data, error } = await supabase
-    .from("crm_wispro_casos")
-    .select("employee_id, employee_name")
-    .in("status", OPEN_STATUSES)
-    .not("employee_id", "is", null)
-    .limit(200);
-
-  if (error) {
-    throw new Error(error.message || "No se pudieron leer los técnicos asignados");
-  }
-
   const byId = new Map<string, { id: string; name: string }>();
-  for (const row of data || []) {
+  for (const row of rows || []) {
     const id = String(row.employee_id || "").trim();
     if (!id || byId.has(id)) continue;
     byId.set(id, {
@@ -278,6 +267,34 @@ export const listAssignedEmployeesWithPendingCasos = async (
   }
   return [...byId.values()];
 };
+
+export const listAssignedEmployees = async (
+  supabase: SupabaseClient,
+  input?: { status?: CrmWisproCasoStatus[]; limit?: number },
+) => {
+  const limit = Math.min(1000, Math.max(1, input?.limit ?? 500));
+  let query = supabase
+    .from("crm_wispro_casos")
+    .select("employee_id, employee_name")
+    .not("employee_id", "is", null)
+    .order("updated_at", { ascending: false })
+    .limit(limit);
+
+  if (input?.status?.length) {
+    query = query.in("status", input.status);
+  }
+
+  const { data, error } = await query;
+  if (error) {
+    throw new Error(error.message || "No se pudieron leer los técnicos asignados");
+  }
+
+  return rowsToNamedEmployees(data);
+};
+
+export const listAssignedEmployeesWithPendingCasos = async (
+  supabase: SupabaseClient,
+) => listAssignedEmployees(supabase, { status: OPEN_STATUSES, limit: 200 });
 
 export const findEmployeeIdByPhoneLast10 = async (
   supabase: SupabaseClient,

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { findCrmTechnician } from "./crm-technicians";
+import { findActiveSupervisorByPhone } from "./crm-supervisors";
 import {
   findEmployeeByDocumentDigits,
   findEmployeeIdByPhoneLast10,
@@ -8,9 +9,7 @@ import { documentDigits, phoneLast10 } from "./phone-match";
 import { pickWisproEmployeeFromCatalog } from "./pick-wispro-employee";
 import {
   isTicketSupervisorEmployee,
-  isTicketSupervisorPhone,
   ticketSupervisorIds,
-  ticketSupervisorPhones,
 } from "./ticket-supervisor";
 import { listTechnicians } from "./wispro";
 import type { WisproEmployee } from "./wispro-types";
@@ -60,7 +59,7 @@ export const enrichEmployeeSupervisorRole = async (
 ): Promise<MatchedWisproEmployee> => {
   const annotated = annotateEmployeeRole(employee);
   if (annotated.isSupervisor || annotated.publicId != null) return annotated;
-  if (!ticketSupervisorIds().size && !ticketSupervisorPhones().size) {
+  if (!ticketSupervisorIds().size) {
     return annotated;
   }
   try {
@@ -138,36 +137,53 @@ export const matchWisproEmployee = async (
     });
   }
 
-  return supervisorIdentityFromPhone(input.phone);
+  return supervisorIdentityFromPhone(supabase, input.phone);
 };
 
-export const supervisorIdentityFromPhone = (
+/**
+ * PRECEDENCIA DE ROLES EN WHATSAPP:
+ * 1. GERENTE/SUPERVISOR (crm_supervisors activo):
+ *    Si el número coincide con un supervisor activo por phone_last10, SIEMPRE
+ *    se otorga el rol supervisor_wispro (isSupervisor: true). Incluso si este
+ *    número también pertenece a un agente o a un técnico en el CRM/Wispro,
+ *    la capacidad de supervisar y consultar colas toma precedencia.
+ * 2. TÉCNICO (crm_technicians / catálogo Wispro):
+ *    Si no es supervisor pero es técnico de campo activo, tiene acceso a su cola y finalización.
+ * 3. CLIENTE:
+ *    Flujo estándar de atención de abonados.
+ */
+export const supervisorIdentityFromPhone = async (
+  supabase: SupabaseClient,
   phone: string | null | undefined,
-): MatchedWisproEmployee | null => {
-  if (!isTicketSupervisorPhone(phone)) return null;
-  const last10 = phoneLast10(phone);
+): Promise<MatchedWisproEmployee | null> => {
+  const supervisor = await findActiveSupervisorByPhone(supabase, phone);
+  if (!supervisor) return null;
+  const last10 = supervisor.phoneLast10 || phoneLast10(phone);
   return {
-    id: `supervisor-phone:${last10}`,
-    name: "Gerente",
+    id: supervisor.wisproEmployeeId || `supervisor-phone:${last10}`,
+    name: supervisor.name || "Gerente",
     phone: phone || null,
     document: null,
     isSupervisor: true,
   };
 };
 
-export const applySupervisorPhoneOverride = (
+export const applySupervisorPhoneOverride = async (
+  supabase: SupabaseClient,
   employee: MatchedWisproEmployee | null,
   phone: string | null | undefined,
-): MatchedWisproEmployee | null => {
-  if (!isTicketSupervisorPhone(phone)) return employee;
+): Promise<MatchedWisproEmployee | null> => {
+  const supervisor = await findActiveSupervisorByPhone(supabase, phone);
+  if (!supervisor) return employee;
   if (employee) {
     return {
       ...employee,
+      name: supervisor.name || employee.name,
       phone: employee.phone || phone || null,
       isSupervisor: true,
     };
   }
-  return supervisorIdentityFromPhone(phone);
+  return supervisorIdentityFromPhone(supabase, phone);
 };
 
 export const matchWisproEmployeeForPhone = (

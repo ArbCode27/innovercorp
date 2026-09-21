@@ -1,6 +1,8 @@
 import { formatLocationForAi } from "@/lib/location-message";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AiContent, AiContentPart } from "./ai-client";
 import { describeImageWithGroq, transcribeAudioWithGroq } from "./ai-client";
+import { getLatestInboundMessage } from "./inbound-intent";
 
 const LOG_PREFIX = "[AI_AGENT]";
 
@@ -202,10 +204,19 @@ const enrichMediaAsText = async (
   message: AgentHistoryMessage,
 ): Promise<string | null> => {
   const mediaType = (message.media_type || "").toLowerCase();
-  const downloaded = await downloadMediaBytes(message);
-  if (!downloaded) return null;
 
   if (mediaType === "audio") {
+    const existing =
+      typeof message.metadata?.transcript === "string"
+        ? message.metadata.transcript.trim()
+        : "";
+    if (existing) {
+      return `[Audio] transcripción: ${existing}`;
+    }
+
+    const downloaded = await downloadMediaBytes(message);
+    if (!downloaded) return null;
+
     const transcript = await transcribeAudioWithGroq({
       bytes: downloaded.buffer,
       mimeType: downloaded.mimeType,
@@ -215,10 +226,25 @@ const enrichMediaAsText = async (
       messageId: message.id,
       preview: transcript.slice(0, 120),
     });
+    message.metadata = {
+      ...(message.metadata || {}),
+      transcript,
+    };
     return `[Audio] transcripción: ${transcript}`;
   }
 
   if (mediaType === "image") {
+    const existing =
+      typeof message.metadata?.media_summary === "string"
+        ? message.metadata.media_summary.trim()
+        : "";
+    if (existing) {
+      return `[Imagen] análisis: ${existing}`;
+    }
+
+    const downloaded = await downloadMediaBytes(message);
+    if (!downloaded) return null;
+
     const analysis = await describeImageWithGroq({
       base64: downloaded.buffer.toString("base64"),
       mimeType: downloaded.mimeType,
@@ -229,6 +255,10 @@ const enrichMediaAsText = async (
       messageId: message.id,
       preview: analysis.slice(0, 120),
     });
+    message.metadata = {
+      ...(message.metadata || {}),
+      media_summary: analysis,
+    };
     return `[Imagen] análisis: ${analysis}`;
   }
 
@@ -246,9 +276,12 @@ const selectMessagesForInlineMedia = (
     ? Date.parse(trigger.created_at)
     : Date.parse(messages[messages.length - 1]?.created_at || "") || Date.now();
 
+  const latestInbound = getLatestInboundMessage(messages);
+
   const candidates = messages.filter((message) => {
     if (!isAttachableMedia(message)) return false;
     if (triggerMessageId && message.id === triggerMessageId) return true;
+    if (latestInbound && message.id === latestInbound.id) return true;
 
     const createdAt = message.created_at ? Date.parse(message.created_at) : NaN;
     if (!Number.isFinite(createdAt)) return false;
@@ -278,9 +311,11 @@ const selectMessagesForInlineMedia = (
 export const buildAgentContents = async (input: {
   messages: AgentHistoryMessage[];
   triggerMessageId?: number | null;
+  supabase?: SupabaseClient;
 }): Promise<{
   contents: AiContent[];
   attachedMediaIds: number[];
+  transcriptsByMessageId: Map<number, string>;
 }> => {
   const inlineTargets = selectMessagesForInlineMedia(
     input.messages,
@@ -292,17 +327,51 @@ export const buildAgentContents = async (input: {
 
   await Promise.all(
     inlineTargets.map(async (message) => {
+      const beforeTranscript = message.metadata?.transcript;
+      const beforeSummary = message.metadata?.media_summary;
       const enriched = await enrichMediaAsText(message);
       if (enriched) mediaTextByMessageId.set(message.id, enriched);
+      const newlyEnriched =
+        (message.metadata?.transcript &&
+          message.metadata.transcript !== beforeTranscript) ||
+        (message.metadata?.media_summary &&
+          message.metadata.media_summary !== beforeSummary);
+      if (newlyEnriched && input.supabase && message.id) {
+        input.supabase
+          .from("messages")
+          .update({ metadata: message.metadata })
+          .eq("id", message.id)
+          .then(
+            () => {},
+            (err) =>
+              console.warn(`${LOG_PREFIX} persist_media_metadata_failed`, err),
+          );
+      }
     }),
   );
+
+  const transcriptsByMessageId = new Map<number, string>();
+  for (const message of input.messages) {
+    if (
+      typeof message.metadata?.transcript === "string" &&
+      message.metadata.transcript.trim()
+    ) {
+      transcriptsByMessageId.set(
+        message.id,
+        message.metadata.transcript.trim(),
+      );
+    }
+  }
 
   const contents: AiContent[] = [];
 
   for (const message of input.messages) {
     const baseText = formatMessageTextForHistory(message);
     const mediaText = mediaTextByMessageId.get(message.id);
-    const text = [baseText, mediaText].filter(Boolean).join("\n").trim();
+    const text =
+      mediaText && !baseText.includes(mediaText)
+        ? [baseText, mediaText].filter(Boolean).join("\n").trim()
+        : baseText || mediaText || "";
 
     if (!text && !inlineTargetIds.has(message.id)) continue;
 
@@ -337,6 +406,7 @@ export const buildAgentContents = async (input: {
   return {
     contents,
     attachedMediaIds: [...mediaTextByMessageId.keys()],
+    transcriptsByMessageId,
   };
 };
 

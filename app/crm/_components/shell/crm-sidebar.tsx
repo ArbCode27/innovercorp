@@ -9,6 +9,7 @@ import {
   MessageSquareQuote,
   LogOut,
   Settings2,
+  ShieldCheck,
   Tags,
   Ticket,
   Users,
@@ -50,6 +51,7 @@ const icons = {
   tickets: Ticket,
   labels: Tags,
   agents: Bot,
+  supervisors: ShieldCheck,
   settings: Settings2,
 } as const;
 

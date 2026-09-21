@@ -4,6 +4,7 @@ import {
   Bot,
   MessageSquareQuote,
   Settings2,
+  ShieldCheck,
   Tags,
   Ticket,
   Users,
@@ -30,6 +31,7 @@ const SETTINGS_ITEMS: Array<{ id: CrmView; label: string; icon: typeof Users }> 
   { id: "quick-replies", label: "Respuestas rápidas", icon: MessageSquareQuote },
   { id: "labels", label: "Etiquetas", icon: Tags },
   { id: "agents", label: "Agentes", icon: Bot },
+  { id: "supervisors", label: "Gerentes", icon: ShieldCheck },
   { id: "settings", label: "Ajustes", icon: Settings2 },
 ];
 

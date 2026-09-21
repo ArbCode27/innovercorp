@@ -55,6 +55,7 @@ import {
   getLatestOutboundMessage,
   inboundHasImage,
   looksLikeCedula,
+  resolveInboundText,
 } from "./inbound-intent";
 import {
   generateAiWithRetry,
@@ -537,6 +538,7 @@ export const runAiAgent = async (input: {
   const { contents, attachedMediaIds } = await buildAgentContents({
     messages: input.messages,
     triggerMessageId: input.triggerMessageId,
+    supabase: input.supabase,
   });
 
   if (!contents.length) {
@@ -544,10 +546,7 @@ export const runAiAgent = async (input: {
   }
 
   const latestInbound = getLatestInboundMessage(input.messages);
-  const inboundText = [latestInbound?.content, latestInbound?.caption]
-    .map((value) => String(value || "").trim())
-    .filter(Boolean)
-    .join(" ");
+  const inboundText = resolveInboundText(latestInbound);
   const burst = collectBurstInbound(input.messages);
   const hasImage =
     inboundHasImage(latestInbound) ||
@@ -598,7 +597,7 @@ export const runAiAgent = async (input: {
     }).catch(() => null);
   }
   if (employee) employee = await enrichEmployeeSupervisorRole(employee);
-  employee = applySupervisorPhoneOverride(employee, phone);
+  employee = await applySupervisorPhoneOverride(input.supabase, employee, phone);
 
   if (employee) {
     input.onBeforeLongRunningWork?.();

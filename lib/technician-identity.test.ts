@@ -311,6 +311,29 @@ describe("technician inbound helpers", () => {
     ).toBe(true);
   });
 
+  it("does not treat media placeholder words as technician ticket detail requests or client names", () => {
+    expect(looksLikeTechnicianTicketDetailRequest("audio")).toBe(false);
+    expect(looksLikeTechnicianTicketDetailRequest("Audio")).toBe(false);
+    expect(looksLikeTechnicianTicketDetailRequest("imagen")).toBe(false);
+    expect(looksLikeTechnicianTicketDetailRequest("video")).toBe(false);
+    expect(parseTechnicianTicketDetailQuery("Audio")).toEqual({
+      publicId: null,
+      clientName: null,
+      listIndex: null,
+    });
+    expect(parseTechnicianTicketDetailQuery("audio")).toEqual({
+      publicId: null,
+      clientName: null,
+      listIndex: null,
+    });
+    expect(
+      shouldDeliverTechnicianTicketDetail({ inboundText: "Audio" }),
+    ).toBe(false);
+    expect(
+      shouldDeliverTechnicianTicketDetail({ inboundText: "audio" }),
+    ).toBe(false);
+  });
+
   it("lets a supervisor ask for another technician queue", () => {
     expect(parseMonitoredTechnicianQuery("dame los tickets asignados a joel")).toEqual(
       {
@@ -318,6 +341,14 @@ describe("technician inbound helpers", () => {
         wantsCountOnly: false,
       },
     );
+    expect(
+      parseMonitoredTechnicianQuery(
+        "dame los tickets resueltos de jonathan por favor",
+      ),
+    ).toEqual({
+      names: ["jonathan"],
+      wantsCountOnly: false,
+    });
     expect(parseMonitoredTechnicianQuery("cuántos tickets tiene alan")).toEqual({
       names: ["alan"],
       wantsCountOnly: true,

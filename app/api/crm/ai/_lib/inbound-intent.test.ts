@@ -3,6 +3,7 @@ import type { AgentHistoryMessage } from "./context-builder";
 import {
   classifyBurstIntent,
   inboundHasLocation,
+  resolveInboundText,
 } from "./inbound-intent";
 
 const message = (
@@ -59,5 +60,34 @@ describe("classifyBurstIntent", () => {
         message({ id: 1, media_type: "image", content: "comprobante" }),
       ]),
     ).toBe("receipt_image");
+  });
+});
+
+describe("resolveInboundText", () => {
+  it("extracts transcript from audio metadata", () => {
+    const audioMsg = message({
+      id: 1,
+      media_type: "audio",
+      content: "Audio",
+      metadata: { transcript: "dame el listado de mis tickets" },
+    });
+    expect(resolveInboundText(audioMsg)).toBe("dame el listado de mis tickets");
+  });
+
+  it("ignores dummy 'Audio' content when no transcript is present", () => {
+    const audioMsg = message({
+      id: 1,
+      media_type: "audio",
+      content: "Audio",
+    });
+    expect(resolveInboundText(audioMsg)).toBe("");
+  });
+
+  it("preserves standard text message content", () => {
+    const textMsg = message({
+      id: 1,
+      content: "Hola mundo",
+    });
+    expect(resolveInboundText(textMsg)).toBe("Hola mundo");
   });
 });
