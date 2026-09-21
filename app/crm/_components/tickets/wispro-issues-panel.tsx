@@ -26,6 +26,7 @@ import { EmployeePicker } from "../wispro/employee-picker";
 import { CrearCasoWisproDialog } from "../wispro/crear-caso-wispro-dialog";
 import { wisproCasoClient } from "../../_lib/wispro-caso-client";
 import type { CrmWisproCaso, WisproEmployee } from "@/lib/wispro-types";
+import { resolveMapsUrl } from "@/lib/maps-link";
 import { formatCrmDate } from "../../_lib/formatters";
 
 const statusLabel: Record<CrmWisproCaso["status"], string> = {
@@ -40,6 +41,43 @@ const isOpenCaso = (caso: CrmWisproCaso) =>
 
 const hasFacade = (caso: CrmWisproCaso) =>
   Boolean(caso.hasFacade || caso.facadeMediaUrl);
+
+const casoMapsUrl = (caso: CrmWisproCaso) =>
+  resolveMapsUrl({
+    mapsUrl: caso.mapsUrl,
+    latitude: caso.latitude,
+    longitude: caso.longitude,
+  });
+
+const TicketLocationCell = ({ caso }: { caso: CrmWisproCaso }) => {
+  const address = caso.addressText?.trim() || null;
+  const mapsUrl = casoMapsUrl(caso);
+
+  if (!address && !mapsUrl) {
+    return <span className={CRM_SURFACES.textMuted}>—</span>;
+  }
+
+  return (
+    <div className="max-w-[260px] space-y-0.5">
+      {address ? (
+        <p className="line-clamp-2" title={address}>
+          {address}
+        </p>
+      ) : null}
+      {mapsUrl ? (
+        <a
+          href={mapsUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1 text-xs underline"
+          aria-label={`Abrir Maps de ${caso.clientName || "el cliente"}`}>
+          Maps
+          <ExternalLink className="size-3" />
+        </a>
+      ) : null}
+    </div>
+  );
+};
 
 export const WisproIssuesPanel = () => {
   const [casos, setCasos] = useState<CrmWisproCaso[]>([]);
@@ -167,7 +205,7 @@ export const WisproIssuesPanel = () => {
             Tickets
           </h2>
           <p className={`text-sm ${CRM_SURFACES.textMuted}`}>
-            Foto de fachada, Maps y técnico. Nova usa esta misma lista.
+            Ubicación, foto de fachada y técnico. Nova usa esta misma lista.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -198,14 +236,14 @@ export const WisproIssuesPanel = () => {
 
       <Card className="overflow-hidden py-0">
         <div className="overflow-x-auto">
-          <Table className="min-w-[1080px]">
+          <Table className="min-w-[1180px]">
             <TableHeader>
               <TableRow className={`${CRM_SURFACES.border} hover:bg-transparent`}>
                 <TableHead className={CRM_SURFACES.textMuted}>#</TableHead>
                 <TableHead className={CRM_SURFACES.textMuted}>Cliente</TableHead>
                 <TableHead className={CRM_SURFACES.textMuted}>Causa</TableHead>
                 <TableHead className={CRM_SURFACES.textMuted}>Técnico</TableHead>
-                <TableHead className={CRM_SURFACES.textMuted}>Maps</TableHead>
+                <TableHead className={CRM_SURFACES.textMuted}>Ubicación</TableHead>
                 <TableHead className={CRM_SURFACES.textMuted}>Fachada</TableHead>
                 <TableHead className={CRM_SURFACES.textMuted}>Estado</TableHead>
                 <TableHead className={CRM_SURFACES.textMuted}>Creado</TableHead>
@@ -241,20 +279,8 @@ export const WisproIssuesPanel = () => {
                           </p>
                         ) : null}
                       </TableCell>
-                      <TableCell>
-                        {caso.mapsUrl ? (
-                          <a
-                            href={caso.mapsUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-1 text-xs underline"
-                            aria-label={`Abrir Maps del ticket ${caso.wisproPublicId ?? ""}`}>
-                            Abrir
-                            <ExternalLink className="size-3" />
-                          </a>
-                        ) : (
-                          <span className={CRM_SURFACES.textMuted}>—</span>
-                        )}
+                      <TableCell className={CRM_SURFACES.textSecondary}>
+                        <TicketLocationCell caso={caso} />
                       </TableCell>
                       <TableCell className={CRM_SURFACES.textSecondary}>
                         {hasFacade(caso) ? "Sí" : "No"}
