@@ -4,6 +4,7 @@ import { listPendingCasosForEmployee } from "./crm-wispro-casos";
 import { recordTechnicianEvent, updateTechnicianReportOffset } from "./crm-technicians";
 import { matchTechnicianTicketDetail } from "./match-technician-ticket";
 import type { MatchedWisproEmployee } from "./match-wispro-employee";
+import { resolveTechnicianByName } from "./resolve-technician-by-name";
 import { technicianDeliveryFollowUp } from "./technician-delivery-text";
 import {
   looksLikeTechnicianNextPage,
@@ -28,6 +29,10 @@ export const TECHNICIAN_TOOL_NAMES = [
   "list_my_pending_tickets",
   "get_my_ticket_detail",
   "finalize_my_ticket",
+] as const;
+
+export const SUPERVISOR_TOOL_NAMES = [
+  "get_technician_assigned_tickets",
 ] as const;
 
 export type TechnicianTicketDelivery = {
@@ -329,5 +334,169 @@ export const deliverTechnicianTicketDetail = async (input: {
     delivered: 1,
     remaining: Math.max(0, all.length - 1),
     offset: 0,
+  };
+};
+
+export type MonitoredTechnicianQueue = TechnicianTicketDelivery & {
+  technicianName: string | null;
+  technicianId: string | null;
+  candidates: Array<{ id: string; name: string }>;
+  tickets: Array<{
+    public_id: number | null;
+    client_name: string | null;
+    cause: string | null;
+    address: string | null;
+    status: string;
+  }>;
+};
+
+const emptyMonitoredQueue = (
+  input: Partial<MonitoredTechnicianQueue> & { message: string },
+): MonitoredTechnicianQueue => ({
+  ok: false,
+  identified: true,
+  count: 0,
+  delivered: 0,
+  remaining: 0,
+  offset: 0,
+  technicianName: null,
+  technicianId: null,
+  candidates: [],
+  tickets: [],
+  ...input,
+});
+
+export const deliverMonitoredTechnicianTickets = async (input: {
+  supabase: SupabaseClient;
+  conversationId: number;
+  to: string;
+  supervisor: MatchedWisproEmployee;
+  technicianId?: string | null;
+  technicianName: string;
+  deliver?: boolean;
+}): Promise<MonitoredTechnicianQueue> => {
+  const deliver = input.deliver !== false;
+  let resolved;
+  try {
+    resolved = await resolveTechnicianByName(input.supabase, input.technicianName);
+  } catch (error) {
+    return emptyMonitoredQueue({
+      message:
+        error instanceof Error
+          ? error.message
+          : "No se pudo buscar al técnico",
+    });
+  }
+
+  if (resolved.matches.length !== 1) {
+    const names = resolved.matches.map((item) => item.name);
+    return emptyMonitoredQueue({
+      ok: true,
+      candidates: resolved.matches.map((item) => ({
+        id: item.id,
+        name: item.name,
+      })),
+      message: resolved.matches.length
+        ? `Hay varios técnicos: ${names.join(", ")}. ¿Cuál quieres consultar?`
+        : `No encontré un técnico llamado ${input.technicianName.trim()}.`,
+    });
+  }
+
+  const target = resolved.matches[0];
+  const loaded = await loadPendingCasos(input.supabase, target.id);
+  if (!loaded.casos) {
+    return emptyMonitoredQueue({
+      message: loaded.message || "No se pudieron leer los tickets pendientes",
+      technicianName: target.name,
+      technicianId: target.id,
+    });
+  }
+
+  const tickets = loaded.casos.map((caso) => ({
+    public_id: caso.wisproPublicId,
+    client_name: caso.clientName,
+    cause: caso.cause || caso.title,
+    address: caso.addressText,
+    status: caso.status,
+  }));
+  const firstName = target.name.trim() || "el técnico";
+
+  if (!loaded.casos.length) {
+    return {
+      ok: true,
+      identified: true,
+      message: `${firstName} no tiene tickets pendientes asignados.`,
+      count: 0,
+      delivered: 0,
+      remaining: 0,
+      offset: 0,
+      technicianName: target.name,
+      technicianId: target.id,
+      candidates: [],
+      tickets,
+    };
+  }
+
+  const heading =
+    loaded.casos.length === 1
+      ? `${firstName} tiene 1 ticket pendiente:`
+      : `${firstName} tiene ${loaded.casos.length} tickets pendientes:`;
+  const body = formatTechnicianList(loaded.casos.map(toTechnicianReport), {
+    heading,
+    hint: null,
+  });
+
+  if (deliver) {
+    try {
+      await sendWhatsAppText({
+        to: input.to,
+        body,
+        supabase: input.supabase,
+        conversationId: input.conversationId,
+        metadata: {
+          engine: "ai",
+          action: "supervisor_technician_queue",
+          technician: target.id,
+        },
+      });
+    } catch (error) {
+      return emptyMonitoredQueue({
+        message:
+          error instanceof Error
+            ? error.message
+            : "No se pudo enviar el listado al supervisor",
+        technicianName: target.name,
+        technicianId: target.id,
+        tickets,
+        count: loaded.casos.length,
+      });
+    }
+  }
+
+  await recordTechnicianEvent(input.supabase, {
+    technicianId: input.technicianId ?? null,
+    conversationId: input.conversationId,
+    event: "supervisor_inspected_technician",
+    method: deliver ? "list" : "summary",
+    metadata: {
+      target_employee_id: target.id,
+      target_name: target.name,
+      count: loaded.casos.length,
+      supervisor_employee_id: input.supervisor.id,
+    },
+  });
+
+  return {
+    ok: true,
+    identified: true,
+    message: deliver ? "" : body,
+    count: loaded.casos.length,
+    delivered: deliver ? loaded.casos.length : 0,
+    remaining: 0,
+    offset: 0,
+    technicianName: target.name,
+    technicianId: target.id,
+    candidates: [],
+    tickets,
   };
 };

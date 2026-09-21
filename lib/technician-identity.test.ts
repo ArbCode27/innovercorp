@@ -11,7 +11,9 @@ import {
   looksLikeTechnicianResend,
   looksLikeTechnicianTicketRequest,
   looksLikeTechnicianTicketDetailRequest,
+  parseMonitoredTechnicianQuery,
   parseTechnicianTicketDetailQuery,
+  shouldDeliverMonitoredTechnicianQueue,
   shouldDeliverTechnicianTicketDetail,
   shouldDeliverTechnicianTickets,
   shouldUseCannedTechnicianWelcome,
@@ -307,5 +309,72 @@ describe("technician inbound helpers", () => {
         inboundIsCedula: false,
       }),
     ).toBe(true);
+  });
+
+  it("lets a supervisor ask for another technician queue", () => {
+    expect(parseMonitoredTechnicianQuery("dame los tickets asignados a joel")).toEqual(
+      {
+        names: ["joel"],
+        wantsCountOnly: false,
+      },
+    );
+    expect(parseMonitoredTechnicianQuery("cuántos tickets tiene alan")).toEqual({
+      names: ["alan"],
+      wantsCountOnly: true,
+    });
+    expect(
+      parseMonitoredTechnicianQuery("cuántos tickets tienen joel y alan").names,
+    ).toEqual(["joel", "alan"]);
+    expect(
+      shouldDeliverTechnicianTickets({
+        justVerified: false,
+        inboundText: "dame los tickets asignados a joel",
+        inboundIsCedula: false,
+        isSupervisor: true,
+      }),
+    ).toBe(false);
+    expect(
+      shouldDeliverMonitoredTechnicianQueue({
+        isSupervisor: true,
+        inboundText: "dame los tickets asignados a joel",
+      }),
+    ).toBe(true);
+    expect(
+      shouldDeliverMonitoredTechnicianQueue({
+        isSupervisor: true,
+        inboundText: "cuántos tickets tiene alan",
+      }),
+    ).toBe(false);
+    expect(
+      shouldDeliverTechnicianTickets({
+        justVerified: false,
+        inboundText: "mis tickets",
+        inboundIsCedula: false,
+        isSupervisor: true,
+      }),
+    ).toBe(true);
+    expect(
+      shouldDeliverTechnicianTickets({
+        justVerified: false,
+        inboundText: "pendientes",
+        inboundIsCedula: false,
+        isSupervisor: true,
+      }),
+    ).toBe(false);
+    expect(parseMonitoredTechnicianQuery("el cliente tiene internet").names).toEqual(
+      [],
+    );
+    expect(
+      shouldDeliverMonitoredTechnicianQueue({
+        isSupervisor: true,
+        inboundText: "el cliente tiene internet",
+      }),
+    ).toBe(false);
+    expect(
+      shouldDeliverMonitoredTechnicianQueue({
+        isSupervisor: false,
+        inboundText: "dame los tickets asignados a joel",
+      }),
+    ).toBe(false);
   });
 });

@@ -35,6 +35,25 @@ export type TechnicianIdentitySignals = {
 const TICKET_REQUEST_RE =
   /\b(pendiente(s)?|ticket(s)?|ruta|visita(s)?|casos?|lote|asignad[oa]s?|listado)\b/i;
 
+const TICKET_MONITOR_CAPTURE_RE =
+  /\b(?:tickets?|casos?|pendientes?|cola|ruta|visitas?)\s+(?:asignad[oa]s?\s+)?(?:de|del|a|para)\s+(.+)$/i;
+
+const TICKET_MONITOR_ASSIGNED_RE =
+  /\b(?:asignad[oa]s?)\s+(?:a|de|para)\s+(.+)$/i;
+
+const TICKET_MONITOR_HAS_RE =
+  /\b(?:tiene|tienen|tenga|tienen?)\s+(.+)$/i;
+
+const TICKET_COUNT_RE = /\b(cu[aá]ntos?|cu[aá]ntas?|total)\b/i;
+
+const TICKET_LIST_VERB_RE =
+  /\b(listado|lista|detalle|ficha|p[aá]sa(?:me)?|m[aá]nda(?:me)?|dame|env[ií]a(?:me)?)\b/i;
+
+const OWN_TICKETS_RE = /\bmis\s+(tickets?|pendientes?|casos?|rutas?)\b/i;
+
+const MONITOR_NAME_TRAIL_RE =
+  /\b(por\s+favor|please|hoy|ahora|pendientes?|tickets?|casos?|asignad[oa]s?)\b/gi;
+
 const TICKET_LIST_SCOPE_RE =
   /\b(pendiente(s)?|ruta|lote|asignad[oa]s?|listado|todos(?:\s+los)?(?:\s+tickets)?|mis\s+(tickets|casos|pendientes)|los\s+tickets)\b/i;
 
@@ -170,6 +189,46 @@ export const looksLikeTechnicianTicketRequest = (
   value: string | null | undefined,
 ) => TICKET_REQUEST_RE.test(String(value || ""));
 
+export type MonitoredTechnicianQuery = {
+  names: string[];
+  wantsCountOnly: boolean;
+};
+
+const cleanMonitoredNameChunk = (value: string) =>
+  value
+    .replace(MONITOR_NAME_TRAIL_RE, " ")
+    .replace(/[¿?¡!.,;:]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+export const parseMonitoredTechnicianQuery = (
+  value: string | null | undefined,
+): MonitoredTechnicianQuery => {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  if (!text) return { names: [], wantsCountOnly: false };
+
+  const captured =
+    TICKET_MONITOR_CAPTURE_RE.exec(text)?.[1] ||
+    TICKET_MONITOR_ASSIGNED_RE.exec(text)?.[1] ||
+    ((TICKET_REQUEST_RE.test(text) || TICKET_COUNT_RE.test(text)) &&
+      TICKET_MONITOR_HAS_RE.exec(text)?.[1]) ||
+    "";
+  const cleaned = cleanMonitoredNameChunk(captured);
+  const names = cleaned
+    .split(/\s+(?:y|e|,)\s+/i)
+    .map((item) => cleanMonitoredNameChunk(item))
+    .filter((item) => item.length >= 3 && !OWN_TICKETS_RE.test(item));
+
+  const wantsCountOnly =
+    TICKET_COUNT_RE.test(text) && !TICKET_LIST_VERB_RE.test(text);
+
+  return { names, wantsCountOnly };
+};
+
+export const looksLikeMonitoredTechnicianQuery = (
+  value: string | null | undefined,
+) => parseMonitoredTechnicianQuery(value).names.length > 0;
+
 export const looksLikeTechnicianTicketDetailRequest = (
   value: string | null | undefined,
 ) => {
@@ -230,6 +289,9 @@ export const looksLikeBareTechnicianGreeting = (
 
 export const formatTechnicianWelcome = (name: string | null | undefined) =>
   `Hola ${technicianFirstName(name)}. Te identifiqué como técnico. ¿Quieres que te envíe tu listado de tickets pendientes?`;
+
+export const formatSupervisorWelcome = (name: string | null | undefined) =>
+  `Hola ${technicianFirstName(name)}. Te identifiqué como supervisor. Puedes consultar la cola de un técnico por nombre (por ejemplo: tickets de Joel).`;
 
 export const formatTechnicianAgentQueue = (
   items: Array<{
@@ -339,10 +401,15 @@ export const shouldDeliverTechnicianTickets = (input: {
   inboundText: string | null | undefined;
   inboundIsCedula: boolean;
   listOfferPending?: boolean;
+  isSupervisor?: boolean;
 }) => {
   if (looksLikeTechnicianFinalizeRequest(input.inboundText)) return false;
   if (shouldDeliverTechnicianTicketDetail({ inboundText: input.inboundText })) {
     return false;
+  }
+  if (looksLikeMonitoredTechnicianQuery(input.inboundText)) return false;
+  if (input.isSupervisor) {
+    return OWN_TICKETS_RE.test(String(input.inboundText || ""));
   }
   if (looksLikeTechnicianTicketRequest(input.inboundText)) return true;
   if (looksLikeTechnicianNextPage(input.inboundText)) return true;
@@ -352,6 +419,16 @@ export const shouldDeliverTechnicianTickets = (input: {
   }
   if (input.inboundIsCedula && !input.justVerified) return true;
   return false;
+};
+
+export const shouldDeliverMonitoredTechnicianQueue = (input: {
+  isSupervisor: boolean;
+  inboundText: string | null | undefined;
+}) => {
+  if (!input.isSupervisor) return false;
+  if (looksLikeTechnicianFinalizeRequest(input.inboundText)) return false;
+  const query = parseMonitoredTechnicianQuery(input.inboundText);
+  return query.names.length === 1 && !query.wantsCountOnly;
 };
 
 export const shouldUseCannedTechnicianWelcome = (input: {

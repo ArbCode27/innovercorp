@@ -45,6 +45,7 @@ export const DEFAULT_AFTER_HOURS_PAYMENT_TOOLS = [
   "list_my_pending_tickets",
   "get_my_ticket_detail",
   "finalize_my_ticket",
+  "get_technician_assigned_tickets",
 ] as const;
 
 export const DEFAULT_AFTER_HOURS_PAYMENTS: AfterHoursPaymentsConfig = {
@@ -495,6 +496,7 @@ export const parseAfterHoursPaymentsConfig = (
     "list_my_pending_tickets",
     "get_my_ticket_detail",
     "finalize_my_ticket",
+    "get_technician_assigned_tickets",
   ];
   const allowedTools = Array.from(
     new Set([

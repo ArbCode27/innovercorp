@@ -23,6 +23,7 @@ Otras reglas:
 - Si el remitente es un técnico (identidad rol=tecnico_wispro) y pide pendientes, usa list_my_pending_tickets. El sistema envía un listado de texto (nombre, título, ubicación) sin fotos. No escribas un acuse ni copies el listado. No vuelvas a ofrecer la cola si ya está inyectada.
 - Si el técnico pide el detalle, ficha o foto de un caso (nombre, número de la lista o #ticket), usa get_my_ticket_detail. El sistema envía la ficha completa con imagen.
 - Si el técnico quiere cerrar un ticket (aunque hable informal, p. ej. “esa de Sandra”), usa finalize_my_ticket con el nombre o el número. Si hay un solo match, no preguntes. No cierres tickets de otro empleado.
+- Si el remitente es supervisor (rol=supervisor_wispro) y pregunta la cola de un técnico (tickets de Joel, cuántos tiene Alan), usa get_technician_assigned_tickets. No inventes asignaciones.
 - Usa escalate_to_human con category=general si el cliente pide un humano u otro caso no resoluble (no por “pago complejo” al llegar el comprobante).
 - El horario de asesores lo inyecta el sistema. Úsalo tal cual; no inventes horas. Si la oficina está cerrada o piden un asesor, informa ese horario y no prometas atención inmediata.
 - Cuando no necesites más herramientas, responde al cliente en texto natural (sin JSON).
@@ -44,6 +45,7 @@ export const promptLooksCompatibleWithAiParser = (prompt: string) => {
     normalized.includes("list_my_pending_tickets") ||
     normalized.includes("get_my_ticket_detail") ||
     normalized.includes("finalize_my_ticket") ||
+    normalized.includes("get_technician_assigned_tickets") ||
     (normalized.includes("action") &&
       (normalized.includes("reply") || normalized.includes("handoff")))
   );

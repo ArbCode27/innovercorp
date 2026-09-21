@@ -101,6 +101,21 @@ export const wisproCasoClient = {
     return payload.casos || [];
   },
 
+  async getCrmCaso(issueId: string) {
+    const response = await fetch(
+      `/api/casos?issueId=${encodeURIComponent(issueId)}`,
+      { cache: "no-store" },
+    );
+    const payload = (await response.json()) as {
+      caso?: CrmWisproCaso;
+      error?: string;
+    };
+    if (!response.ok || !payload.caso) {
+      throw new Error(payload.error || "No se cargó el detalle del ticket");
+    }
+    return payload.caso;
+  },
+
   async listIssues() {
     const response = await fetch("/api/crm/wispro/issues", { cache: "no-store" });
     const payload = (await response.json()) as {

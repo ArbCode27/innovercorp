@@ -235,20 +235,48 @@ export const listOpenCasosForConversation = async (
 export const listPendingCasosForEmployee = async (
   supabase: SupabaseClient,
   employeeId: string,
+  input?: { limit?: number },
 ) => {
+  const limit = Math.min(100, Math.max(1, input?.limit ?? 20));
   const { data, error } = await supabase
     .from("crm_wispro_casos")
     .select("*")
     .eq("employee_id", employeeId)
     .in("status", OPEN_STATUSES)
     .order("window_start", { ascending: true, nullsFirst: false })
-    .limit(20);
+    .limit(limit);
 
   if (error) {
     throw new Error(error.message || "No se pudieron leer los tickets del técnico");
   }
 
   return (data || []).map((row) => fromRow(row as Record<string, unknown>));
+};
+
+export const listAssignedEmployeesWithPendingCasos = async (
+  supabase: SupabaseClient,
+) => {
+  const { data, error } = await supabase
+    .from("crm_wispro_casos")
+    .select("employee_id, employee_name")
+    .in("status", OPEN_STATUSES)
+    .not("employee_id", "is", null)
+    .limit(200);
+
+  if (error) {
+    throw new Error(error.message || "No se pudieron leer los técnicos asignados");
+  }
+
+  const byId = new Map<string, { id: string; name: string }>();
+  for (const row of data || []) {
+    const id = String(row.employee_id || "").trim();
+    if (!id || byId.has(id)) continue;
+    byId.set(id, {
+      id,
+      name: String(row.employee_name || "Técnico"),
+    });
+  }
+  return [...byId.values()];
 };
 
 export const findEmployeeIdByPhoneLast10 = async (

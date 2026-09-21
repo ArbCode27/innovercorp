@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { CheckCircle2, ExternalLink, Plus, RefreshCw, UserRoundPen } from "lucide-react";
+import { CheckCircle2, Eye, ExternalLink, Plus, RefreshCw, UserRoundPen } from "lucide-react";
 import { toast } from "sonner";
 import {
   Table,
@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
 import { EmployeePicker } from "../wispro/employee-picker";
 import { CrearCasoWisproDialog } from "../wispro/crear-caso-wispro-dialog";
+import { TicketDetailDialog } from "./ticket-detail-dialog";
 import { wisproCasoClient } from "../../_lib/wispro-caso-client";
 import type { CrmWisproCaso, WisproEmployee } from "@/lib/wispro-types";
 import { resolveMapsUrl } from "@/lib/maps-link";
@@ -87,6 +88,7 @@ export const WisproIssuesPanel = () => {
   const [busyIssueId, setBusyIssueId] = useState<string | null>(null);
   const [finalizeCaso, setFinalizeCaso] = useState<CrmWisproCaso | null>(null);
   const [reassignCaso, setReassignCaso] = useState<CrmWisproCaso | null>(null);
+  const [detailCaso, setDetailCaso] = useState<CrmWisproCaso | null>(null);
   const [reassignEmployeeId, setReassignEmployeeId] = useState("");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
 
@@ -292,32 +294,41 @@ export const WisproIssuesPanel = () => {
                         {formatCrmDate(caso.createdAt)}
                       </TableCell>
                       <TableCell>
-                        {open ? (
-                          <div className="flex flex-wrap gap-2">
-                            <Button
-                              type="button"
-                              variant="success"
-                              size="sm"
-                              disabled={busy}
-                              aria-label={`Finalizar ticket ${caso.wisproPublicId ?? ""}`}
-                              onClick={() => setFinalizeCaso(caso)}>
-                              <CheckCircle2 className="size-3.5" />
-                              Finalizar
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              size="sm"
-                              disabled={busy}
-                              aria-label={`Reasignar ticket ${caso.wisproPublicId ?? ""}`}
-                              onClick={() => void handleOpenReassign(caso)}>
-                              <UserRoundPen className="size-3.5" />
-                              Reasignar
-                            </Button>
-                          </div>
-                        ) : (
-                          <span className={CRM_SURFACES.textMuted}>—</span>
-                        )}
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            aria-label={`Ver detalle del ticket ${caso.wisproPublicId ?? ""}`}
+                            onClick={() => setDetailCaso(caso)}>
+                            <Eye className="size-3.5" />
+                            Detalle
+                          </Button>
+                          {open ? (
+                            <>
+                              <Button
+                                type="button"
+                                variant="success"
+                                size="sm"
+                                disabled={busy}
+                                aria-label={`Finalizar ticket ${caso.wisproPublicId ?? ""}`}
+                                onClick={() => setFinalizeCaso(caso)}>
+                                <CheckCircle2 className="size-3.5" />
+                                Finalizar
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                size="sm"
+                                disabled={busy}
+                                aria-label={`Reasignar ticket ${caso.wisproPublicId ?? ""}`}
+                                onClick={() => void handleOpenReassign(caso)}>
+                                <UserRoundPen className="size-3.5" />
+                                Reasignar
+                              </Button>
+                            </>
+                          ) : null}
+                        </div>
                       </TableCell>
                     </TableRow>
                   );
@@ -414,6 +425,13 @@ export const WisproIssuesPanel = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <TicketDetailDialog
+        caso={detailCaso}
+        onOpenChange={(open) => {
+          if (!open) setDetailCaso(null);
+        }}
+      />
 
       <CrearCasoWisproDialog
         open={isCreateOpen}

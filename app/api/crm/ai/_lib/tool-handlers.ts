@@ -31,6 +31,7 @@ import {
   GET_BCV_RATE_TOOL,
   GET_CLIENT_TICKET_TOOL,
   GET_MY_TICKET_DETAIL_TOOL,
+  GET_TECHNICIAN_ASSIGNED_TICKETS_TOOL,
   LINK_WISPRO_TOOL,
   LIST_MY_PENDING_TICKETS_TOOL,
   LOOKUP_WISPRO_TOOL,
@@ -39,6 +40,7 @@ import {
   finalizeMyTicketArgsSchema,
   getClientTicketArgsSchema,
   getMyTicketDetailArgsSchema,
+  getTechnicianAssignedTicketsArgsSchema,
   linkWisproArgsSchema,
   listMyPendingTicketsArgsSchema,
   lookupWisproArgsSchema,
@@ -48,7 +50,7 @@ import {
   listOpenCasosForConversation,
 } from "@/lib/crm-wispro-casos";
 import { matchWisproEmployee, type MatchedWisproEmployee } from "@/lib/match-wispro-employee";
-import { deliverTechnicianPendingTickets, deliverTechnicianTicketDetail } from "@/lib/technician-tickets";
+import { deliverMonitoredTechnicianTickets, deliverTechnicianPendingTickets, deliverTechnicianTicketDetail } from "@/lib/technician-tickets";
 import {
   FinalizeCasoError,
   finalizeCrmWisproCaso,
@@ -1652,6 +1654,83 @@ const handleFinalizeMyTicket = async (
   }
 };
 
+const handleGetTechnicianAssignedTickets = async (
+  ctx: AgentRunContext,
+  rawArgs: unknown,
+): Promise<ToolHandlerResult> => {
+  const parsed = getTechnicianAssignedTicketsArgsSchema.safeParse(rawArgs ?? {});
+  if (!parsed.success) {
+    return {
+      name: GET_TECHNICIAN_ASSIGNED_TICKETS_TOOL,
+      ok: false,
+      response: {
+        ok: false,
+        error: parsed.error.issues[0]?.message || "args inválidos",
+      },
+    };
+  }
+
+  const employee = ctx.wisproEmployee;
+  if (!employee?.isSupervisor) {
+    return {
+      name: GET_TECHNICIAN_ASSIGNED_TICKETS_TOOL,
+      ok: false,
+      response: {
+        ok: false,
+        error: "Solo un supervisor identificado puede consultar colas de otros técnicos.",
+      },
+    };
+  }
+
+  const to = ctx.customerPhone || ctx.whatsappId;
+  if (!to) {
+    return {
+      name: GET_TECHNICIAN_ASSIGNED_TICKETS_TOOL,
+      ok: false,
+      response: { ok: false, error: "No hay teléfono de WhatsApp para responder." },
+    };
+  }
+
+  ctx.onBeforeLongRunningWork?.();
+  const deliver = parsed.data.mode !== "summary";
+  const delivery = await deliverMonitoredTechnicianTickets({
+    supabase: ctx.supabase,
+    conversationId: ctx.conversationId,
+    to,
+    supervisor: employee,
+    technicianName: parsed.data.technician_name,
+    deliver,
+  });
+
+  if (delivery.ok && deliver && !delivery.message.trim()) {
+    ctx.suppressReply = true;
+  }
+
+  return {
+    name: GET_TECHNICIAN_ASSIGNED_TICKETS_TOOL,
+    ok: delivery.ok,
+    stopAgent: true,
+    directReply: delivery.message.trim() || undefined,
+    response: {
+      ok: delivery.ok,
+      identified: delivery.identified,
+      technician: delivery.technicianName,
+      technician_id: delivery.technicianId,
+      count: delivery.count,
+      delivered: delivery.delivered,
+      candidates: delivery.candidates,
+      tickets: delivery.tickets,
+      hint: delivery.ok
+        ? delivery.delivered > 0
+          ? "El listado ya se envió por WhatsApp. No escribas nada más."
+          : delivery.tickets.length
+            ? "Resume el conteo o el listado en un mensaje corto. No inventes tickets."
+            : delivery.message
+        : undefined,
+    },
+  };
+};
+
 export const executeAgentTool = async (
   ctx: AgentRunContext,
   toolName: string,
@@ -1720,6 +1799,9 @@ export const executeAgentTool = async (
       break;
     case FINALIZE_MY_TICKET_TOOL:
       result = await handleFinalizeMyTicket(ctx, rawArgs);
+      break;
+    case GET_TECHNICIAN_ASSIGNED_TICKETS_TOOL:
+      result = await handleGetTechnicianAssignedTickets(ctx, rawArgs);
       break;
     default:
       result = {

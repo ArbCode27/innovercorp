@@ -71,6 +71,7 @@ export type FormatTechnicianListOptions = {
   startIndex?: number;
   remaining?: number;
   heading?: string;
+  hint?: string | null;
 };
 
 const ticketTitle = (caso: TechnicianReportCaso) =>
@@ -101,8 +102,12 @@ export const formatTechnicianList = (
     ].join("\n");
   });
   const hint =
-    remaining > 0
-      ? "Escribe *siguiente* para ver más, o el número o el nombre para la ficha completa."
-      : "Escribe el número o el nombre para ver la ficha completa.";
-  return [header, "", blocks.join("\n\n"), "", hint].join("\n");
+    options?.hint === undefined
+      ? remaining > 0
+        ? "Escribe *siguiente* para ver más, o el número o el nombre para la ficha completa."
+        : "Escribe el número o el nombre para ver la ficha completa."
+      : options.hint;
+  return [header, "", blocks.join("\n\n"), hint ? `\n${hint}` : ""]
+    .join("\n")
+    .trimEnd();
 };

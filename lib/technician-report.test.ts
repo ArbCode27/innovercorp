@@ -100,6 +100,31 @@ describe("formatTechnicianList", () => {
     expect(text).toContain("Tienes 9 tickets pendientes:");
     expect(text).toContain("9. Katiuska");
   });
+
+  it("omits the detail hint for supervisor lists", () => {
+    const text = formatTechnicianList(
+      [
+        {
+          wisproPublicId: 1,
+          clientName: "Ana Pérez",
+          clientPhone: "1",
+          cause: "ONT",
+          title: "Falla",
+          addressText: "Calle 12, Mume",
+          mapsUrl: null,
+          latitude: null,
+          longitude: null,
+          windowStart: null,
+          windowEnd: null,
+          facadeMediaUrl: null,
+        },
+      ],
+      { heading: "Joel tiene 1 ticket pendiente:", hint: null },
+    );
+    expect(text).toContain("Joel tiene 1 ticket pendiente:");
+    expect(text).toContain("1. Ana Pérez");
+    expect(text).not.toContain("ficha completa");
+  });
 });
 
 describe("collectCasoContextFromMessages", () => {

@@ -23,24 +23,29 @@ import {
 } from "./context-builder";
 import type { AiContent, AiContentPart } from "./ai-client";
 import type { MatchedWisproEmployee } from "@/lib/match-wispro-employee";
-import { matchWisproEmployee } from "@/lib/match-wispro-employee";
+import { applySupervisorPhoneOverride, enrichEmployeeSupervisorRole, matchWisproEmployee } from "@/lib/match-wispro-employee";
 import { resolveTechnicianSession } from "@/lib/crm-technicians";
 import { listOpenCasosForConversation, listPendingCasosForEmployee } from "@/lib/crm-wispro-casos";
 import { documentLast4 } from "@/lib/technician-crypto";
 import {
+  formatSupervisorWelcome,
   formatTechnicianAgentQueue,
   formatTechnicianWelcome,
   looksLikeCustomerPaymentOverride,
   looksLikeTechnicianListOffer,
   looksLikeTechnicianRoleClaim,
   looksLikeTechnicianTicketRequest,
+  parseMonitoredTechnicianQuery,
+  shouldDeliverMonitoredTechnicianQueue,
   shouldDeliverTechnicianTicketDetail,
   shouldDeliverTechnicianTickets,
   shouldUseCannedTechnicianWelcome,
 } from "@/lib/technician-identity";
 import {
+  deliverMonitoredTechnicianTickets,
   deliverTechnicianPendingTickets,
   deliverTechnicianTicketDetail,
+  SUPERVISOR_TOOL_NAMES,
   TECHNICIAN_TOOL_NAMES,
 } from "@/lib/technician-tickets";
 import {
@@ -150,11 +155,17 @@ const buildIdentityBlock = (input: {
     "N/D";
 
   const ticketLine = input.employee
-    ? `- rol: tecnico_wispro (${input.employee.name}${
-        documentLast4(input.employee.document)
-          ? ` · ci ···${documentLast4(input.employee.document)}`
-          : ""
-      })`
+    ? input.employee.isSupervisor
+      ? `- rol: supervisor_wispro (${input.employee.name}${
+          documentLast4(input.employee.document)
+            ? ` · ci ···${documentLast4(input.employee.document)}`
+            : ""
+        })`
+      : `- rol: tecnico_wispro (${input.employee.name}${
+          documentLast4(input.employee.document)
+            ? ` · ci ···${documentLast4(input.employee.document)}`
+            : ""
+        })`
     : input.clientTickets.length
       ? `- rol: cliente\n- ticket_activo: ${input.clientTickets
           .map(
@@ -166,10 +177,12 @@ const buildIdentityBlock = (input: {
 
   const queue = formatTechnicianAgentQueue(input.pendingQueue);
   const techLine = input.employee
-    ? [
-        `- tickets_pendientes: ${input.pendingCount ?? 0} (solo asignados a este empleado)`,
-        queue ? `- cola:\n${queue}` : "- cola: ninguna",
-      ].join("\n")
+    ? input.employee.isSupervisor
+      ? "- puede_consultar_colas_de_tecnicos: sí (usa get_technician_assigned_tickets con el nombre)"
+      : [
+          `- tickets_pendientes: ${input.pendingCount ?? 0} (solo asignados a este empleado)`,
+          queue ? `- cola:\n${queue}` : "- cola: ninguna",
+        ].join("\n")
     : null;
 
   return [
@@ -584,9 +597,12 @@ export const runAiAgent = async (input: {
       document: inboundCedula,
     }).catch(() => null);
   }
+  if (employee) employee = await enrichEmployeeSupervisorRole(employee);
+  employee = applySupervisorPhoneOverride(employee, phone);
 
   if (employee) {
     input.onBeforeLongRunningWork?.();
+    const isSupervisor = Boolean(employee.isSupervisor);
     const lastOutbound = getLatestOutboundMessage(input.messages);
     const listOfferPending = looksLikeTechnicianListOffer(
       [lastOutbound?.content, lastOutbound?.caption]
@@ -594,15 +610,56 @@ export const runAiAgent = async (input: {
         .filter(Boolean)
         .join(" "),
     );
-    const shouldDeliverDetail = shouldDeliverTechnicianTicketDetail({
-      inboundText,
-    });
+    const shouldDeliverDetail =
+      !isSupervisor &&
+      shouldDeliverTechnicianTicketDetail({
+        inboundText,
+      });
     const shouldDeliver = shouldDeliverTechnicianTickets({
       justVerified: Boolean(session?.justVerified),
       inboundText,
       inboundIsCedula: looksLikeCedula(inboundText) || Boolean(inboundCedula),
       listOfferPending,
+      isSupervisor,
     });
+    const shouldDeliverMonitored = shouldDeliverMonitoredTechnicianQueue({
+      isSupervisor,
+      inboundText,
+    });
+
+    if (shouldDeliverMonitored) {
+      if (!phone) {
+        return {
+          action: "reply",
+          message:
+            "No pude identificar tu WhatsApp para enviarte la cola. Escribe desde el número registrado en tu ficha.",
+          reason: "technician_missing_phone",
+          runId,
+          clientId: input.client?.id ?? null,
+        };
+      }
+      const monitoredName =
+        parseMonitoredTechnicianQuery(inboundText).names[0] || "";
+      const delivery = await deliverMonitoredTechnicianTickets({
+        supabase: input.supabase,
+        conversationId: input.conversationId,
+        to: phone,
+        supervisor: employee,
+        technicianId: session?.technician?.id ?? null,
+        technicianName: monitoredName,
+      });
+      return {
+        action: "reply",
+        message: delivery.message,
+        reason: delivery.ok
+          ? delivery.message.trim()
+            ? "supervisor_technician_queue"
+            : "technician_tickets"
+          : "supervisor_technician_queue_failed",
+        runId,
+        clientId: input.client?.id ?? null,
+      };
+    }
 
     if (shouldDeliverDetail || shouldDeliver) {
       if (!phone) {
@@ -662,17 +719,20 @@ export const runAiAgent = async (input: {
     ) {
       return {
         action: "reply",
-        message: formatTechnicianWelcome(employee.name),
-        reason: "technician_welcome",
+        message: isSupervisor
+          ? formatSupervisorWelcome(employee.name)
+          : formatTechnicianWelcome(employee.name),
+        reason: isSupervisor ? "supervisor_welcome" : "technician_welcome",
         runId,
         clientId: input.client?.id ?? null,
       };
     }
 
     if (allowedToolNames?.length) {
-      allowedToolNames = Array.from(
-        new Set([...allowedToolNames, ...TECHNICIAN_TOOL_NAMES]),
-      );
+      const extras = isSupervisor
+        ? [...SUPERVISOR_TOOL_NAMES, ...TECHNICIAN_TOOL_NAMES]
+        : TECHNICIAN_TOOL_NAMES;
+      allowedToolNames = Array.from(new Set([...allowedToolNames, ...extras]));
     }
   }
 
@@ -689,7 +749,7 @@ export const runAiAgent = async (input: {
   }> = [];
 
   try {
-    if (employee) {
+    if (employee && !employee.isSupervisor) {
       const pending = await listPendingCasosForEmployee(
         input.supabase,
         employee.id,
@@ -700,7 +760,7 @@ export const runAiAgent = async (input: {
         clientName: caso.clientName,
         cause: caso.cause || caso.title,
       }));
-    } else {
+    } else if (!employee) {
       const open = await listOpenCasosForConversation(input.supabase, {
         conversationId: input.conversationId,
         crmClientId: input.client?.id ?? null,

@@ -185,9 +185,23 @@ const persistFicha = async (
   }
 };
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const supabase = getSupabaseAdmin();
+    const issueId = request.nextUrl.searchParams.get("issueId")?.trim();
+    if (issueId) {
+      const caso = await getCrmWisproCasoByIssueId(supabase, issueId);
+      if (!caso) {
+        return NextResponse.json({ error: "No existe ese ticket" }, { status: 404 });
+      }
+      return NextResponse.json({
+        caso: {
+          ...caso,
+          hasFacade: Boolean(caso.hasFacade || caso.facadeMediaUrl),
+        },
+      });
+    }
+
     const casos = await listCrmWisproCasos(supabase);
     return NextResponse.json({
       casos: casos.map((caso) => ({

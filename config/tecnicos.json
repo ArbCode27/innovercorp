@@ -1,4 +1,6 @@
 {
   "employeeIds": [],
-  "excludeIds": []
+  "excludeIds": [],
+  "supervisorIds": [],
+  "supervisorPhones": ["04142132785"]
 }
