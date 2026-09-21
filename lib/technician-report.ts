@@ -67,14 +67,42 @@ export const formatTechnicianCaption = (caso: TechnicianReportCaso) => {
     : caption.slice(0, TECHNICIAN_CAPTION_MAX - 1);
 };
 
-export const formatTechnicianList = (casos: TechnicianReportCaso[]) => {
+export type FormatTechnicianListOptions = {
+  startIndex?: number;
+  remaining?: number;
+  heading?: string;
+};
+
+const ticketTitle = (caso: TechnicianReportCaso) =>
+  (caso.cause || caso.title || "Sin título").trim() || "Sin título";
+
+const ticketLocation = (caso: TechnicianReportCaso) =>
+  caso.addressText?.trim() || "Sin ubicación";
+
+export const formatTechnicianList = (
+  casos: TechnicianReportCaso[],
+  options?: FormatTechnicianListOptions,
+) => {
   if (!casos.length) return "No tienes tickets pendientes asignados.";
-  const lines = casos.map((caso, index) => {
-    const ticket =
-      caso.wisproPublicId != null ? `#${caso.wisproPublicId}` : "s/n";
+  const startIndex = Math.max(0, options?.startIndex ?? 0);
+  const remaining = Math.max(0, options?.remaining ?? 0);
+  const total = startIndex + casos.length + remaining;
+  const header =
+    options?.heading ||
+    (total === 1
+      ? "Tienes 1 ticket pendiente:"
+      : `Tienes ${total} tickets pendientes:`);
+  const blocks = casos.map((caso, index) => {
     const name = caso.clientName?.trim() || "Cliente";
-    const cause = (caso.cause || caso.title || "").trim();
-    return `${index + 1}. ${ticket} · ${name}${cause ? ` · ${cause}` : ""}`;
+    return [
+      `${startIndex + index + 1}. ${name}`,
+      `   ${ticketTitle(caso)}`,
+      `   Ubicación: ${ticketLocation(caso)}`,
+    ].join("\n");
   });
-  return [`Tienes ${casos.length} ticket(s) pendiente(s):`, ...lines].join("\n");
+  const hint =
+    remaining > 0
+      ? "Escribe *siguiente* para ver más, o el número o el nombre para la ficha completa."
+      : "Escribe el número o el nombre para ver la ficha completa.";
+  return [header, "", blocks.join("\n\n"), "", hint].join("\n");
 };

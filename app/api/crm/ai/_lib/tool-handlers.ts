@@ -30,6 +30,7 @@ import {
   FINALIZE_MY_TICKET_TOOL,
   GET_BCV_RATE_TOOL,
   GET_CLIENT_TICKET_TOOL,
+  GET_MY_TICKET_DETAIL_TOOL,
   LINK_WISPRO_TOOL,
   LIST_MY_PENDING_TICKETS_TOOL,
   LOOKUP_WISPRO_TOOL,
@@ -37,6 +38,7 @@ import {
   escalateHumanArgsSchema,
   finalizeMyTicketArgsSchema,
   getClientTicketArgsSchema,
+  getMyTicketDetailArgsSchema,
   linkWisproArgsSchema,
   listMyPendingTicketsArgsSchema,
   lookupWisproArgsSchema,
@@ -46,7 +48,7 @@ import {
   listOpenCasosForConversation,
 } from "@/lib/crm-wispro-casos";
 import { matchWisproEmployee, type MatchedWisproEmployee } from "@/lib/match-wispro-employee";
-import { deliverTechnicianPendingTickets } from "@/lib/technician-tickets";
+import { deliverTechnicianPendingTickets, deliverTechnicianTicketDetail } from "@/lib/technician-tickets";
 import {
   FinalizeCasoError,
   finalizeCrmWisproCaso,
@@ -1343,6 +1345,97 @@ const handleListMyPendingTickets = async (
   };
 };
 
+const resolveTechnicianEmployee = async (
+  ctx: AgentRunContext,
+  cedula?: string | null,
+) =>
+  ctx.wisproEmployee ||
+  (await matchWisproEmployee(ctx.supabase, {
+    phone: ctx.customerPhone,
+    document: cedula || ctx.lastLookupCedula,
+  }));
+
+const handleGetMyTicketDetail = async (
+  ctx: AgentRunContext,
+  rawArgs: unknown,
+): Promise<ToolHandlerResult> => {
+  const parsed = getMyTicketDetailArgsSchema.safeParse(rawArgs ?? {});
+  if (!parsed.success) {
+    return {
+      name: GET_MY_TICKET_DETAIL_TOOL,
+      ok: false,
+      response: { ok: false, error: parsed.error.issues[0]?.message || "args inválidos" },
+    };
+  }
+
+  const employee = await resolveTechnicianEmployee(ctx, parsed.data.cedula);
+  if (!employee) {
+    return {
+      name: GET_MY_TICKET_DETAIL_TOOL,
+      ok: true,
+      directReply:
+        "No pude identificarte como técnico. Enviá tu cédula (solo números) o pedí que carguen tu WhatsApp o documento en la ficha de empleado.",
+      stopAgent: true,
+      response: {
+        ok: true,
+        identified: false,
+        count: 0,
+      },
+    };
+  }
+
+  const to = ctx.customerPhone || ctx.whatsappId;
+  if (!to) {
+    return {
+      name: GET_MY_TICKET_DETAIL_TOOL,
+      ok: false,
+      response: { ok: false, error: "No hay teléfono de WhatsApp para enviar la ficha." },
+    };
+  }
+
+  ctx.onBeforeLongRunningWork?.();
+  const delivery = await deliverTechnicianTicketDetail({
+    supabase: ctx.supabase,
+    conversationId: ctx.conversationId,
+    to,
+    employee,
+    inboundText: parsed.data.client_name
+      ? parsed.data.client_name
+      : parsed.data.public_id != null
+        ? `#${parsed.data.public_id}`
+        : parsed.data.list_index != null
+          ? String(parsed.data.list_index)
+          : "detalle",
+    publicId: parsed.data.public_id,
+    clientName: parsed.data.client_name,
+    listIndex: parsed.data.list_index,
+  });
+
+  if (delivery.ok && !delivery.message.trim()) {
+    ctx.suppressReply = true;
+  }
+
+  return {
+    name: GET_MY_TICKET_DETAIL_TOOL,
+    ok: delivery.ok,
+    stopAgent: true,
+    directReply: delivery.message.trim() || undefined,
+    response: {
+      ok: delivery.ok,
+      identified: delivery.identified,
+      employee: employee.name,
+      count: delivery.count,
+      delivered: delivery.delivered,
+      remaining: delivery.remaining,
+      hint: delivery.ok
+        ? delivery.delivered > 0
+          ? "La ficha ya se envió por WhatsApp. No escribas nada más al técnico."
+          : delivery.message
+        : undefined,
+    },
+  };
+};
+
 const handleGetClientTicket = async (
   ctx: AgentRunContext,
   rawArgs: unknown,
@@ -1362,7 +1455,7 @@ const handleGetClientTicket = async (
       ok: false,
       response: {
         ok: false,
-        error: "Este WhatsApp es de un técnico. Usa list_my_pending_tickets.",
+        error: "Este WhatsApp es de un técnico. Usa list_my_pending_tickets o get_my_ticket_detail.",
       },
     };
   }
@@ -1621,6 +1714,9 @@ export const executeAgentTool = async (
       break;
     case LIST_MY_PENDING_TICKETS_TOOL:
       result = await handleListMyPendingTickets(ctx, rawArgs);
+      break;
+    case GET_MY_TICKET_DETAIL_TOOL:
+      result = await handleGetMyTicketDetail(ctx, rawArgs);
       break;
     case FINALIZE_MY_TICKET_TOOL:
       result = await handleFinalizeMyTicket(ctx, rawArgs);

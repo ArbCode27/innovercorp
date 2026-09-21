@@ -35,6 +35,18 @@ export type TechnicianIdentitySignals = {
 const TICKET_REQUEST_RE =
   /\b(pendiente(s)?|ticket(s)?|ruta|visita(s)?|casos?|lote|asignad[oa]s?|listado)\b/i;
 
+const TICKET_LIST_SCOPE_RE =
+  /\b(pendiente(s)?|ruta|lote|asignad[oa]s?|listado|todos(?:\s+los)?(?:\s+tickets)?|mis\s+(tickets|casos|pendientes)|los\s+tickets)\b/i;
+
+const TICKET_DETAIL_KEYWORD_RE =
+  /\b(detalle|ficha|completo|m[aá]s\s+(datos|info|informaci[oó]n)|foto(?:s)?\s+d(?:e|el|la)|fachada)\b/i;
+
+const TICKET_DETAIL_PUBLIC_ID_RE =
+  /#\s*(\d{3,})\b|\b(?:ticket|caso)\s+#?\s*(\d{3,})\b/i;
+
+const TICKET_DETAIL_INDEX_RE =
+  /(?:^|[\s,.;:!?¿¡])(?:el|n(?:u|ú)mero|nro|n[º°]|#)?\s*(\d{1,2})(?=$|[\s,.;:!?])/i;
+
 const NEXT_PAGE_RE = /\b(siguiente(s)?|prox(imo|ima)|otro lote|m[aá]s tickets)\b/i;
 
 const RESEND_RE = /\b(reenvia(r)?|mand(a|ame) de nuevo|otra vez|repet(i|í)r)\b/i;
@@ -67,6 +79,12 @@ const TECHNICIAN_LIST_OFFER_RE = /listado de tickets pendientes/i;
 const TECHNICIAN_GREETING_RE =
   /^(hola|buenas|buen(os|as)\s+(d[ií]as|tardes|noches)|saludos)([!.,\s].*)?$/i;
 
+const DETAIL_NAME_NOISE_RE =
+  /\b(?:detalle|ficha|completo|foto(?:s)?|fachada|p[aá]sa(?:me)?|m[aá]nda(?:me)?|env[ií]a(?:me)?|dame|por\s+favor|el|la|los|las|de|del|al|a|un|una|ticket|caso|visita|n[uú]mero|nro|pendiente(?:s)?|m[aá]s|datos|info|informaci[oó]n)\b/gi;
+
+const BARE_CLIENT_NAME_BLOCKLIST_RE =
+  /^(hola|gracias|ok+|okay|dale|va|claro|listo|bueno|espera|ahora|ya|bien|perfecto|entendido|pendientes?|tickets?|casos?|visitas?|ruta|siguiente|reenviar|saludos|buenas?|d[ií]as|tardes|noches|ayuda|men[uú]|t[eé]cnic[oa]s?)$/i;
+
 const stripFinalizeFillers = (value: string) => {
   let rest = value.replace(/\s+/g, " ").trim();
   rest = rest.replace(/[\s,]+(?:por\s+favor|please)$/i, "").trim();
@@ -93,9 +111,92 @@ export const looksLikeOtpCode = (value: string | null | undefined) => {
   return digits.length === 6 && /^[\d\s-]+$/.test(text);
 };
 
+export type TechnicianTicketDetailQuery = {
+  publicId: number | null;
+  clientName: string | null;
+  listIndex: number | null;
+};
+
+export const parseTechnicianTicketDetailQuery = (
+  value: string | null | undefined,
+): TechnicianTicketDetailQuery => {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  if (!text) {
+    return { publicId: null, clientName: null, listIndex: null };
+  }
+
+  const publicIdMatch = TICKET_DETAIL_PUBLIC_ID_RE.exec(text);
+  const publicIdRaw = publicIdMatch?.[1] || publicIdMatch?.[2] || null;
+  const publicId = publicIdRaw ? Number.parseInt(publicIdRaw, 10) : null;
+
+  let listIndex: number | null = null;
+  if (publicId == null) {
+    if (/^\d{1,2}$/.test(text)) {
+      listIndex = Number.parseInt(text, 10);
+    } else {
+      const indexMatch = TICKET_DETAIL_INDEX_RE.exec(text);
+      if (indexMatch?.[1]) {
+        const parsed = Number.parseInt(indexMatch[1], 10);
+        if (parsed >= 1 && parsed <= 99) listIndex = parsed;
+      }
+    }
+  }
+
+  let clientName: string | null = null;
+  if (publicId == null) {
+    const rest = text
+      .replace(TICKET_DETAIL_KEYWORD_RE, " ")
+      .replace(DETAIL_NAME_NOISE_RE, " ")
+      .replace(/#?\d+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (
+      rest.length >= 3 &&
+      !BARE_CLIENT_NAME_BLOCKLIST_RE.test(rest) &&
+      looksLikeFinalizeClientName(rest)
+    ) {
+      clientName = rest;
+    }
+  }
+
+  return {
+    publicId: publicId != null && Number.isFinite(publicId) ? publicId : null,
+    clientName,
+    listIndex,
+  };
+};
+
 export const looksLikeTechnicianTicketRequest = (
   value: string | null | undefined,
 ) => TICKET_REQUEST_RE.test(String(value || ""));
+
+export const looksLikeTechnicianTicketDetailRequest = (
+  value: string | null | undefined,
+) => {
+  if (looksLikeTechnicianFinalizeRequest(value)) return false;
+  if (looksLikeTechnicianNextPage(value)) return false;
+  if (looksLikeTechnicianResend(value)) return false;
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  if (!text) return false;
+  if (/^(los\s+)?(tickets?|pendientes?|casos?|visitas?|ruta)$/i.test(text)) {
+    return false;
+  }
+  const hasListScope = TICKET_LIST_SCOPE_RE.test(text);
+  const hasDetailKeyword = TICKET_DETAIL_KEYWORD_RE.test(text);
+  if (hasListScope && !hasDetailKeyword) return false;
+  if (
+    /\b(?:esa|ese|eso|esta|este)\s+de\b/i.test(text) &&
+    !hasDetailKeyword
+  ) {
+    return false;
+  }
+  if (hasDetailKeyword) return true;
+
+  const query = parseTechnicianTicketDetailQuery(text);
+  if (query.publicId != null || query.listIndex != null) return true;
+  if (query.clientName) return true;
+  return false;
+};
 
 export const looksLikeTechnicianNextPage = (value: string | null | undefined) =>
   NEXT_PAGE_RE.test(String(value || ""));
@@ -226,6 +327,13 @@ export const decideTechnicianVerification = (
   return { action: "customer" };
 };
 
+export const shouldDeliverTechnicianTicketDetail = (input: {
+  inboundText: string | null | undefined;
+}) => {
+  if (looksLikeTechnicianFinalizeRequest(input.inboundText)) return false;
+  return looksLikeTechnicianTicketDetailRequest(input.inboundText);
+};
+
 export const shouldDeliverTechnicianTickets = (input: {
   justVerified: boolean;
   inboundText: string | null | undefined;
@@ -233,6 +341,9 @@ export const shouldDeliverTechnicianTickets = (input: {
   listOfferPending?: boolean;
 }) => {
   if (looksLikeTechnicianFinalizeRequest(input.inboundText)) return false;
+  if (shouldDeliverTechnicianTicketDetail({ inboundText: input.inboundText })) {
+    return false;
+  }
   if (looksLikeTechnicianTicketRequest(input.inboundText)) return true;
   if (looksLikeTechnicianNextPage(input.inboundText)) return true;
   if (looksLikeTechnicianResend(input.inboundText)) return true;

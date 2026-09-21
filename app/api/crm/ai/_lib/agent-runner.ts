@@ -34,10 +34,15 @@ import {
   looksLikeTechnicianListOffer,
   looksLikeTechnicianRoleClaim,
   looksLikeTechnicianTicketRequest,
+  shouldDeliverTechnicianTicketDetail,
   shouldDeliverTechnicianTickets,
   shouldUseCannedTechnicianWelcome,
 } from "@/lib/technician-identity";
-import { deliverTechnicianPendingTickets, TECHNICIAN_TOOL_NAMES } from "@/lib/technician-tickets";
+import {
+  deliverTechnicianPendingTickets,
+  deliverTechnicianTicketDetail,
+  TECHNICIAN_TOOL_NAMES,
+} from "@/lib/technician-tickets";
 import {
   collectBurstInbound,
   extractLatestInboundCedula,
@@ -589,6 +594,9 @@ export const runAiAgent = async (input: {
         .filter(Boolean)
         .join(" "),
     );
+    const shouldDeliverDetail = shouldDeliverTechnicianTicketDetail({
+      inboundText,
+    });
     const shouldDeliver = shouldDeliverTechnicianTickets({
       justVerified: Boolean(session?.justVerified),
       inboundText,
@@ -596,7 +604,7 @@ export const runAiAgent = async (input: {
       listOfferPending,
     });
 
-    if (shouldDeliver) {
+    if (shouldDeliverDetail || shouldDeliver) {
       if (!phone) {
         return {
           action: "reply",
@@ -608,21 +616,38 @@ export const runAiAgent = async (input: {
         };
       }
 
-      const delivery = await deliverTechnicianPendingTickets({
-        supabase: input.supabase,
-        conversationId: input.conversationId,
-        to: phone,
-        employee,
-        technicianId: session?.technician?.id ?? null,
-        inboundText,
-        storedOffset: session?.reportOffset ?? 0,
-        justVerified: Boolean(session?.justVerified),
-      });
+      const delivery = shouldDeliverDetail
+        ? await deliverTechnicianTicketDetail({
+            supabase: input.supabase,
+            conversationId: input.conversationId,
+            to: phone,
+            employee,
+            technicianId: session?.technician?.id ?? null,
+            inboundText,
+          })
+        : await deliverTechnicianPendingTickets({
+            supabase: input.supabase,
+            conversationId: input.conversationId,
+            to: phone,
+            employee,
+            technicianId: session?.technician?.id ?? null,
+            inboundText,
+            storedOffset: session?.reportOffset ?? 0,
+            justVerified: Boolean(session?.justVerified),
+          });
+
+      const silentReason = shouldDeliverDetail
+        ? "technician_ticket_detail"
+        : "technician_tickets";
 
       return {
         action: "reply",
         message: delivery.message,
-        reason: delivery.ok ? "technician_tickets" : "technician_tickets_failed",
+        reason: delivery.ok
+          ? silentReason
+          : shouldDeliverDetail
+            ? "technician_ticket_detail_failed"
+            : "technician_tickets_failed",
         runId,
         clientId: input.client?.id ?? null,
       };

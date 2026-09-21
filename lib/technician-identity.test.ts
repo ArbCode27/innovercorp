@@ -10,6 +10,9 @@ import {
   looksLikeTechnicianOfferAccept,
   looksLikeTechnicianResend,
   looksLikeTechnicianTicketRequest,
+  looksLikeTechnicianTicketDetailRequest,
+  parseTechnicianTicketDetailQuery,
+  shouldDeliverTechnicianTicketDetail,
   shouldDeliverTechnicianTickets,
   shouldUseCannedTechnicianWelcome,
   technicianFirstName,
@@ -257,5 +260,52 @@ describe("technician inbound helpers", () => {
         listOfferPending: false,
       }),
     ).toBe(false);
+  });
+
+  it("routes list vs ficha without sending photos on the index", () => {
+    expect(looksLikeTechnicianTicketDetailRequest("pásame los pendientes")).toBe(
+      false,
+    );
+    expect(looksLikeTechnicianTicketDetailRequest("mis tickets")).toBe(false);
+    expect(looksLikeTechnicianTicketDetailRequest("detalle de tania")).toBe(true);
+    expect(looksLikeTechnicianTicketDetailRequest("ficha de pedro")).toBe(true);
+    expect(looksLikeTechnicianTicketDetailRequest("el 3")).toBe(true);
+    expect(looksLikeTechnicianTicketDetailRequest("Tania Ortiz")).toBe(true);
+    expect(looksLikeTechnicianTicketDetailRequest("esa de sandra")).toBe(false);
+    expect(looksLikeTechnicianTicketDetailRequest("cierra el ticket 1842")).toBe(
+      false,
+    );
+    expect(parseTechnicianTicketDetailQuery("detalle de tania")).toEqual({
+      publicId: null,
+      clientName: "tania",
+      listIndex: null,
+    });
+    expect(parseTechnicianTicketDetailQuery("el 3")).toEqual({
+      publicId: null,
+      clientName: null,
+      listIndex: 3,
+    });
+    expect(parseTechnicianTicketDetailQuery("#1842")).toEqual({
+      publicId: 1842,
+      clientName: null,
+      listIndex: null,
+    });
+    expect(
+      shouldDeliverTechnicianTickets({
+        justVerified: false,
+        inboundText: "detalle de tania",
+        inboundIsCedula: false,
+      }),
+    ).toBe(false);
+    expect(
+      shouldDeliverTechnicianTicketDetail({ inboundText: "detalle de tania" }),
+    ).toBe(true);
+    expect(
+      shouldDeliverTechnicianTickets({
+        justVerified: false,
+        inboundText: "pásame los pendientes",
+        inboundIsCedula: false,
+      }),
+    ).toBe(true);
   });
 });

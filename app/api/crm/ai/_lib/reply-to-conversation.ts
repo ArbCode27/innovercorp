@@ -895,11 +895,18 @@ export const replyToConversationWithAi = async (
 
     const replyTextRaw = decision.message.trim();
     if (!replyTextRaw) {
-      if (decision.reason === "technician_tickets") {
+      if (
+        decision.reason === "technician_tickets" ||
+        decision.reason === "technician_ticket_detail"
+      ) {
         await closeRun("replied", {
           metadata: { intent, aiRunId: decision.runId, silentTickets: true },
         });
-        console.log(`${LOG_PREFIX} silent_technician_tickets`, {
+        console.log(
+          decision.reason === "technician_ticket_detail"
+            ? `${LOG_PREFIX} silent_technician_ticket_detail`
+            : `${LOG_PREFIX} silent_technician_tickets`,
+          {
           ...baseContext,
           runId: decision.runId,
         });

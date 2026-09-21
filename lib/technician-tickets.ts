@@ -2,16 +2,19 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { orderKindLabels } from "@/app/crm/_lib/wispro-caso-schema";
 import { listPendingCasosForEmployee } from "./crm-wispro-casos";
 import { recordTechnicianEvent, updateTechnicianReportOffset } from "./crm-technicians";
+import { matchTechnicianTicketDetail } from "./match-technician-ticket";
 import type { MatchedWisproEmployee } from "./match-wispro-employee";
 import { technicianDeliveryFollowUp } from "./technician-delivery-text";
 import {
   looksLikeTechnicianNextPage,
   looksLikeTechnicianResend,
+  parseTechnicianTicketDetailQuery,
   technicianFirstName,
 } from "./technician-identity";
 import {
   formatTechnicianCaption,
   formatTechnicianList,
+  type TechnicianReportCaso,
 } from "./technician-report";
 import {
   sendWhatsAppImageFromUrl,
@@ -20,10 +23,10 @@ import {
 import type { CrmWisproCaso } from "./wispro-types";
 
 const PAGE_SIZE = 8;
-const DEDUPE_WINDOW_MS = 2 * 60 * 60 * 1000;
 
 export const TECHNICIAN_TOOL_NAMES = [
   "list_my_pending_tickets",
+  "get_my_ticket_detail",
   "finalize_my_ticket",
 ] as const;
 
@@ -37,10 +40,19 @@ export type TechnicianTicketDelivery = {
   offset: number;
 };
 
-const reportKey = (employeeId: string, caso: CrmWisproCaso) =>
-  `${employeeId}:${caso.id}:${caso.updatedAt || ""}`;
+const emptyDelivery = (
+  input: Partial<TechnicianTicketDelivery> & { message: string },
+): TechnicianTicketDelivery => ({
+  ok: false,
+  identified: true,
+  count: 0,
+  delivered: 0,
+  remaining: 0,
+  offset: 0,
+  ...input,
+});
 
-const toTechnicianReport = (caso: CrmWisproCaso) => ({
+const toTechnicianReport = (caso: CrmWisproCaso): TechnicianReportCaso => ({
   wisproPublicId: caso.wisproPublicId,
   kindLabel:
     caso.kind && caso.kind in orderKindLabels
@@ -59,37 +71,67 @@ const toTechnicianReport = (caso: CrmWisproCaso) => ({
   facadeMediaUrl: caso.facadeMediaUrl,
 });
 
-const markReported = async (
+const loadPendingCasos = async (
   supabase: SupabaseClient,
   employeeId: string,
-  casos: CrmWisproCaso[],
-) => {
-  const now = new Date().toISOString();
-  await Promise.all(
-    casos.map((caso) =>
-      supabase
-        .from("crm_wispro_casos")
-        .update({
-          last_technician_report_at: now,
-          last_technician_report_key: reportKey(employeeId, caso),
-        })
-        .eq("id", caso.id),
-    ),
-  );
+): Promise<
+  { casos: CrmWisproCaso[]; message?: undefined } | { casos: null; message: string }
+> => {
+  try {
+    return { casos: await listPendingCasosForEmployee(supabase, employeeId) };
+  } catch (error) {
+    return {
+      casos: null,
+      message:
+        error instanceof Error
+          ? error.message
+          : "No se pudieron leer los tickets pendientes",
+    };
+  }
 };
 
-const filterUnsent = (
-  employeeId: string,
-  casos: CrmWisproCaso[],
-  force: boolean,
-) => {
-  if (force) return casos;
-  const cutoff = Date.now() - DEDUPE_WINDOW_MS;
-  return casos.filter((caso) => {
-    const key = caso.lastTechnicianReportKey;
-    const reportedAt = caso.lastTechnicianReportAt;
-    if (!key || key !== reportKey(employeeId, caso) || !reportedAt) return true;
-    return Date.parse(reportedAt) < cutoff;
+const sendTechnicianTicketCard = async (input: {
+  supabase: SupabaseClient;
+  conversationId: number;
+  to: string;
+  report: TechnicianReportCaso;
+}) => {
+  const caption = formatTechnicianCaption(input.report);
+  const metadata = {
+    engine: "ai",
+    action: "technician_report",
+    ticket: input.report.wisproPublicId,
+  };
+
+  if (input.report.facadeMediaUrl) {
+    try {
+      await sendWhatsAppImageFromUrl({
+        to: input.to,
+        imageUrl: input.report.facadeMediaUrl,
+        caption,
+        supabase: input.supabase,
+        conversationId: input.conversationId,
+        metadata,
+      });
+      return;
+    } catch {
+      await sendWhatsAppText({
+        to: input.to,
+        body: caption,
+        supabase: input.supabase,
+        conversationId: input.conversationId,
+        metadata: { ...metadata, action: "technician_report_fallback" },
+      });
+      return;
+    }
+  }
+
+  await sendWhatsAppText({
+    to: input.to,
+    body: caption,
+    supabase: input.supabase,
+    conversationId: input.conversationId,
+    metadata,
   });
 };
 
@@ -103,25 +145,12 @@ export const deliverTechnicianPendingTickets = async (input: {
   storedOffset?: number;
   justVerified?: boolean;
 }): Promise<TechnicianTicketDelivery> => {
-  const force = looksLikeTechnicianResend(input.inboundText);
-  let all: CrmWisproCaso[];
-  try {
-    all = await listPendingCasosForEmployee(input.supabase, input.employee.id);
-  } catch (error) {
-    return {
-      ok: false,
-      identified: true,
-      message:
-        error instanceof Error
-          ? error.message
-          : "No se pudieron leer los tickets pendientes",
-      count: 0,
-      delivered: 0,
-      remaining: 0,
-      offset: 0,
-    };
+  const loaded = await loadPendingCasos(input.supabase, input.employee.id);
+  if (!loaded.casos) {
+    return emptyDelivery({ message: loaded.message || "No se pudieron leer los tickets pendientes" });
   }
 
+  const all = loaded.casos;
   const storedOffset = Math.max(0, input.storedOffset || 0);
   const offset = looksLikeTechnicianNextPage(input.inboundText)
     ? storedOffset >= all.length
@@ -133,124 +162,38 @@ export const deliverTechnicianPendingTickets = async (input: {
 
   if (!page.length) {
     await updateTechnicianReportOffset(input.supabase, input.conversationId, 0);
-    return {
+    return emptyDelivery({
       ok: true,
-      identified: true,
       message:
         offset > 0
           ? "No hay más tickets en este lote."
           : `Hola ${firstName}, no tienes tickets pendientes asignados.`,
-      count: 0,
-      delivered: 0,
-      remaining: 0,
-      offset: 0,
-    };
-  }
-
-  const sendable = filterUnsent(input.employee.id, page, force);
-  if (!sendable.length) {
-    const remaining = Math.max(0, all.length - offset - page.length);
-    await updateTechnicianReportOffset(
-      input.supabase,
-      input.conversationId,
-      offset + page.length,
-    );
-    return {
-      ok: true,
-      identified: true,
-      message: remaining
-        ? `Ya te envié este lote. Quedan ${remaining}; escribe *siguiente* o *reenviar* si los necesitas de nuevo.`
-        : "Ya te envié esos tickets. Escribe *reenviar* si los necesitas de nuevo.",
-      count: all.length,
-      delivered: 0,
-      remaining,
-      offset: offset + page.length,
-    };
-  }
-
-  const reports = sendable.map(toTechnicianReport);
-  let delivered = 0;
-  const failures: string[] = [];
-
-  try {
-    if (reports.length > 1) {
-      await sendWhatsAppText({
-        to: input.to,
-        body: formatTechnicianList(reports),
-        supabase: input.supabase,
-        conversationId: input.conversationId,
-        metadata: { engine: "ai", action: "technician_report_index" },
-      });
-    }
-
-    for (const report of reports) {
-      const caption = formatTechnicianCaption(report);
-      try {
-        if (report.facadeMediaUrl) {
-          await sendWhatsAppImageFromUrl({
-            to: input.to,
-            imageUrl: report.facadeMediaUrl,
-            caption,
-            supabase: input.supabase,
-            conversationId: input.conversationId,
-            metadata: {
-              engine: "ai",
-              action: "technician_report",
-              ticket: report.wisproPublicId,
-            },
-          });
-        } else {
-          await sendWhatsAppText({
-            to: input.to,
-            body: caption,
-            supabase: input.supabase,
-            conversationId: input.conversationId,
-            metadata: {
-              engine: "ai",
-              action: "technician_report",
-              ticket: report.wisproPublicId,
-            },
-          });
-        }
-        delivered += 1;
-      } catch (error) {
-        failures.push(
-          error instanceof Error ? error.message : "No se pudo enviar un ticket",
-        );
-        try {
-          await sendWhatsAppText({
-            to: input.to,
-            body: caption,
-            supabase: input.supabase,
-            conversationId: input.conversationId,
-            metadata: { engine: "ai", action: "technician_report_fallback" },
-          });
-          delivered += 1;
-        } catch {
-          // already recorded
-        }
-      }
-    }
-  } catch (error) {
-    return {
-      ok: false,
-      identified: true,
-      message:
-        error instanceof Error
-          ? error.message
-          : "No se pudo enviar el reporte al técnico",
-      count: all.length,
-      delivered,
-      remaining: Math.max(0, all.length - offset - page.length),
-      offset,
-    };
-  }
-
-  if (delivered > 0) {
-    await markReported(input.supabase, input.employee.id, sendable);
+    });
   }
 
   const remaining = Math.max(0, all.length - offset - page.length);
+  const reports = page.map(toTechnicianReport);
+
+  try {
+    await sendWhatsAppText({
+      to: input.to,
+      body: formatTechnicianList(reports, { startIndex: offset, remaining }),
+      supabase: input.supabase,
+      conversationId: input.conversationId,
+      metadata: { engine: "ai", action: "technician_report_index" },
+    });
+  } catch (error) {
+    return emptyDelivery({
+      message:
+        error instanceof Error
+          ? error.message
+          : "No se pudo enviar el listado al técnico",
+      count: all.length,
+      remaining,
+      offset,
+    });
+  }
+
   await updateTechnicianReportOffset(
     input.supabase,
     input.conversationId,
@@ -260,23 +203,131 @@ export const deliverTechnicianPendingTickets = async (input: {
   await recordTechnicianEvent(input.supabase, {
     technicianId: input.technicianId ?? null,
     conversationId: input.conversationId,
-    event: delivered > 0 ? "tickets_delivered" : "tickets_failed",
-    method: force ? "resend" : "pending",
+    event: "tickets_delivered",
+    method: looksLikeTechnicianResend(input.inboundText) ? "resend" : "pending",
     metadata: {
-      delivered,
+      delivered: reports.length,
       remaining,
       count: all.length,
-      failures,
+      mode: "list",
     },
   });
 
   return {
-    ok: delivered > 0,
+    ok: true,
     identified: true,
-    message: technicianDeliveryFollowUp({ delivered, remaining }),
+    message: technicianDeliveryFollowUp({
+      delivered: reports.length,
+      remaining,
+    }),
     count: all.length,
-    delivered,
+    delivered: reports.length,
     remaining,
     offset: offset + page.length,
+  };
+};
+
+export const deliverTechnicianTicketDetail = async (input: {
+  supabase: SupabaseClient;
+  conversationId: number;
+  to: string;
+  employee: MatchedWisproEmployee;
+  technicianId?: string | null;
+  inboundText?: string | null;
+  publicId?: number | null;
+  clientName?: string | null;
+  listIndex?: number | null;
+}): Promise<TechnicianTicketDelivery> => {
+  const loaded = await loadPendingCasos(input.supabase, input.employee.id);
+  if (!loaded.casos) {
+    return emptyDelivery({ message: loaded.message || "No se pudieron leer los tickets pendientes" });
+  }
+
+  const all = loaded.casos;
+  const parsed = parseTechnicianTicketDetailQuery(input.inboundText);
+  const query = {
+    publicId: input.publicId ?? parsed.publicId,
+    clientName: input.clientName ?? parsed.clientName,
+    listIndex: input.listIndex ?? parsed.listIndex,
+  };
+  const hasFilter =
+    query.publicId != null ||
+    Boolean(query.clientName?.trim()) ||
+    query.listIndex != null;
+  const matches = matchTechnicianTicketDetail(all, query);
+
+  if (!all.length) {
+    return emptyDelivery({
+      ok: true,
+      message: "No tienes tickets pendientes asignados.",
+    });
+  }
+
+  if (!matches.length) {
+    return {
+      ok: true,
+      identified: true,
+      message: hasFilter
+        ? "No encontré ese caso en tu cola. Escribe el número o el nombre de la lista."
+        : "¿De cuál caso necesitas la ficha? Escribe el número o el nombre de la lista.",
+      count: all.length,
+      delivered: 0,
+      remaining: all.length,
+      offset: 0,
+    };
+  }
+
+  if (matches.length > 1) {
+    return {
+      ok: true,
+      identified: true,
+      message: formatTechnicianList(matches.map(toTechnicianReport), {
+        heading: "Hay varios casos con ese dato:",
+      }),
+      count: all.length,
+      delivered: 0,
+      remaining: all.length,
+      offset: 0,
+    };
+  }
+
+  const target = matches[0];
+  try {
+    await sendTechnicianTicketCard({
+      supabase: input.supabase,
+      conversationId: input.conversationId,
+      to: input.to,
+      report: toTechnicianReport(target),
+    });
+  } catch (error) {
+    return emptyDelivery({
+      message:
+        error instanceof Error
+          ? error.message
+          : "No se pudo enviar la ficha del ticket",
+      count: all.length,
+      remaining: all.length,
+    });
+  }
+
+  await recordTechnicianEvent(input.supabase, {
+    technicianId: input.technicianId ?? null,
+    conversationId: input.conversationId,
+    event: "ticket_detail_delivered",
+    method: "detail",
+    metadata: {
+      public_id: target.wisproPublicId,
+      client_name: target.clientName,
+    },
+  });
+
+  return {
+    ok: true,
+    identified: true,
+    message: "",
+    count: all.length,
+    delivered: 1,
+    remaining: Math.max(0, all.length - 1),
+    offset: 0,
   };
 };

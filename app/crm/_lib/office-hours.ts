@@ -43,6 +43,7 @@ export const DEFAULT_AFTER_HOURS_PAYMENT_TOOLS = [
   "link_wispro_client",
   "get_client_ticket",
   "list_my_pending_tickets",
+  "get_my_ticket_detail",
   "finalize_my_ticket",
 ] as const;
 
@@ -492,6 +493,7 @@ export const parseAfterHoursPaymentsConfig = (
   const extras = [
     "get_client_ticket",
     "list_my_pending_tickets",
+    "get_my_ticket_detail",
     "finalize_my_ticket",
   ];
   const allowedTools = Array.from(

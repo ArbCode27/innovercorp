@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { matchPendingCasosForTechnician } from "./match-technician-ticket";
+import { matchPendingCasosForTechnician, matchTechnicianTicketDetail } from "./match-technician-ticket";
 import type { CrmWisproCaso } from "./wispro-types";
 
 const caso = (
@@ -105,5 +105,57 @@ describe("matchPendingCasosForTechnician", () => {
     expect(
       matchPendingCasosForTechnician(pending, { publicId: 9999 }),
     ).toEqual([]);
+  });
+});
+
+describe("matchTechnicianTicketDetail", () => {
+  const pending = [
+    caso({
+      wisproIssueId: "a",
+      wisproPublicId: 1842,
+      clientName: "Tania Ortiz",
+    }),
+    caso({
+      wisproIssueId: "b",
+      wisproPublicId: 1901,
+      clientName: "Pedro Guzmán",
+    }),
+    caso({
+      wisproIssueId: "c",
+      wisproPublicId: 1843,
+      clientName: "Katiuska Ramirez",
+    }),
+  ];
+
+  it("resolves a 1-based list index", () => {
+    expect(
+      matchTechnicianTicketDetail(pending, { listIndex: 2 }).map(
+        (item) => item.wisproIssueId,
+      ),
+    ).toEqual(["b"]);
+  });
+
+  it("returns empty for an out-of-range index", () => {
+    expect(matchTechnicianTicketDetail(pending, { listIndex: 9 })).toEqual([]);
+  });
+
+  it("does not dump the queue when there is no filter", () => {
+    expect(matchTechnicianTicketDetail(pending, {})).toEqual([]);
+  });
+
+  it("sends the only pending ticket when the tech asks for detail with no name", () => {
+    expect(
+      matchTechnicianTicketDetail([pending[0]], {}).map(
+        (item) => item.wisproIssueId,
+      ),
+    ).toEqual(["a"]);
+  });
+
+  it("matches a client name fragment", () => {
+    expect(
+      matchTechnicianTicketDetail(pending, { clientName: "tania" }).map(
+        (item) => item.wisproIssueId,
+      ),
+    ).toEqual(["a"]);
   });
 });

@@ -1,13 +1,10 @@
-/** After cards go out, stay silent unless the tech must page for more. */
+/** After the list or ficha goes out, stay silent. Pagination lives in the list. */
 export const technicianDeliveryFollowUp = (input: {
   delivered: number;
-  remaining: number;
+  remaining?: number;
 }) => {
   if (input.delivered <= 0) {
     return "No pude enviar los tickets por WhatsApp. Intenta de nuevo.";
-  }
-  if (input.remaining > 0) {
-    return `Quedan ${input.remaining}. Escribe *siguiente* si los necesitas.`;
   }
   return "";
 };
