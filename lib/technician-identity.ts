@@ -321,7 +321,7 @@ export const formatTechnicianWelcome = (name: string | null | undefined) =>
   `Hola ${technicianFirstName(name)}. Te identifiqué como técnico. ¿Quieres que te envíe tu listado de tickets pendientes?`;
 
 export const formatSupervisorWelcome = (name: string | null | undefined) =>
-  `Hola ${technicianFirstName(name)}. Te identifiqué como supervisor. Puedes consultar la cola de un técnico por nombre (por ejemplo: tickets de Joel).`;
+  `Hola ${technicianFirstName(name)}. Te identifiqué como supervisor. Puedes consultar los tickets del equipo diciendo «tickets», consultar un técnico por nombre («tickets de Joel») o pedir «mis tickets» para tus propias asignaciones.`;
 
 export const formatTechnicianAgentQueue = (
   items: Array<{
@@ -426,6 +426,61 @@ export const shouldDeliverTechnicianTicketDetail = (input: {
   return looksLikeTechnicianTicketDetailRequest(input.inboundText);
 };
 
+export const looksLikeSupervisorOwnTicketsRequest = (
+  value: string | null | undefined,
+): boolean => {
+  const text = String(value || "").trim();
+  if (!text) return false;
+  return (
+    /\b(?:mis\s+(?:tickets?|pendientes?|casos?|rutas?|cola)|mi\s+(?:ruta|cola)|asignad[oa]s?\s+a\s+m[ií]|tengo\b.*?\basignad[oa]|lo\s+m[ií]o)\b/i.test(
+      text,
+    )
+  );
+};
+
+export const looksLikeSupervisorTeamTicketsRequest = (
+  value: string | null | undefined,
+): boolean => {
+  const text = String(value || "").trim();
+  if (!text) return false;
+  if (looksLikeTechnicianFinalizeRequest(text)) return false;
+  if (looksLikeSupervisorOwnTicketsRequest(text)) return false;
+  if (looksLikeMonitoredTechnicianQuery(text)) return false;
+
+  return /\b(?:tickets?|casos?|pendientes?|visitas?|cola|rutas?|listado)\b/i.test(
+    text,
+  );
+};
+
+export type TemporalDateFilter = "today" | "tomorrow" | "all";
+
+export const parseTemporalDateFilter = (
+  text: string | null | undefined,
+): TemporalDateFilter => {
+  const s = String(text || "").toLowerCase();
+  if (/\b(?:mañana|manana)\b/i.test(s)) return "tomorrow";
+  if (/\b(?:hoy|ahora|este\s+d[ií]a|del\s+d[ií]a)\b/i.test(s)) return "today";
+  return "all";
+};
+
+export const getCaracasDateKey = (dateOffsetDays = 0): string => {
+  const d = new Date(Date.now() + dateOffsetDays * 24 * 60 * 60 * 1000);
+  return new Intl.DateTimeFormat("es-VE", {
+    timeZone: "America/Caracas",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(d);
+};
+
+export const shouldDeliverSupervisorTeamTickets = (input: {
+  isSupervisor: boolean;
+  inboundText: string | null | undefined;
+}): boolean => {
+  if (!input.isSupervisor) return false;
+  return looksLikeSupervisorTeamTicketsRequest(input.inboundText);
+};
+
 export const shouldDeliverTechnicianTickets = (input: {
   justVerified: boolean;
   inboundText: string | null | undefined;
@@ -434,13 +489,13 @@ export const shouldDeliverTechnicianTickets = (input: {
   isSupervisor?: boolean;
 }) => {
   if (looksLikeTechnicianFinalizeRequest(input.inboundText)) return false;
+  if (input.isSupervisor) {
+    return looksLikeSupervisorOwnTicketsRequest(input.inboundText);
+  }
   if (shouldDeliverTechnicianTicketDetail({ inboundText: input.inboundText })) {
     return false;
   }
   if (looksLikeMonitoredTechnicianQuery(input.inboundText)) return false;
-  if (input.isSupervisor) {
-    return OWN_TICKETS_RE.test(String(input.inboundText || ""));
-  }
   if (looksLikeTechnicianTicketRequest(input.inboundText)) return true;
   if (looksLikeTechnicianNextPage(input.inboundText)) return true;
   if (looksLikeTechnicianResend(input.inboundText)) return true;

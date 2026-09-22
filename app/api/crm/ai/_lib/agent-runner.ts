@@ -37,12 +37,14 @@ import {
   looksLikeTechnicianTicketRequest,
   parseMonitoredTechnicianQuery,
   shouldDeliverMonitoredTechnicianQueue,
+  shouldDeliverSupervisorTeamTickets,
   shouldDeliverTechnicianTicketDetail,
   shouldDeliverTechnicianTickets,
   shouldUseCannedTechnicianWelcome,
 } from "@/lib/technician-identity";
 import {
   deliverMonitoredTechnicianTickets,
+  deliverSupervisorTeamTickets,
   deliverTechnicianPendingTickets,
   deliverTechnicianTicketDetail,
   SUPERVISOR_TOOL_NAMES,
@@ -625,6 +627,10 @@ export const runAiAgent = async (input: {
       isSupervisor,
       inboundText,
     });
+    const shouldDeliverTeam = shouldDeliverSupervisorTeamTickets({
+      isSupervisor,
+      inboundText,
+    });
 
     if (shouldDeliverMonitored) {
       if (!phone) {
@@ -656,6 +662,37 @@ export const runAiAgent = async (input: {
             ? "supervisor_technician_queue"
             : "technician_tickets"
           : "supervisor_technician_queue_failed",
+        runId,
+        clientId: input.client?.id ?? null,
+      };
+    }
+
+    if (shouldDeliverTeam) {
+      if (!phone) {
+        return {
+          action: "reply",
+          message:
+            "No pude identificar tu WhatsApp para enviarte el listado de tickets. Escribe desde el número registrado en tu ficha.",
+          reason: "technician_missing_phone",
+          runId,
+          clientId: input.client?.id ?? null,
+        };
+      }
+      const delivery = await deliverSupervisorTeamTickets({
+        supabase: input.supabase,
+        conversationId: input.conversationId,
+        to: phone,
+        supervisor: employee,
+        inboundText,
+      });
+      return {
+        action: "reply",
+        message: delivery.message,
+        reason: delivery.ok
+          ? delivery.message.trim()
+            ? "supervisor_team_tickets"
+            : "technician_tickets"
+          : "supervisor_team_tickets_failed",
         runId,
         clientId: input.client?.id ?? null,
       };

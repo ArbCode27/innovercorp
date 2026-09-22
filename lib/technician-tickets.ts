@@ -1,18 +1,22 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { orderKindLabels } from "@/app/crm/_lib/wispro-caso-schema";
 import {
+  listAllOpenTeamCasos,
   listCasosForEmployee,
   listPendingCasosForEmployee,
   type TechnicianTicketScope,
 } from "./crm-wispro-casos";
 import { recordTechnicianEvent, updateTechnicianReportOffset } from "./crm-technicians";
 import { matchTechnicianTicketDetail } from "./match-technician-ticket";
-import type { MatchedWisproEmployee } from "./match-wispro-employee";
+import { type MatchedWisproEmployee } from "./match-wispro-employee";
+import { phoneLast10 } from "./phone-match";
 import { resolveTechnicianByName } from "./resolve-technician-by-name";
 import { technicianDeliveryFollowUp } from "./technician-delivery-text";
 import {
+  getCaracasDateKey,
   looksLikeTechnicianNextPage,
   looksLikeTechnicianResend,
+  parseTemporalDateFilter,
   parseTechnicianTicketDetailQuery,
   parseTechnicianTicketScope,
   technicianFirstName,
@@ -22,6 +26,8 @@ import {
   technicianResolvedListHeading,
 } from "./technician-name-match";
 import {
+  formatScheduleDateKey,
+  formatSupervisorTeamTicketsReport,
   formatTechnicianCaption,
   formatTechnicianList,
   type TechnicianReportCaso,
@@ -85,12 +91,18 @@ const toTechnicianReport = (caso: CrmWisproCaso): TechnicianReportCaso => ({
   facadeMediaUrl: caso.facadeMediaUrl,
   status: caso.status,
   closedAt: caso.closedAt,
+  priority: caso.priority,
+  employeeName: caso.employeeName,
 });
 
 const loadCasos = async (
   supabase: SupabaseClient,
   employeeId: string,
-  options?: { scope?: TechnicianTicketScope; limit?: number },
+  options?: {
+    scope?: TechnicianTicketScope;
+    limit?: number;
+    phoneLast10?: string | null;
+  },
 ): Promise<
   { casos: CrmWisproCaso[]; message?: undefined } | { casos: null; message: string }
 > => {
@@ -171,7 +183,11 @@ export const deliverTechnicianPendingTickets = async (input: {
   scope?: TechnicianTicketScope;
 }): Promise<TechnicianTicketDelivery> => {
   const scope = input.scope || parseTechnicianTicketScope(input.inboundText);
-  const loaded = await loadCasos(input.supabase, input.employee.id, { scope });
+  const phone10 = phoneLast10(input.employee.phone);
+  const loaded = await loadCasos(input.supabase, input.employee.id, {
+    scope,
+    phoneLast10: phone10,
+  });
   if (!loaded.casos) {
     return emptyDelivery({ message: loaded.message || "No se pudieron leer los tickets" });
   }
@@ -191,9 +207,11 @@ export const deliverTechnicianPendingTickets = async (input: {
     const emptyMsg =
       offset > 0
         ? "No hay más tickets en este lote."
-        : scope === "done"
-          ? `Hola ${firstName}, no tienes tickets resueltos en los últimos 7 días. Puedes consultar tus tickets pendientes.`
-          : `Hola ${firstName}, no tienes tickets pendientes asignados.`;
+        : input.employee.isSupervisor
+          ? `Hola ${firstName}, no tienes tickets pendientes asignados a tu nombre. Escribe «tickets» para ver el listado del equipo o «tickets de [Nombre]» para consultar a un técnico.`
+          : scope === "done"
+            ? `Hola ${firstName}, no tienes tickets resueltos en los últimos 7 días. Puedes consultar tus tickets pendientes.`
+            : `Hola ${firstName}, no tienes tickets pendientes asignados.`;
     return emptyDelivery({
       ok: true,
       message: emptyMsg,
@@ -584,5 +602,95 @@ export const deliverMonitoredTechnicianTickets = async (input: {
     matchedBy: resolved.matchedBy,
     score: resolved.score,
     tickets,
+  };
+};
+
+export const deliverSupervisorTeamTickets = async (input: {
+  supabase: SupabaseClient;
+  conversationId: number;
+  to: string;
+  supervisor: MatchedWisproEmployee;
+  inboundText?: string | null;
+  scope?: TechnicianTicketScope;
+}): Promise<TechnicianTicketDelivery> => {
+  const scope: TechnicianTicketScope = input.scope || "pending";
+  let allCasos: CrmWisproCaso[];
+  try {
+    allCasos = await listAllOpenTeamCasos(input.supabase, { scope });
+  } catch (error) {
+    return emptyDelivery({
+      message:
+        error instanceof Error
+          ? error.message
+          : "No se pudieron consultar los tickets del equipo",
+    });
+  }
+
+  const temporal = parseTemporalDateFilter(input.inboundText);
+  let dateTitle: string | undefined;
+  let filteredCasos = allCasos;
+
+  if (temporal === "today") {
+    const todayKey = getCaracasDateKey(0);
+    dateTitle = `de Hoy (${todayKey})`;
+    filteredCasos = allCasos.filter((c) => {
+      const scheduleKey = formatScheduleDateKey(c.windowStart);
+      return scheduleKey === todayKey;
+    });
+  } else if (temporal === "tomorrow") {
+    const tomorrowKey = getCaracasDateKey(1);
+    dateTitle = `de Mañana (${tomorrowKey})`;
+    filteredCasos = allCasos.filter((c) => {
+      const scheduleKey = formatScheduleDateKey(c.windowStart);
+      return scheduleKey === tomorrowKey;
+    });
+  }
+
+  const reports = filteredCasos.map(toTechnicianReport);
+  const messageBody = formatSupervisorTeamTicketsReport(reports, {
+    dateTitle,
+    totalUnfilteredCount: allCasos.length,
+    temporalFilter: temporal,
+  });
+
+  try {
+    await sendWhatsAppText({
+      to: input.to,
+      body: messageBody,
+      supabase: input.supabase,
+      conversationId: input.conversationId,
+      metadata: { engine: "ai", action: "supervisor_team_tickets" },
+    });
+  } catch (error) {
+    return emptyDelivery({
+      message:
+        error instanceof Error
+          ? error.message
+          : "No se pudo enviar el reporte de tickets al supervisor",
+      count: filteredCasos.length,
+    });
+  }
+
+  await recordTechnicianEvent(input.supabase, {
+    technicianId: null,
+    conversationId: input.conversationId,
+    event: "supervisor_team_tickets_delivered",
+    method: "team_list",
+    metadata: {
+      delivered: filteredCasos.length,
+      totalUnfiltered: allCasos.length,
+      temporal,
+      scope,
+    },
+  });
+
+  return {
+    ok: true,
+    identified: true,
+    message: "",
+    count: filteredCasos.length,
+    delivered: filteredCasos.length,
+    remaining: 0,
+    offset: 0,
   };
 };

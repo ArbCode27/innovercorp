@@ -897,7 +897,9 @@ export const replyToConversationWithAi = async (
     if (!replyTextRaw) {
       if (
         decision.reason === "technician_tickets" ||
-        decision.reason === "technician_ticket_detail"
+        decision.reason === "technician_ticket_detail" ||
+        decision.reason === "supervisor_technician_queue" ||
+        decision.reason === "supervisor_team_tickets"
       ) {
         await closeRun("replied", {
           metadata: { intent, aiRunId: decision.runId, silentTickets: true },
@@ -912,7 +914,7 @@ export const replyToConversationWithAi = async (
         });
         return {
           ok: true,
-          reason: "technician_tickets",
+          reason: decision.reason,
           action: "reply",
           messageId: null,
           runId: decision.runId,

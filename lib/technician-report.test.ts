@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  formatSupervisorTeamTicketsReport,
   formatTechnicianCaption,
   formatTechnicianList,
 } from "./technician-report";
@@ -215,5 +216,108 @@ describe("collectCasoContextFromMessages", () => {
     expect(ctx.mapsUrl).toBe("https://maps.google.com/?q=10.2,-64.7");
     expect(ctx.facade?.mediaUrl).toBe("https://cdn.example/fachada.jpg");
     expect(ctx.addressText).toContain("Casa");
+  });
+});
+
+describe("formatSupervisorTeamTicketsReport", () => {
+  it("returns clean message when no tickets are registered", () => {
+    const text = formatSupervisorTeamTicketsReport([]);
+    expect(text).toContain("No hay tickets pendientes registrados en el sistema.");
+  });
+
+  it("groups tickets by technician and date with priorities and hints", () => {
+    const text = formatSupervisorTeamTicketsReport([
+      {
+        wisproPublicId: 1042,
+        employeeName: "Joel Cárdenas",
+        clientName: "Katherine Inojosa",
+        clientPhone: "04141234567",
+        cause: "Pérdida de señal óptica",
+        title: "Falla de internet",
+        addressText: "Brisas del Rosario",
+        mapsUrl: null,
+        latitude: null,
+        longitude: null,
+        windowStart: "2026-09-22T15:00:00.000Z",
+        windowEnd: "2026-09-22T17:00:00.000Z",
+        facadeMediaUrl: null,
+        priority: "urgent",
+      },
+      {
+        wisproPublicId: 1045,
+        employeeName: "Joel Cárdenas",
+        clientName: "Pedro Morales",
+        clientPhone: null,
+        cause: "Instalación nueva",
+        title: "Instalación",
+        addressText: "Casco Central",
+        mapsUrl: null,
+        latitude: null,
+        longitude: null,
+        windowStart: "2026-09-22T18:00:00.000Z",
+        windowEnd: "2026-09-22T20:00:00.000Z",
+        facadeMediaUrl: null,
+        priority: "medium",
+      },
+      {
+        wisproPublicId: 1048,
+        employeeName: "Alan Brito",
+        clientName: "Carlos Gómez",
+        clientPhone: null,
+        cause: "Cambio de router",
+        title: "Revisión",
+        addressText: "Sector Mume",
+        mapsUrl: null,
+        latitude: null,
+        longitude: null,
+        windowStart: "2026-09-23T13:00:00.000Z",
+        windowEnd: "2026-09-23T15:00:00.000Z",
+        facadeMediaUrl: null,
+        priority: "high",
+      },
+      {
+        wisproPublicId: 1050,
+        employeeName: null,
+        clientName: "Luis Martínez",
+        clientPhone: null,
+        cause: "Revisión de cable",
+        title: "Soporte",
+        addressText: "Los Olivos",
+        mapsUrl: null,
+        latitude: null,
+        longitude: null,
+        windowStart: null,
+        windowEnd: null,
+        facadeMediaUrl: null,
+        priority: "low",
+      },
+    ]);
+
+    expect(text).toContain("Listado de Tickets del Equipo");
+    expect(text).toContain("Total: 4 tickets activos distribuidos en 3 colas.");
+
+    // Technicians present
+    expect(text).toContain("ALAN BRITO");
+    expect(text).toContain("JOEL CÁRDENAS");
+    expect(text).toContain("SIN ASIGNAR");
+
+    // Dates present
+    expect(text).toContain("22/09/2026:");
+    expect(text).toContain("23/09/2026:");
+    expect(text).toContain("Fecha por definir:");
+
+    // Clients and IDs
+    expect(text).toContain("*Katherine Inojosa* (#1042)");
+    expect(text).toContain("*Pedro Morales* (#1045)");
+    expect(text).toContain("*Carlos Gómez* (#1048)");
+    expect(text).toContain("*Luis Martínez* (#1050)");
+
+    // Priority badges
+    expect(text).toContain("🔥 Urgente");
+    expect(text).toContain("⚠️ Alta");
+
+    // Supervisor guide footer
+    expect(text).toContain("tickets de [Nombre]");
+    expect(text).toContain("mis tickets");
   });
 });

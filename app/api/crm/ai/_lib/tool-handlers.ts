@@ -50,7 +50,12 @@ import {
   listOpenCasosForConversation,
 } from "@/lib/crm-wispro-casos";
 import { matchWisproEmployee, type MatchedWisproEmployee } from "@/lib/match-wispro-employee";
-import { deliverMonitoredTechnicianTickets, deliverTechnicianPendingTickets, deliverTechnicianTicketDetail } from "@/lib/technician-tickets";
+import {
+  deliverMonitoredTechnicianTickets,
+  deliverSupervisorTeamTickets,
+  deliverTechnicianPendingTickets,
+  deliverTechnicianTicketDetail,
+} from "@/lib/technician-tickets";
 import {
   FinalizeCasoError,
   finalizeCrmWisproCaso,
@@ -1693,6 +1698,43 @@ const handleGetTechnicianAssignedTickets = async (
   }
 
   ctx.onBeforeLongRunningWork?.();
+  const techNameLower = parsed.data.technician_name.trim().toLowerCase();
+  const isTeamQuery =
+    techNameLower === "todos" ||
+    techNameLower === "equipo" ||
+    techNameLower === "general" ||
+    techNameLower === "todos los técnicos" ||
+    techNameLower === "todos los tecnicos";
+
+  if (isTeamQuery) {
+    const delivery = await deliverSupervisorTeamTickets({
+      supabase: ctx.supabase,
+      conversationId: ctx.conversationId,
+      to,
+      supervisor: employee,
+      inboundText: parsed.data.technician_name,
+      scope: parsed.data.scope,
+    });
+
+    if (delivery.ok && !delivery.message.trim()) {
+      ctx.suppressReply = true;
+    }
+
+    return {
+      name: GET_TECHNICIAN_ASSIGNED_TICKETS_TOOL,
+      ok: delivery.ok,
+      stopAgent: true,
+      directReply: delivery.message.trim() || undefined,
+      response: {
+        ok: delivery.ok,
+        identified: true,
+        status: "resolved",
+        count: delivery.count,
+        delivered: delivery.delivered,
+      },
+    };
+  }
+
   const deliver = parsed.data.mode !== "summary";
   const delivery = await deliverMonitoredTechnicianTickets({
     supabase: ctx.supabase,

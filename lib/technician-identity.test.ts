@@ -11,9 +11,12 @@ import {
   looksLikeTechnicianResend,
   looksLikeTechnicianTicketRequest,
   looksLikeTechnicianTicketDetailRequest,
+  looksLikeSupervisorOwnTicketsRequest,
+  looksLikeSupervisorTeamTicketsRequest,
   parseMonitoredTechnicianQuery,
   parseTechnicianTicketDetailQuery,
   shouldDeliverMonitoredTechnicianQueue,
+  shouldDeliverSupervisorTeamTickets,
   shouldDeliverTechnicianTicketDetail,
   shouldDeliverTechnicianTickets,
   shouldUseCannedTechnicianWelcome,
@@ -470,5 +473,133 @@ describe("technician inbound helpers", () => {
         inboundText: "dame los tickets de Jonathan del día de hoy por favor",
       }),
     ).toBe(true);
+  });
+
+  describe("supervisor own tickets vs team tickets differentiation", () => {
+    it("identifies supervisor asking specifically for their own tickets", () => {
+      const ownQueries = [
+        "mis tickets",
+        "mis tickets de hoy",
+        "mis pendientes",
+        "mi ruta",
+        "mis casos",
+        "lo que tengo asignado yo",
+        "tickets asignados a mi",
+        "lo mio por favor",
+        "mi cola",
+      ];
+
+      for (const query of ownQueries) {
+        expect(looksLikeSupervisorOwnTicketsRequest(query)).toBe(true);
+        expect(
+          shouldDeliverTechnicianTickets({
+            justVerified: false,
+            inboundText: query,
+            inboundIsCedula: false,
+            isSupervisor: true,
+          }),
+        ).toBe(true);
+        expect(
+          shouldDeliverSupervisorTeamTickets({
+            isSupervisor: true,
+            inboundText: query,
+          }),
+        ).toBe(false);
+        expect(
+          shouldDeliverMonitoredTechnicianQueue({
+            isSupervisor: true,
+            inboundText: query,
+          }),
+        ).toBe(false);
+      }
+    });
+
+    it("identifies supervisor asking for general team tickets", () => {
+      const teamQueries = [
+        "tickets",
+        "los tickets",
+        "dame los tickets",
+        "tickets de hoy",
+        "tickets para hoy",
+        "tickets del día",
+        "tickets de mañana",
+        "pendientes",
+        "pendientes de hoy",
+        "listado de tickets",
+        "cola",
+        "ruta",
+        "tickets de todos",
+      ];
+
+      for (const query of teamQueries) {
+        expect(looksLikeSupervisorOwnTicketsRequest(query)).toBe(false);
+        expect(looksLikeSupervisorTeamTicketsRequest(query)).toBe(true);
+        expect(
+          shouldDeliverTechnicianTickets({
+            justVerified: false,
+            inboundText: query,
+            inboundIsCedula: false,
+            isSupervisor: true,
+          }),
+        ).toBe(false);
+        expect(
+          shouldDeliverSupervisorTeamTickets({
+            isSupervisor: true,
+            inboundText: query,
+          }),
+        ).toBe(true);
+        expect(
+          shouldDeliverMonitoredTechnicianQueue({
+            isSupervisor: true,
+            inboundText: query,
+          }),
+        ).toBe(false);
+      }
+    });
+
+    it("identifies supervisor asking for a specific technician queue", () => {
+      const specificQueries = [
+        "tickets de joel",
+        "dame los tickets de Jonathan",
+        "cola de alan",
+      ];
+
+      for (const query of specificQueries) {
+        expect(looksLikeSupervisorOwnTicketsRequest(query)).toBe(false);
+        expect(
+          shouldDeliverSupervisorTeamTickets({
+            isSupervisor: true,
+            inboundText: query,
+          }),
+        ).toBe(false);
+        expect(
+          shouldDeliverMonitoredTechnicianQueue({
+            isSupervisor: true,
+            inboundText: query,
+          }),
+        ).toBe(true);
+      }
+    });
+
+    it("regular technicians always get their own tickets and never team list", () => {
+      const queries = ["tickets", "dame los tickets", "tickets de hoy", "mis tickets"];
+
+      for (const query of queries) {
+        expect(
+          shouldDeliverTechnicianTickets({
+            justVerified: false,
+            inboundText: query,
+            inboundIsCedula: false,
+            isSupervisor: false,
+          }),
+        ).toBe(true);
+        expect(
+          shouldDeliverSupervisorTeamTickets({
+            isSupervisor: false,
+            inboundText: query,
+          }),
+        ).toBe(false);
+      }
+    });
   });
 });

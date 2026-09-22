@@ -273,6 +273,7 @@ export const listCasosForEmployee = async (
     sinceDays?: number;
     fromDate?: string | null;
     toDate?: string | null;
+    phoneLast10?: string | null;
   },
 ): Promise<CrmWisproCaso[]> => {
   const scope = options?.scope || "pending";
@@ -293,8 +294,18 @@ export const listCasosForEmployee = async (
   let query = supabase
     .from("crm_wispro_casos")
     .select("*")
-    .eq("employee_id", employeeId)
     .in("status", statuses);
+
+  if (employeeId.startsWith("supervisor-phone:")) {
+    const digits = employeeId.replace("supervisor-phone:", "").trim();
+    query = query.eq("employee_phone_last10", digits);
+  } else if (options?.phoneLast10) {
+    query = query.or(
+      `employee_id.eq.${employeeId},employee_phone_last10.eq.${options.phoneLast10}`,
+    );
+  } else {
+    query = query.eq("employee_id", employeeId);
+  }
 
   if (scope === "done") {
     if (options?.fromDate) {
@@ -319,6 +330,43 @@ export const listCasosForEmployee = async (
   if (error) {
     throw new Error(
       error.message || "No se pudieron leer los tickets del técnico",
+    );
+  }
+
+  return (data || []).map((row) => fromRow(row as Record<string, unknown>));
+};
+
+export const listAllOpenTeamCasos = async (
+  supabase: SupabaseClient,
+  options?: {
+    scope?: TechnicianTicketScope;
+    limit?: number;
+  },
+): Promise<CrmWisproCaso[]> => {
+  const scope = options?.scope || "pending";
+  const limit = Math.min(200, Math.max(1, options?.limit ?? 100));
+
+  let statuses: CrmWisproCasoStatus[];
+  if (scope === "done") {
+    statuses = DONE_STATUSES;
+  } else if (scope === "all") {
+    statuses = ALL_STATUSES;
+  } else {
+    statuses = OPEN_STATUSES;
+  }
+
+  const { data, error } = await supabase
+    .from("crm_wispro_casos")
+    .select("*")
+    .in("status", statuses)
+    .order("employee_name", { ascending: true, nullsFirst: false })
+    .order("window_start", { ascending: true, nullsFirst: false })
+    .order("created_at", { ascending: true })
+    .limit(limit);
+
+  if (error) {
+    throw new Error(
+      error.message || "No se pudieron leer los tickets del equipo",
     );
   }
 

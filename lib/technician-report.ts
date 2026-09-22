@@ -1,4 +1,5 @@
 import { resolveMapsUrl } from "./maps-link";
+import { getCaracasDateKey } from "./technician-identity";
 
 export const TECHNICIAN_CAPTION_MAX = 1024;
 
@@ -18,9 +19,11 @@ export type TechnicianReportCaso = {
   facadeMediaUrl: string | null;
   status?: string | null;
   closedAt?: string | null;
+  priority?: string | null;
+  employeeName?: string | null;
 };
 
-const formatWindow = (start: string | null, end: string | null) => {
+export const formatWindow = (start: string | null, end: string | null) => {
   if (!start && !end) return null;
   try {
     const formatter = new Intl.DateTimeFormat("es-VE", {
@@ -220,4 +223,123 @@ export const formatTechnicianList = (
   return [header, "", formattedContent, hint ? `\n${hint}` : ""]
     .join("\n")
     .trimEnd();
+};
+
+export type SupervisorTeamReportOptions = {
+  dateTitle?: string;
+  totalUnfilteredCount?: number;
+  temporalFilter?: "today" | "tomorrow" | "all";
+  maxItems?: number;
+};
+
+const priorityBadge = (priority?: string | null) => {
+  if (priority === "urgent") return " · 🔥 Urgente";
+  if (priority === "high") return " · ⚠️ Alta";
+  if (priority === "low") return " · 🟢 Baja";
+  return "";
+};
+
+export const formatSupervisorTeamTicketsReport = (
+  casos: (TechnicianReportCaso & { priority?: string | null; employeeName?: string | null })[],
+  options?: SupervisorTeamReportOptions,
+): string => {
+  if (!casos.length) {
+    if (options?.temporalFilter === "today") {
+      const todayKey = getCaracasDateKey(0);
+      return options.totalUnfilteredCount
+        ? `📋 No hay tickets agendados para hoy (${todayKey}). Hay ${options.totalUnfilteredCount} tickets pendientes en otras fechas o por definir.`
+        : `📋 No hay tickets agendados para hoy (${todayKey}).`;
+    }
+    if (options?.temporalFilter === "tomorrow") {
+      const tomorrowKey = getCaracasDateKey(1);
+      return `📋 No hay tickets agendados para mañana (${tomorrowKey}).`;
+    }
+    return "📋 No hay tickets pendientes registrados en el sistema.";
+  }
+
+  const maxItems = options?.maxItems ?? 25;
+  const displayCasos = casos.slice(0, maxItems);
+  const truncatedCount = casos.length - displayCasos.length;
+
+  // Group by Technician
+  const byTechnician = new Map<string, typeof displayCasos>();
+  for (const caso of displayCasos) {
+    const rawName = caso.employeeName?.trim();
+    const techName = rawName || "Sin asignar";
+    if (!byTechnician.has(techName)) {
+      byTechnician.set(techName, []);
+    }
+    byTechnician.get(techName)!.push(caso);
+  }
+
+  // Sort technicians alphabetically with "Sin asignar" at the end
+  const sortedTechKeys = [...byTechnician.keys()].sort((a, b) => {
+    if (a === "Sin asignar") return 1;
+    if (b === "Sin asignar") return -1;
+    return a.localeCompare(b, "es", { sensitivity: "base" });
+  });
+
+  const sections: string[] = [];
+  const dateTitle = options?.dateTitle ? ` ${options.dateTitle}` : "";
+  sections.push(`📋 *Listado de Tickets del Equipo${dateTitle}*`);
+  sections.push(
+    `Total: ${casos.length} ticket${casos.length === 1 ? "" : "s"} activo${casos.length === 1 ? "" : "s"} distribuido${casos.length === 1 ? "" : "s"} en ${sortedTechKeys.length} cola${sortedTechKeys.length === 1 ? "" : "s"}.`,
+  );
+
+  for (const techKey of sortedTechKeys) {
+    const techCasos = byTechnician.get(techKey)!;
+    const isUnassigned = techKey === "Sin asignar";
+    const headerPrefix = isUnassigned ? "⚠️" : "👷";
+    const techHeader = `${headerPrefix} *${techKey.toUpperCase()}* (${techCasos.length}):`;
+
+    // Group by Date for this technician
+    const dateGroups = new Map<string, typeof techCasos>();
+    for (const caso of techCasos) {
+      const dateKey =
+        formatScheduleDateKey(caso.windowStart) || "Fecha por definir";
+      if (!dateGroups.has(dateKey)) {
+        dateGroups.set(dateKey, []);
+      }
+      dateGroups.get(dateKey)!.push(caso);
+    }
+
+    const techDateSections: string[] = [];
+    let itemCounter = 1;
+
+    for (const [dateLabel, groupCasos] of dateGroups.entries()) {
+      const dateHeader = `📅 ${dateLabel}:`;
+      const itemBlocks = groupCasos.map((caso) => {
+        const idx = itemCounter++;
+        const publicId =
+          caso.wisproPublicId != null ? `#${caso.wisproPublicId}` : "s/n";
+        const priority = priorityBadge(caso.priority);
+        const window = formatWindow(caso.windowStart, caso.windowEnd);
+        const windowLine = window ? `\n   Horario: ${window}` : "";
+        const location = caso.addressText?.trim();
+        const locationLine = location ? `\n   Ubicación: ${location}` : "";
+        const title = (caso.cause || caso.title || "Visita técnica").trim();
+
+        return [
+          `${idx}. *${caso.clientName?.trim() || "Cliente"}* (${publicId})${priority}`,
+          `   ${title}${windowLine}${locationLine}`,
+        ].join("\n");
+      });
+
+      techDateSections.push(`${dateHeader}\n${itemBlocks.join("\n\n")}`);
+    }
+
+    sections.push(`${techHeader}\n${techDateSections.join("\n\n")}`);
+  }
+
+  if (truncatedCount > 0) {
+    sections.push(
+      `_Mostrando los primeros ${maxItems} tickets de ${casos.length}. Escribe «tickets de [Nombre]» para ver la cola completa de un técnico._`,
+    );
+  }
+
+  sections.push(
+    `_Para ver la cola de un solo técnico escribe «tickets de [Nombre]». Para ver tus propias asignaciones escribe «mis tickets»._`,
+  );
+
+  return sections.join("\n\n");
 };

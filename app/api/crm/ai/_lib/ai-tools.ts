@@ -373,7 +373,7 @@ export const AI_TOOLS_CONTRACT_PROMPT = `Herramientas disponibles (obligatorio r
 7) list_my_pending_tickets — SOLO técnicos identificados. Envía un listado de texto (nombre, título, ubicación). SIN fotos ni ficha. Si delivered=true, no escribas nada más.
 8) get_my_ticket_detail — SOLO técnicos identificados. Envía la ficha completa de UN caso (con foto). Pasa public_id, client_name o list_index. Si delivered=true, no escribas nada más.
 9) finalize_my_ticket — SOLO técnicos identificados. Cierra en CRM y Wispro. Pasa public_id o client_name (aunque el técnico hable informal). Si hay 1 pendiente o 1 match en la cola, cierra sin preguntar. No ofrezcas el listado.
-10) get_technician_assigned_tickets — SOLO supervisores (rol=supervisor_wispro). Pasa el nombre TAL CUAL lo dijo el gerente (no lo corrijas). El sistema resuelve contra el catálogo (resolved/ambiguous/not_found). No inventes nombres. mode=list envía el listado; mode=summary para conteos. Si delivered=true, no escribas nada más.
+10) get_technician_assigned_tickets — SOLO supervisores (rol=supervisor_wispro). Pasa el nombre TAL CUAL lo dijo el gerente (no lo corrijas). Si el gerente pide los tickets en general o de todo el equipo (ej: todos, equipo, general, tickets de hoy), pasa technician_name='todos'. El sistema resuelve contra el catálogo (resolved/ambiguous/not_found). No inventes nombres. mode=list envía el listado; mode=summary para conteos. Si delivered=true, no escribas nada más. Si pide SUS propios tickets ('mis tickets', 'mi ruta', 'lo mío'), usa list_my_pending_tickets.
 
 Tasa BCV / bolívares (CRÍTICO):
 - NUNCA inventes ni recalcules la tasa.
