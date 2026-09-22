@@ -1322,6 +1322,7 @@ const handleListMyPendingTickets = async (
     employee,
     inboundText: parsed.data.cedula ? `cedula ${parsed.data.cedula}` : "pendientes",
     storedOffset: parsed.data.offset || 0,
+    scope: parsed.data.scope,
   });
 
   if (delivery.ok && !delivery.message.trim()) {
@@ -1700,6 +1701,7 @@ const handleGetTechnicianAssignedTickets = async (
     supervisor: employee,
     technicianName: parsed.data.technician_name,
     deliver,
+    scope: parsed.data.scope,
   });
 
   if (delivery.ok && deliver && !delivery.message.trim()) {

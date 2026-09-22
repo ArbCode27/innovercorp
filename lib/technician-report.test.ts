@@ -125,6 +125,72 @@ describe("formatTechnicianList", () => {
     expect(text).toContain("1. Ana Pérez");
     expect(text).not.toContain("ficha completa");
   });
+
+  it("groups and orders tickets by scheduled date in format DD/MM/YYYY: with continuous numbering", () => {
+    const text = formatTechnicianList([
+      {
+        wisproPublicId: 101,
+        clientName: "EDMARY RODRIGUEZ",
+        clientPhone: "04141234567",
+        cause: "Luz roja LOS (pérdida de señal óptica)",
+        title: "Sin internet",
+        addressText: "Textiles La Fila S.A.",
+        mapsUrl: null,
+        latitude: null,
+        longitude: null,
+        windowStart: "2026-09-20T14:00:00.000Z",
+        windowEnd: "2026-09-20T16:00:00.000Z",
+        facadeMediaUrl: null,
+      },
+      {
+        wisproPublicId: 102,
+        clientName: "JUAN PEREZ",
+        clientPhone: "04249876543",
+        cause: "Corte de fibra",
+        title: "Revisión técnica",
+        addressText: "Calle Los Rosales",
+        mapsUrl: null,
+        latitude: null,
+        longitude: null,
+        windowStart: "2026-09-22T10:00:00.000Z",
+        windowEnd: "2026-09-22T12:00:00.000Z",
+        facadeMediaUrl: null,
+      },
+    ]);
+
+    expect(text).toContain("20/09/2026:");
+    expect(text).toContain("1. EDMARY RODRIGUEZ");
+    expect(text).toContain("22/09/2026:");
+    expect(text).toContain("2. JUAN PEREZ");
+  });
+
+  it("formats done tickets with resolution date and done scope header", () => {
+    const text = formatTechnicianList(
+      [
+        {
+          wisproPublicId: 50,
+          clientName: "MARIA GOMEZ",
+          clientPhone: null,
+          cause: "Cambio de router",
+          title: "Instalación",
+          addressText: "Av Bolívar",
+          mapsUrl: null,
+          latitude: null,
+          longitude: null,
+          windowStart: null,
+          windowEnd: null,
+          facadeMediaUrl: null,
+          status: "done",
+          closedAt: "2026-09-21T18:30:00.000Z",
+        },
+      ],
+      { scope: "done" },
+    );
+
+    expect(text).toContain("Tienes 1 ticket resuelto:");
+    expect(text).toContain("1. MARIA GOMEZ");
+    expect(text).toContain("Resuelto:");
+  });
 });
 
 describe("collectCasoContextFromMessages", () => {

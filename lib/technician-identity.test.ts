@@ -339,6 +339,7 @@ describe("technician inbound helpers", () => {
       {
         names: ["joel"],
         wantsCountOnly: false,
+        scope: "pending",
       },
     );
     expect(
@@ -348,10 +349,12 @@ describe("technician inbound helpers", () => {
     ).toEqual({
       names: ["jonathan"],
       wantsCountOnly: false,
+      scope: "done",
     });
     expect(parseMonitoredTechnicianQuery("cuántos tickets tiene alan")).toEqual({
       names: ["alan"],
       wantsCountOnly: true,
+      scope: "pending",
     });
     expect(
       parseMonitoredTechnicianQuery("cuántos tickets tienen joel y alan").names,
@@ -407,5 +410,65 @@ describe("technician inbound helpers", () => {
         inboundText: "dame los tickets asignados a joel",
       }),
     ).toBe(false);
+  });
+
+  it("handles technician queries with temporal expressions (hoy, mañana, día) without misidentifying client names", () => {
+    const temporalQueries = [
+      "Tickets del día de hoy... Por favor",
+      "Tickets para el día de mañana. Por favor",
+      "tickets de hoy",
+      "tickets para hoy",
+      "tickets de mañana",
+      "tickets para mañana",
+      "tickets del día",
+      "tickets del dia de hoy",
+      "pendientes de hoy",
+      "cola de hoy",
+      "mis tickets de hoy",
+      "Tickets por favor",
+    ];
+
+    for (const query of temporalQueries) {
+      expect(looksLikeTechnicianTicketDetailRequest(query)).toBe(false);
+      expect(parseTechnicianTicketDetailQuery(query).clientName).toBeNull();
+      expect(
+        shouldDeliverTechnicianTicketDetail({ inboundText: query }),
+      ).toBe(false);
+      expect(
+        shouldDeliverTechnicianTickets({
+          justVerified: false,
+          inboundText: query,
+          inboundIsCedula: false,
+          isSupervisor: false,
+        }),
+      ).toBe(true);
+    }
+  });
+
+  it("handles supervisor queries with temporal expressions cleanly", () => {
+    expect(
+      parseMonitoredTechnicianQuery(
+        "dame los tickets de Jonathan del día de hoy por favor",
+      ),
+    ).toEqual({
+      names: ["Jonathan"],
+      wantsCountOnly: false,
+      scope: "pending",
+    });
+    expect(
+      parseMonitoredTechnicianQuery(
+        "tickets de joel para mañana",
+      ),
+    ).toEqual({
+      names: ["joel"],
+      wantsCountOnly: false,
+      scope: "pending",
+    });
+    expect(
+      shouldDeliverMonitoredTechnicianQueue({
+        isSupervisor: true,
+        inboundText: "dame los tickets de Jonathan del día de hoy por favor",
+      }),
+    ).toBe(true);
   });
 });

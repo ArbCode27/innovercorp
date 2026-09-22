@@ -50,8 +50,10 @@ export const finalizeCrmWisproCaso = async (
 
   const issue = await closeHelpDeskIssue(existing.wisproIssueId);
   const order = await closeWorkOrderIfPresent(existing.wisproOrderId);
+  const now = new Date().toISOString();
   const caso = await patchCrmWisproCaso(supabase, existing.wisproIssueId, {
     status: "done",
+    closedAt: now,
   });
 
   return { caso, issue, order };

@@ -33,7 +33,7 @@ export type TechnicianIdentitySignals = {
 };
 
 const TICKET_REQUEST_RE =
-  /\b(pendiente(s)?|ticket(s)?|ruta|visita(s)?|casos?|lote|asignad[oa]s?|listado)\b/i;
+  /\b(pendiente(s)?|ticket(s)?|ruta|visita(s)?|casos?|cola|lote|asignad[oa]s?|listado)\b/i;
 
 const TICKET_MONITOR_CAPTURE_RE =
   /\b(?:tickets?|casos?|pendientes?|cola|ruta|visitas?)\s+(?:(?:asignad[oa]s?|resuelt[oa]s?|cerrad[oa]s?|finalizad[oa]s?|terminad[oa]s?|completad[oa]s?|solucionad[oa]s?|atendid[oa]s?|pendientes?|abiert[oa]s?|todos)\s+)*(?:de|del|a|para)\s+(.+)$/i;
@@ -49,13 +49,13 @@ const TICKET_COUNT_RE = /\b(cu[aá]ntos?|cu[aá]ntas?|total)\b/i;
 const TICKET_LIST_VERB_RE =
   /\b(listado|lista|detalle|ficha|p[aá]sa(?:me)?|m[aá]nda(?:me)?|dame|env[ií]a(?:me)?)\b/i;
 
-const OWN_TICKETS_RE = /\bmis\s+(tickets?|pendientes?|casos?|rutas?)\b/i;
+const OWN_TICKETS_RE = /\bmis\s+(tickets?|pendientes?|casos?|rutas?|cola)\b/i;
 
 const MONITOR_NAME_TRAIL_RE =
-  /\b(por\s+favor|please|hoy|ahora|pendientes?|tickets?|casos?|asignad[oa]s?|resuelt[oa]s?|cerrad[oa]s?|finalizad[oa]s?|terminad[oa]s?|completad[oa]s?|solucionad[oa]s?|atendid[oa]s?|abiert[oa]s?|todos)\b/gi;
+  /\b(por\s+favor|please|hoy|ahora|mañana|ayer|semana|mes|d[ií]a(?:s)?|pendientes?|tickets?|casos?|asignad[oa]s?|resuelt[oa]s?|cerrad[oa]s?|finalizad[oa]s?|terminad[oa]s?|completad[oa]s?|solucionad[oa]s?|atendid[oa]s?|abiert[oa]s?|todos|el|la|los|las|de|del|al|a|para)\b/gi;
 
 const TICKET_LIST_SCOPE_RE =
-  /\b(pendiente(s)?|ruta|lote|asignad[oa]s?|listado|todos(?:\s+los)?(?:\s+tickets)?|mis\s+(tickets|casos|pendientes)|los\s+tickets)\b/i;
+  /\b(pendiente(s)?|ruta|lote|asignad[oa]s?|listado|todos(?:\s+los)?(?:\s+tickets)?|mis\s+(tickets|casos|pendientes)|los\s+tickets|(?:tickets?|casos?|pendientes?|visitas?|cola|rutas?)\s+(?:del?\s+|para(?:\s+el)?\s+|de\s+)?(?:(?:este\s+)?d[ií]a(?:\s+(?:de\s+)?(?:hoy|mañana|ayer))?|hoy|mañana|ayer|ahora|esta\s+semana|este\s+mes))\b/i;
 
 const TICKET_DETAIL_KEYWORD_RE =
   /\b(detalle|ficha|completo|m[aá]s\s+(datos|info|informaci[oó]n)|foto(?:s)?\s+d(?:e|el|la)|fachada)\b/i;
@@ -89,7 +89,7 @@ const FINALIZE_TARGET_RE =
   /(?:ticket|caso|visita|#\s*\d{2,}|\d{3,})/i;
 
 const FINALIZE_LEADING_FILLER_RE =
-  /^(?:el|la|los|las|de|del|al|a|un|una|mi|su|este|esta|ese|esa|por\s+favor|please)[\s,]+/i;
+  /^(?:el|la|los|las|de|del|al|a|para|un|una|mi|mis|su|sus|tu|tus|este|esta|ese|esa|por\s+favor|please)[\s,]+/i;
 
 const FINALIZE_NAME_RE = /^[\p{L}][\p{L}\s.'’-]{1,79}$/u;
 
@@ -99,10 +99,10 @@ const TECHNICIAN_GREETING_RE =
   /^(hola|buenas|buen(os|as)\s+(d[ií]as|tardes|noches)|saludos)([!.,\s].*)?$/i;
 
 const DETAIL_NAME_NOISE_RE =
-  /\b(?:detalle|ficha|completo|foto(?:s)?|fachada|p[aá]sa(?:me)?|m[aá]nda(?:me)?|env[ií]a(?:me)?|dame|por\s+favor|el|la|los|las|de|del|al|a|un|una|ticket|caso|visita|n[uú]mero|nro|pendiente(?:s)?|m[aá]s|datos|info|informaci[oó]n)\b/gi;
+  /\b(?:detalle|ficha|completo|foto(?:s)?|fachada|p[aá]sa(?:me)?|m[aá]nda(?:me)?|env[ií]a(?:me)?|dame|por\s+favor|please|el|la|los|las|de|del|al|a|para|un|una|mi|mis|su|sus|tu|tus|tickets?|casos?|visitas?|rutas?|cola|n[uú]mero|nro|pendiente(?:s)?|m[aá]s|datos|info|informaci[oó]n|d[ií]a(?:s)?|hoy|mañana|ayer|ahora|semana|mes)\b/gi;
 
 const BARE_CLIENT_NAME_BLOCKLIST_RE =
-  /^(hola|gracias|ok+|okay|dale|va|claro|listo|bueno|espera|ahora|ya|bien|perfecto|entendido|pendientes?|tickets?|casos?|visitas?|ruta|siguiente|reenviar|saludos|buenas?|d[ií]as|tardes|noches|ayuda|men[uú]|t[eé]cnic[oa]s?|audio|imagen|video|foto|fotos|documento|ubicaci[oó]n|nota de voz|voz|sticker)$/i;
+  /^(hola|gracias|ok+|okay|dale|va|claro|listo|bueno|espera|ahora|ya|bien|perfecto|entendido|pendientes?|tickets?|casos?|visitas?|ruta|siguiente|reenviar|saludos|buenas?|d[ií]as?|hoy|mañana|ayer|semana|mes|cola|mis?|sus?|tus?|tardes|noches|ayuda|men[uú]|t[eé]cnic[oa]s?|audio|imagen|video|foto|fotos|documento|ubicaci[oó]n|nota de voz|voz|sticker)$/i;
 
 const stripFinalizeFillers = (value: string) => {
   let rest = value.replace(/\s+/g, " ").trim();
@@ -189,9 +189,27 @@ export const looksLikeTechnicianTicketRequest = (
   value: string | null | undefined,
 ) => TICKET_REQUEST_RE.test(String(value || ""));
 
+export type TechnicianTicketScope = "pending" | "done" | "all";
+
+export const parseTechnicianTicketScope = (
+  value: string | null | undefined,
+): TechnicianTicketScope => {
+  const text = String(value || "").toLowerCase();
+  if (/\b(todos|todas|ambos)\b/i.test(text)) return "all";
+  if (
+    /\b(resuelt[oa]s?|cerrad[oa]s?|finalizad[oa]s?|terminad[oa]s?|completad[oa]s?|solucionad[oa]s?|atendid[oa]s?)\b/i.test(
+      text,
+    )
+  ) {
+    return "done";
+  }
+  return "pending";
+};
+
 export type MonitoredTechnicianQuery = {
   names: string[];
   wantsCountOnly: boolean;
+  scope: TechnicianTicketScope;
 };
 
 const cleanMonitoredNameChunk = (value: string) =>
@@ -205,7 +223,7 @@ export const parseMonitoredTechnicianQuery = (
   value: string | null | undefined,
 ): MonitoredTechnicianQuery => {
   const text = String(value || "").replace(/\s+/g, " ").trim();
-  if (!text) return { names: [], wantsCountOnly: false };
+  if (!text) return { names: [], wantsCountOnly: false, scope: "pending" };
 
   const captured =
     TICKET_MONITOR_CAPTURE_RE.exec(text)?.[1] ||
@@ -221,8 +239,9 @@ export const parseMonitoredTechnicianQuery = (
 
   const wantsCountOnly =
     TICKET_COUNT_RE.test(text) && !TICKET_LIST_VERB_RE.test(text);
+  const scope = parseTechnicianTicketScope(text);
 
-  return { names, wantsCountOnly };
+  return { names, wantsCountOnly, scope };
 };
 
 export const looksLikeMonitoredTechnicianQuery = (
@@ -237,7 +256,11 @@ export const looksLikeTechnicianTicketDetailRequest = (
   if (looksLikeTechnicianResend(value)) return false;
   const text = String(value || "").replace(/\s+/g, " ").trim();
   if (!text) return false;
-  if (/^(los\s+)?(tickets?|pendientes?|casos?|visitas?|ruta)$/i.test(text)) {
+  if (
+    /^(?:(?:mis|los|el)\s+)?(?:tickets?|pendientes?|casos?|visitas?|ruta|cola)(?:\s+(?:del?\s+|para(?:\s+el)?\s+|de\s+)?(?:(?:este\s+)?d[ií]a(?:\s+(?:de\s+)?(?:hoy|mañana|ayer))?|hoy|mañana|ayer|ahora|esta\s+semana|este\s+mes))?(?:[\s.,;:]+(?:por\s+favor|please))?$/i.test(
+      text,
+    )
+  ) {
     return false;
   }
   if (

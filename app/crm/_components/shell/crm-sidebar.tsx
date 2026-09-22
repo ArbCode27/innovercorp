@@ -12,6 +12,7 @@ import {
   ShieldCheck,
   Tags,
   Ticket,
+  Trophy,
   Users,
   Wallet,
 } from "lucide-react";
@@ -49,6 +50,7 @@ const icons = {
   clients: Users,
   payments: Wallet,
   tickets: Ticket,
+  performance: Trophy,
   labels: Tags,
   agents: Bot,
   supervisors: ShieldCheck,

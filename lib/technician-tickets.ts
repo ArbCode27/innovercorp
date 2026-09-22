@@ -1,6 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { orderKindLabels } from "@/app/crm/_lib/wispro-caso-schema";
-import { listPendingCasosForEmployee } from "./crm-wispro-casos";
+import {
+  listCasosForEmployee,
+  listPendingCasosForEmployee,
+  type TechnicianTicketScope,
+} from "./crm-wispro-casos";
 import { recordTechnicianEvent, updateTechnicianReportOffset } from "./crm-technicians";
 import { matchTechnicianTicketDetail } from "./match-technician-ticket";
 import type { MatchedWisproEmployee } from "./match-wispro-employee";
@@ -10,6 +14,7 @@ import {
   looksLikeTechnicianNextPage,
   looksLikeTechnicianResend,
   parseTechnicianTicketDetailQuery,
+  parseTechnicianTicketScope,
   technicianFirstName,
 } from "./technician-identity";
 import {
@@ -78,26 +83,36 @@ const toTechnicianReport = (caso: CrmWisproCaso): TechnicianReportCaso => ({
   windowStart: caso.windowStart,
   windowEnd: caso.windowEnd,
   facadeMediaUrl: caso.facadeMediaUrl,
+  status: caso.status,
+  closedAt: caso.closedAt,
 });
 
-const loadPendingCasos = async (
+const loadCasos = async (
   supabase: SupabaseClient,
   employeeId: string,
+  options?: { scope?: TechnicianTicketScope; limit?: number },
 ): Promise<
   { casos: CrmWisproCaso[]; message?: undefined } | { casos: null; message: string }
 > => {
   try {
-    return { casos: await listPendingCasosForEmployee(supabase, employeeId) };
+    return { casos: await listCasosForEmployee(supabase, employeeId, options) };
   } catch (error) {
     return {
       casos: null,
       message:
         error instanceof Error
           ? error.message
-          : "No se pudieron leer los tickets pendientes",
+          : "No se pudieron leer los tickets del técnico",
     };
   }
 };
+
+const loadPendingCasos = async (
+  supabase: SupabaseClient,
+  employeeId: string,
+): Promise<
+  { casos: CrmWisproCaso[]; message?: undefined } | { casos: null; message: string }
+> => loadCasos(supabase, employeeId, { scope: "pending" });
 
 const sendTechnicianTicketCard = async (input: {
   supabase: SupabaseClient;
@@ -153,10 +168,12 @@ export const deliverTechnicianPendingTickets = async (input: {
   inboundText?: string | null;
   storedOffset?: number;
   justVerified?: boolean;
+  scope?: TechnicianTicketScope;
 }): Promise<TechnicianTicketDelivery> => {
-  const loaded = await loadPendingCasos(input.supabase, input.employee.id);
+  const scope = input.scope || parseTechnicianTicketScope(input.inboundText);
+  const loaded = await loadCasos(input.supabase, input.employee.id, { scope });
   if (!loaded.casos) {
-    return emptyDelivery({ message: loaded.message || "No se pudieron leer los tickets pendientes" });
+    return emptyDelivery({ message: loaded.message || "No se pudieron leer los tickets" });
   }
 
   const all = loaded.casos;
@@ -171,12 +188,15 @@ export const deliverTechnicianPendingTickets = async (input: {
 
   if (!page.length) {
     await updateTechnicianReportOffset(input.supabase, input.conversationId, 0);
+    const emptyMsg =
+      offset > 0
+        ? "No hay más tickets en este lote."
+        : scope === "done"
+          ? `Hola ${firstName}, no tienes tickets resueltos en los últimos 7 días. Puedes consultar tus tickets pendientes.`
+          : `Hola ${firstName}, no tienes tickets pendientes asignados.`;
     return emptyDelivery({
       ok: true,
-      message:
-        offset > 0
-          ? "No hay más tickets en este lote."
-          : `Hola ${firstName}, no tienes tickets pendientes asignados.`,
+      message: emptyMsg,
     });
   }
 
@@ -186,7 +206,7 @@ export const deliverTechnicianPendingTickets = async (input: {
   try {
     await sendWhatsAppText({
       to: input.to,
-      body: formatTechnicianList(reports, { startIndex: offset, remaining }),
+      body: formatTechnicianList(reports, { startIndex: offset, remaining, scope }),
       supabase: input.supabase,
       conversationId: input.conversationId,
       metadata: { engine: "ai", action: "technician_report_index" },
@@ -219,6 +239,7 @@ export const deliverTechnicianPendingTickets = async (input: {
       remaining,
       count: all.length,
       mode: "list",
+      scope,
     },
   });
 
@@ -386,8 +407,10 @@ export const deliverMonitoredTechnicianTickets = async (input: {
   technicianId?: string | null;
   technicianName: string;
   deliver?: boolean;
+  scope?: TechnicianTicketScope;
 }): Promise<MonitoredTechnicianQueue> => {
   const deliver = input.deliver !== false;
+  const scope: TechnicianTicketScope = input.scope || "pending";
   let resolved;
   try {
     resolved = await resolveTechnicianByName(input.supabase, input.technicianName);
@@ -432,10 +455,10 @@ export const deliverMonitoredTechnicianTickets = async (input: {
   }
 
   const target = resolved.employee;
-  const loaded = await loadPendingCasos(input.supabase, target.id);
+  const loaded = await loadCasos(input.supabase, target.id, { scope });
   if (!loaded.casos) {
     return emptyMonitoredQueue({
-      message: loaded.message || "No se pudieron leer los tickets pendientes",
+      message: loaded.message || "No se pudieron leer los tickets del técnico",
       technicianName: target.name,
       technicianId: target.id,
     });
@@ -455,10 +478,16 @@ export const deliverMonitoredTechnicianTickets = async (input: {
   );
 
   if (!loaded.casos.length) {
+    const emptyMsg =
+      scope === "done"
+        ? `${firstName} no tiene tickets resueltos en los últimos 7 días. Puedes consultar sus tickets pendientes.`
+        : scope === "all"
+          ? `${firstName} no tiene tickets registrados.`
+          : `${firstName} no tiene tickets pendientes asignados.`;
     return {
       ok: true,
       identified: true,
-      message: `${firstName} no tiene tickets pendientes asignados.`,
+      message: emptyMsg,
       count: 0,
       delivered: 0,
       remaining: 0,
@@ -474,16 +503,27 @@ export const deliverMonitoredTechnicianTickets = async (input: {
     };
   }
 
+  const isDone = scope === "done";
+  const isAll = scope === "all";
   const countHeading =
     loaded.casos.length === 1
-      ? `${firstName} tiene 1 ticket pendiente:`
-      : `${firstName} tiene ${loaded.casos.length} tickets pendientes:`;
+      ? isDone
+        ? `${firstName} tiene 1 ticket resuelto en los últimos 7 días:`
+        : isAll
+          ? `${firstName} tiene 1 ticket:`
+          : `${firstName} tiene 1 ticket pendiente:`
+      : isDone
+        ? `${firstName} tiene ${loaded.casos.length} tickets resueltos en los últimos 7 días:`
+        : isAll
+          ? `${firstName} tiene ${loaded.casos.length} tickets (pendientes y resueltos):`
+          : `${firstName} tiene ${loaded.casos.length} tickets pendientes:`;
   const heading = officialHeading
     ? `${officialHeading}\n${countHeading}`
     : countHeading;
   const body = formatTechnicianList(loaded.casos.map(toTechnicianReport), {
     heading,
     hint: null,
+    scope,
   });
 
   if (deliver) {
@@ -497,6 +537,7 @@ export const deliverMonitoredTechnicianTickets = async (input: {
           engine: "ai",
           action: "supervisor_technician_queue",
           technician: target.id,
+          scope,
         },
       });
     } catch (error) {
@@ -523,6 +564,7 @@ export const deliverMonitoredTechnicianTickets = async (input: {
       target_name: target.name,
       count: loaded.casos.length,
       supervisor_employee_id: input.supervisor.id,
+      scope,
     },
   });
 

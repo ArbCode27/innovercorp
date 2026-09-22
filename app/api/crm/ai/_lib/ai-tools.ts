@@ -102,6 +102,7 @@ export const getClientTicketArgsSchema = z.object({});
 
 export const listMyPendingTicketsArgsSchema = z.object({
   offset: z.coerce.number().int().min(0).optional().default(0),
+  scope: z.enum(["pending", "done", "all"]).optional().default("pending"),
   cedula: z.preprocess(
     (value) => {
       if (value == null || value === "") return null;
@@ -148,6 +149,7 @@ export const finalizeMyTicketArgsSchema = z.object({
 export const getTechnicianAssignedTicketsArgsSchema = z.object({
   technician_name: z.string().trim().min(3).max(80),
   mode: z.enum(["list", "summary"]).optional().default("list"),
+  scope: z.enum(["pending", "done", "all"]).optional().default("pending"),
 });
 
 /** AI tool declarations for the CRM agent. */
@@ -348,6 +350,12 @@ export const AI_TOOL_DECLARATIONS = [
           enum: ["list", "summary"],
           description:
             "list = envía el listado. summary = solo datos (cuántos tiene, comparación).",
+        },
+        scope: {
+          type: "string",
+          enum: ["pending", "done", "all"],
+          description:
+            "pending = abiertos y agendados (default); done = resueltos; all = ambos.",
         },
       },
       required: ["technician_name"],

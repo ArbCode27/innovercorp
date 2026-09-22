@@ -36,6 +36,7 @@ export type CrmView =
   | "clients"
   | "payments"
   | "tickets"
+  | "performance"
   | "labels"
   | "agents"
   | "supervisors"

@@ -13,6 +13,7 @@ export const CRM_NAV_ITEMS: Array<{
   { id: "clients", label: "Clientes" },
   { id: "payments", label: "Pagos" },
   { id: "tickets", label: "Tickets" },
+  { id: "performance", label: "Rendimiento" },
   { id: "labels", label: "Etiquetas" },
   { id: "agents", label: "Agentes" },
   { id: "supervisors", label: "Gerentes" },

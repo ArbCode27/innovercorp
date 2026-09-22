@@ -18,6 +18,7 @@ import { SettingsView } from "../settings/settings-view";
 import { SupervisorsView } from "../supervisors/supervisors-view";
 import { PaymentsView } from "../payments/payments-view";
 import { TicketsView } from "../tickets/tickets-view";
+import { PerformanceView } from "../performance/performance-view";
 import { CrmAppearanceHydrator } from "./crm-appearance-hydrator";
 import { CrmMobileNav, CrmSidebar } from "./crm-sidebar";
 import { parseCrmAccentId, type CrmAccentId, type CrmColorMode } from "../../_lib/crm-accents";
@@ -236,6 +237,7 @@ export const CrmShell = () => {
               />
             ) : null}
             {activeView === "tickets" ? <TicketsView /> : null}
+            {activeView === "performance" ? <PerformanceView /> : null}
             {activeView === "labels" ? (
               <LabelsView
                 labels={crm.labels}

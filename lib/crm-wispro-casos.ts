@@ -28,9 +28,16 @@ export type UpsertCrmWisproCasoInput = {
   facadeMessageId?: number | null;
   windowStart?: string | null;
   windowEnd?: string | null;
+  closedAt?: string | null;
+  resolutionNotes?: string | null;
 };
 
-const OPEN_STATUSES: CrmWisproCasoStatus[] = ["open", "scheduled"];
+export type TechnicianTicketScope = "pending" | "done" | "all";
+
+export const OPEN_STATUSES: CrmWisproCasoStatus[] = ["open", "scheduled"];
+export const DONE_STATUSES: CrmWisproCasoStatus[] = ["done"];
+export const ALL_STATUSES: CrmWisproCasoStatus[] = ["open", "scheduled", "done"];
+export const DEFAULT_DONE_DAYS = 7;
 
 const toRow = (input: UpsertCrmWisproCasoInput) => ({
   conversation_id: input.conversationId ?? null,
@@ -60,6 +67,8 @@ const toRow = (input: UpsertCrmWisproCasoInput) => ({
   facade_message_id: input.facadeMessageId ?? null,
   window_start: input.windowStart ?? null,
   window_end: input.windowEnd ?? null,
+  closed_at: input.closedAt ?? null,
+  resolution_notes: input.resolutionNotes ?? null,
   updated_at: new Date().toISOString(),
 });
 
@@ -95,6 +104,8 @@ const fromRow = (row: Record<string, unknown>): CrmWisproCaso => ({
   windowEnd: (row.window_end as string | null) ?? null,
   lastTechnicianReportAt: (row.last_technician_report_at as string | null) ?? null,
   lastTechnicianReportKey: (row.last_technician_report_key as string | null) ?? null,
+  closedAt: (row.closed_at as string | null) ?? null,
+  resolutionNotes: (row.resolution_notes as string | null) ?? null,
   createdAt: (row.created_at as string | null) ?? null,
   updatedAt: (row.updated_at as string | null) ?? null,
 });
@@ -161,6 +172,8 @@ export const toUpsertCrmWisproCasoInput = (
   facadeMessageId: caso.facadeMessageId,
   windowStart: caso.windowStart,
   windowEnd: caso.windowEnd,
+  closedAt: caso.closedAt,
+  resolutionNotes: caso.resolutionNotes,
 });
 
 export const patchCrmWisproCaso = async (
@@ -232,26 +245,76 @@ export const listOpenCasosForConversation = async (
   return (data || []).map((row) => fromRow(row as Record<string, unknown>));
 };
 
-export const listPendingCasosForEmployee = async (
+export const listCasosForEmployee = async (
   supabase: SupabaseClient,
   employeeId: string,
-  input?: { limit?: number },
-) => {
-  const limit = Math.min(100, Math.max(1, input?.limit ?? 20));
-  const { data, error } = await supabase
+  options?: {
+    scope?: TechnicianTicketScope;
+    limit?: number;
+    sinceDays?: number;
+    fromDate?: string | null;
+    toDate?: string | null;
+  },
+): Promise<CrmWisproCaso[]> => {
+  const scope = options?.scope || "pending";
+  const limit = Math.min(
+    100,
+    Math.max(1, options?.limit ?? (scope === "done" ? 15 : 20)),
+  );
+
+  let statuses: CrmWisproCasoStatus[];
+  if (scope === "done") {
+    statuses = DONE_STATUSES;
+  } else if (scope === "all") {
+    statuses = ALL_STATUSES;
+  } else {
+    statuses = OPEN_STATUSES;
+  }
+
+  let query = supabase
     .from("crm_wispro_casos")
     .select("*")
     .eq("employee_id", employeeId)
-    .in("status", OPEN_STATUSES)
-    .order("window_start", { ascending: true, nullsFirst: false })
-    .limit(limit);
+    .in("status", statuses);
+
+  if (scope === "done") {
+    if (options?.fromDate) {
+      query = query.gte("closed_at", options.fromDate);
+    } else {
+      const days = options?.sinceDays ?? DEFAULT_DONE_DAYS;
+      const since = new Date(
+        Date.now() - days * 24 * 60 * 60 * 1000,
+      ).toISOString();
+      query = query.gte("closed_at", since);
+    }
+    if (options?.toDate) {
+      query = query.lte("closed_at", options.toDate);
+    }
+    query = query.order("closed_at", { ascending: false, nullsFirst: false });
+  } else {
+    query = query.order("window_start", { ascending: true, nullsFirst: false });
+  }
+
+  const { data, error } = await query.limit(limit);
 
   if (error) {
-    throw new Error(error.message || "No se pudieron leer los tickets del técnico");
+    throw new Error(
+      error.message || "No se pudieron leer los tickets del técnico",
+    );
   }
 
   return (data || []).map((row) => fromRow(row as Record<string, unknown>));
 };
+
+export const listPendingCasosForEmployee = async (
+  supabase: SupabaseClient,
+  employeeId: string,
+  input?: { limit?: number },
+) =>
+  listCasosForEmployee(supabase, employeeId, {
+    scope: "pending",
+    limit: input?.limit,
+  });
 
 const rowsToNamedEmployees = (
   rows: Array<{ employee_id?: unknown; employee_name?: unknown }> | null,
@@ -270,7 +333,11 @@ const rowsToNamedEmployees = (
 
 export const listAssignedEmployees = async (
   supabase: SupabaseClient,
-  input?: { status?: CrmWisproCasoStatus[]; limit?: number },
+  input?: {
+    status?: CrmWisproCasoStatus[];
+    scope?: TechnicianTicketScope;
+    limit?: number;
+  },
 ) => {
   const limit = Math.min(1000, Math.max(1, input?.limit ?? 500));
   let query = supabase
@@ -280,8 +347,18 @@ export const listAssignedEmployees = async (
     .order("updated_at", { ascending: false })
     .limit(limit);
 
-  if (input?.status?.length) {
-    query = query.in("status", input.status);
+  let statuses = input?.status;
+  if (!statuses && input?.scope) {
+    statuses =
+      input.scope === "done"
+        ? DONE_STATUSES
+        : input.scope === "all"
+          ? ALL_STATUSES
+          : OPEN_STATUSES;
+  }
+
+  if (statuses?.length) {
+    query = query.in("status", statuses);
   }
 
   const { data, error } = await query;

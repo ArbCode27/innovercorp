@@ -637,8 +637,8 @@ export const runAiAgent = async (input: {
           clientId: input.client?.id ?? null,
         };
       }
-      const monitoredName =
-        parseMonitoredTechnicianQuery(inboundText).names[0] || "";
+      const monitoredQuery = parseMonitoredTechnicianQuery(inboundText);
+      const monitoredName = monitoredQuery.names[0] || "";
       const delivery = await deliverMonitoredTechnicianTickets({
         supabase: input.supabase,
         conversationId: input.conversationId,
@@ -646,6 +646,7 @@ export const runAiAgent = async (input: {
         supervisor: employee,
         technicianId: session?.technician?.id ?? null,
         technicianName: monitoredName,
+        scope: monitoredQuery.scope,
       });
       return {
         action: "reply",

@@ -7,6 +7,7 @@ import {
   ShieldCheck,
   Tags,
   Ticket,
+  Trophy,
   Users,
   Wallet,
 } from "lucide-react";
@@ -28,6 +29,7 @@ const SETTINGS_ITEMS: Array<{ id: CrmView; label: string; icon: typeof Users }> 
   { id: "clients", label: "Clientes", icon: Users },
   { id: "payments", label: "Pagos", icon: Wallet },
   { id: "tickets", label: "Tickets", icon: Ticket },
+  { id: "performance", label: "Rendimiento", icon: Trophy },
   { id: "quick-replies", label: "Respuestas rápidas", icon: MessageSquareQuote },
   { id: "labels", label: "Etiquetas", icon: Tags },
   { id: "agents", label: "Agentes", icon: Bot },
