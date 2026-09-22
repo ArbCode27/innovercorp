@@ -286,6 +286,22 @@ export const WisproIssuesPanel = () => {
     setSortOrder((current) => (current === "desc" ? "asc" : "desc"));
   };
 
+  const statusCounts = useMemo(() => {
+    const counts: Record<string, number> = {
+      all: casos.length,
+      open: 0,
+      scheduled: 0,
+      done: 0,
+      cancelled: 0,
+    };
+    for (const caso of casos) {
+      if (caso.status in counts) {
+        counts[caso.status]++;
+      }
+    }
+    return counts;
+  }, [casos]);
+
   const filteredCasos = useMemo(() => {
     return casos
       .filter((caso) => {
@@ -379,6 +395,7 @@ export const WisproIssuesPanel = () => {
         employees={employees}
         totalCount={casos.length}
         filteredCount={filteredCasos.length}
+        statusCounts={statusCounts}
         onReset={handleResetFilters}
       />
 
