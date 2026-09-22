@@ -3,7 +3,17 @@
 import { Award, Clock, Star, Trophy, Wrench, CheckCircle2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { AvatarInitials } from "../shared/avatar-initials";
+import {
+  formatDurationHours,
+  formatDurationMinutes,
+  formatNumber,
+} from "@/lib/crm-performance-formatters";
 import type {
   AgentPerformanceMetric,
   TechnicianPerformanceMetric,
@@ -21,13 +31,18 @@ export const BestAgentPodiumCard = ({ agent }: BestAgentPodiumCardProps) => {
         <p className="text-sm font-medium text-muted-foreground">
           Sin datos suficientes para el podio de asesores en este período
         </p>
+        <p className="text-xs text-muted-foreground/70 mt-1">
+          (Se requiere un mínimo de 10 casos resueltos para clasificar al podio)
+        </p>
       </Card>
     );
   }
 
+  const durationInfo = formatDurationMinutes(agent.avgDurationMinutes);
+
   return (
     <Card className="relative overflow-hidden border-amber-500/30 bg-gradient-to-br from-amber-500/10 via-background to-background p-5 shadow-sm">
-      <div className="absolute top-3 right-3 flex items-center gap-1.5 rounded-full bg-amber-500/20 px-3 py-1 text-xs font-semibold text-amber-600 dark:text-amber-400">
+      <div className="absolute top-3 right-3 flex items-center gap-1.5 rounded-full bg-amber-500/20 px-3 py-1 text-xs font-semibold text-amber-700 dark:text-amber-400">
         <Trophy className="size-3.5 fill-amber-500 text-amber-500" />
         <span>#1 Mejor Asesor</span>
       </div>
@@ -51,8 +66,14 @@ export const BestAgentPodiumCard = ({ agent }: BestAgentPodiumCardProps) => {
             <h3 className="truncate font-semibold text-base tracking-tight">
               {agent.name}
             </h3>
-            <Badge variant="outline" className="border-amber-500/40 text-amber-600 dark:text-amber-400 text-[11px]">
-              {agent.score} pts
+            <Badge
+              variant="outline"
+              className="border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400 text-[11px] font-bold">
+              {formatNumber(agent.score, {
+                minimumFractionDigits: 1,
+                maximumFractionDigits: 1,
+              })}{" "}
+              pts
             </Badge>
           </div>
           <p className="truncate text-xs text-muted-foreground">
@@ -65,21 +86,35 @@ export const BestAgentPodiumCard = ({ agent }: BestAgentPodiumCardProps) => {
         <div className="rounded-lg bg-muted/40 p-2">
           <p className="text-[11px] font-medium text-muted-foreground">Casos</p>
           <p className="text-base font-bold text-foreground">
-            {agent.resolvedCases}
+            {formatNumber(agent.resolvedCases)}
           </p>
         </div>
         <div className="rounded-lg bg-muted/40 p-2">
           <p className="text-[11px] font-medium text-muted-foreground">Satisfacción</p>
           <p className="text-base font-bold text-amber-600 dark:text-amber-400 flex items-center justify-center gap-0.5">
-            <span>{agent.satisfactionRating}</span>
+            <span>
+              {formatNumber(agent.satisfactionRating, {
+                minimumFractionDigits: 1,
+                maximumFractionDigits: 1,
+              })}
+            </span>
             <Star className="size-3.5 fill-amber-500 text-amber-500" />
           </p>
         </div>
         <div className="rounded-lg bg-muted/40 p-2">
           <p className="text-[11px] font-medium text-muted-foreground">Duración prom.</p>
-          <p className="text-base font-bold text-foreground">
-            {agent.avgDurationMinutes}m
-          </p>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <p className="text-base font-bold text-foreground cursor-help underline decoration-dotted decoration-muted-foreground/40 underline-offset-4">
+                {durationInfo.display}
+              </p>
+            </TooltipTrigger>
+            <TooltipContent side="top">
+              <p className="text-xs">
+                {durationInfo.rawFormatted} ({durationInfo.hoursMinutes})
+              </p>
+            </TooltipContent>
+          </Tooltip>
         </div>
       </div>
     </Card>
@@ -100,13 +135,16 @@ export const BestTechnicianPodiumCard = ({
         <p className="text-sm font-medium text-muted-foreground">
           Sin datos suficientes para el podio de técnicos en este período
         </p>
+        <p className="text-xs text-muted-foreground/70 mt-1">
+          (Se requiere un mínimo de 5 tickets resueltos para clasificar al podio)
+        </p>
       </Card>
     );
   }
 
   return (
     <Card className="relative overflow-hidden border-sky-500/30 bg-gradient-to-br from-sky-500/10 via-background to-background p-5 shadow-sm">
-      <div className="absolute top-3 right-3 flex items-center gap-1.5 rounded-full bg-sky-500/20 px-3 py-1 text-xs font-semibold text-sky-600 dark:text-sky-400">
+      <div className="absolute top-3 right-3 flex items-center gap-1.5 rounded-full bg-sky-500/20 px-3 py-1 text-xs font-semibold text-sky-700 dark:text-sky-400">
         <Wrench className="size-3.5 text-sky-500" />
         <span>#1 Mejor Técnico</span>
       </div>
@@ -126,8 +164,14 @@ export const BestTechnicianPodiumCard = ({
             <h3 className="truncate font-semibold text-base tracking-tight">
               {technician.name}
             </h3>
-            <Badge variant="outline" className="border-sky-500/40 text-sky-600 dark:text-sky-400 text-[11px]">
-              {technician.score} pts
+            <Badge
+              variant="outline"
+              className="border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-400 text-[11px] font-bold">
+              {formatNumber(technician.score, {
+                minimumFractionDigits: 1,
+                maximumFractionDigits: 1,
+              })}{" "}
+              pts
             </Badge>
           </div>
           <p className="truncate text-xs text-muted-foreground">
@@ -140,20 +184,22 @@ export const BestTechnicianPodiumCard = ({
         <div className="rounded-lg bg-muted/40 p-2">
           <p className="text-[11px] font-medium text-muted-foreground">Resueltos</p>
           <p className="text-base font-bold text-foreground">
-            {technician.resolvedCount}
-            <span className="text-xs font-normal text-muted-foreground">/{technician.totalAssigned}</span>
+            {formatNumber(technician.resolvedCount)}
+            <span className="text-xs font-normal text-muted-foreground">
+              /{formatNumber(technician.totalAssigned)}
+            </span>
           </p>
         </div>
         <div className="rounded-lg bg-muted/40 p-2">
           <p className="text-[11px] font-medium text-muted-foreground">Efectividad</p>
           <p className="text-base font-bold text-sky-600 dark:text-sky-400">
-            {technician.resolutionRate}%
+            {formatNumber(technician.resolutionRate)}%
           </p>
         </div>
         <div className="rounded-lg bg-muted/40 p-2">
           <p className="text-[11px] font-medium text-muted-foreground">Puntualidad</p>
           <p className="text-base font-bold text-foreground">
-            {technician.punctualityRate}%
+            {formatNumber(technician.punctualityRate)}%
           </p>
         </div>
       </div>

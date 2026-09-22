@@ -19,6 +19,10 @@ import { Card } from "@/components/ui/card";
 import { BestAgentPodiumCard, BestTechnicianPodiumCard } from "./podium-card";
 import { AgentsRankingTable } from "./agents-ranking-table";
 import { TechniciansRankingTable } from "./technicians-ranking-table";
+import {
+  formatDurationMinutes,
+  formatNumber,
+} from "@/lib/crm-performance-formatters";
 import type {
   PerformanceDashboardData,
   PerformancePeriod,
@@ -146,10 +150,10 @@ export const PerformanceView = () => {
             <Headphones className="size-4" />
           </div>
           <p className="text-2xl font-bold tracking-tight">
-            {summary?.totalConversationsResolved ?? "—"}
+            {summary ? formatNumber(summary.totalConversationsResolved) : "—"}
           </p>
-          <p className="text-[11px] text-muted-foreground">
-            Tiempo prom: {summary?.avgAgentDurationMinutes ?? 0} min
+          <p className="text-[11px] text-muted-foreground truncate" title={summary?.avgAgentDurationMinutes ? `${formatNumber(summary.avgAgentDurationMinutes)} min` : undefined}>
+            Tiempo prom: {summary?.avgAgentDurationMinutes ? formatDurationMinutes(summary.avgAgentDurationMinutes).display : "0m"} ({formatNumber(summary?.avgAgentDurationMinutes ?? 0)} min)
           </p>
         </Card>
 
@@ -159,7 +163,7 @@ export const PerformanceView = () => {
             <Star className="size-4 text-amber-500" />
           </div>
           <p className="text-2xl font-bold tracking-tight text-amber-600 dark:text-amber-400">
-            {summary ? `${summary.agentFcrRate}%` : "—"}
+            {summary ? `${formatNumber(summary.agentFcrRate)}%` : "—"}
           </p>
           <p className="text-[11px] text-muted-foreground">
             Casos resueltos sin reapertura en 24h
@@ -172,10 +176,10 @@ export const PerformanceView = () => {
             <CheckCircle2 className="size-4 text-emerald-500" />
           </div>
           <p className="text-2xl font-bold tracking-tight text-emerald-600 dark:text-emerald-400">
-            {summary?.totalTicketsResolved ?? "—"}
+            {summary ? formatNumber(summary.totalTicketsResolved) : "—"}
           </p>
           <p className="text-[11px] text-muted-foreground">
-            De {summary?.totalTicketsAssigned ?? 0} tickets asignados
+            De {formatNumber(summary?.totalTicketsAssigned ?? 0)} tickets asignados
           </p>
         </Card>
 
@@ -185,7 +189,7 @@ export const PerformanceView = () => {
             <Wrench className="size-4 text-sky-500" />
           </div>
           <p className="text-2xl font-bold tracking-tight text-sky-600 dark:text-sky-400">
-            {summary ? `${summary.technicianResolutionRate}%` : "—"}
+            {summary ? `${formatNumber(summary.technicianResolutionRate)}%` : "—"}
           </p>
           <p className="text-[11px] text-muted-foreground">
             Tasa de resolución global en campo
@@ -221,7 +225,7 @@ export const PerformanceView = () => {
                   : "text-muted-foreground hover:text-foreground"
               }`}>
               <Users className="size-3.5" />
-              <span>Asesores de Oficina ({data?.agents.length ?? 0})</span>
+              <span>Asesores de Oficina ({formatNumber(data?.agents.length ?? 0)})</span>
             </button>
             <button
               type="button"
@@ -232,7 +236,7 @@ export const PerformanceView = () => {
                   : "text-muted-foreground hover:text-foreground"
               }`}>
               <Wrench className="size-3.5" />
-              <span>Técnicos de Campo ({data?.technicians.length ?? 0})</span>
+              <span>Técnicos de Campo ({formatNumber(data?.technicians.length ?? 0)})</span>
             </button>
           </div>
         </div>

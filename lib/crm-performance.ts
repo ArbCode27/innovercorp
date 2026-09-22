@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { PERFORMANCE_CONFIG } from "./crm-performance-config";
 
 export type PerformancePeriod = "month" | "last_month" | "week" | "all";
 
@@ -14,7 +15,9 @@ export interface AgentPerformanceMetric {
   reopenedCases: number;
   fcrRate: number; // First Contact Resolution (No-reapertura) 0 - 100%
   satisfactionRating: number; // 1.0 - 5.0 estrellas calculadas objetivamente
-  score: number; // 0 - 100
+  score: number; // 0 - 100 (puntaje ponderado bayesiano)
+  rawScore: number; // 0 - 100 (calidad cruda antes del factor de volumen)
+  isEligibleForPodium: boolean;
   rank: number;
   badge?: "gold" | "silver" | "bronze" | null;
 }
@@ -28,7 +31,9 @@ export interface TechnicianPerformanceMetric {
   resolutionRate: number; // 0 - 100%
   avgResolutionHours: number;
   punctualityRate: number; // 0 - 100%
-  score: number; // 0 - 100
+  score: number; // 0 - 100 (puntaje ponderado bayesiano)
+  rawScore: number; // 0 - 100 (calidad cruda antes del factor de volumen)
+  isEligibleForPodium: boolean;
   rank: number;
   badge?: "gold" | "silver" | "bronze" | null;
 }
@@ -74,27 +79,43 @@ export const getPeriodDateRange = (
 };
 
 /**
- * Calculates weighted score (0 - 100) for office agents:
- * - Satisfaction / First Contact Resolution: 40% weight
- * - Volume of resolved cases: 35% weight
- * - Resolution speed / duration: 25% weight
+ * Promedio ponderado bayesiano (modelo IMDB) para incorporar el volumen como factor de confianza:
+ * puntaje_ajustado = (v / (v + m)) * R + (m / (v + m)) * C
+ *
+ * @param volume (v) Número de casos/tickets resueltos en el período
+ * @param minVolumeConfidence (m) Umbral mínimo de volumen para confianza plena (configurable)
+ * @param rawQuality (R) Puntaje de calidad crudo del agente/técnico (0 - 100)
+ * @param groupAverageQuality (C) Media global de calidad del grupo en el período
  */
-export const calculateAgentScore = (params: {
-  resolvedCases: number;
-  maxCasesInPeriod: number;
+export const calculateBayesianScore = (params: {
+  volume: number;
+  minVolumeConfidence: number;
+  rawQuality: number;
+  groupAverageQuality: number;
+}): number => {
+  const { volume, minVolumeConfidence, rawQuality, groupAverageQuality } = params;
+  if (volume <= 0) return 0;
+
+  const v = Math.max(0, volume);
+  const m = Math.max(1, minVolumeConfidence);
+  const R = Math.max(0, Math.min(100, rawQuality));
+  const C = Math.max(0, Math.min(100, groupAverageQuality));
+
+  const weighted = (v / (v + m)) * R + (m / (v + m)) * C;
+  return Math.round(weighted * 10) / 10;
+};
+
+/**
+ * Calcula la calidad cruda R (0 - 100) para un asesor de oficina:
+ * - FCR / Satisfacción estimada: peso configurable (default 65%)
+ * - Velocidad / Duración promedio: peso configurable (default 35%)
+ */
+export const calculateAgentRawQuality = (params: {
   fcrRate: number;
   avgDurationMinutes: number;
 }): number => {
-  if (params.resolvedCases === 0) return 0;
-
-  // FCR score (0 - 100)
   const satisfactionScore = Math.max(0, Math.min(100, params.fcrRate));
 
-  // Volume score normalized against the top performer (or minimum 10 cases)
-  const targetMax = Math.max(1, params.maxCasesInPeriod);
-  const volumeScore = Math.min(100, (params.resolvedCases / targetMax) * 100);
-
-  // Speed score: <= 15 min = 100 pts, decays down to 30 pts for > 2 hours
   let speedScore = 100;
   if (params.avgDurationMinutes > 120) {
     speedScore = 30;
@@ -106,37 +127,97 @@ export const calculateAgentScore = (params: {
     speedScore = 90;
   }
 
-  const weighted =
-    satisfactionScore * 0.4 + volumeScore * 0.35 + speedScore * 0.25;
-
-  return Math.round(weighted * 10) / 10;
+  const { fcr, speed } = PERFORMANCE_CONFIG.agents.weights;
+  const raw = satisfactionScore * fcr + speedScore * speed;
+  return Math.round(raw * 10) / 10;
 };
 
 /**
- * Calculates weighted score (0 - 100) for field technicians:
- * - Resolution rate (Done / Assigned): 45% weight
- * - Punctuality / Schedule adherence: 30% weight
- * - Volume of resolved tickets: 25% weight
+ * Calcula la calidad cruda R (0 - 100) para un técnico de campo:
+ * - Tasa de resolución (Resueltos / Asignados): peso configurable (default 60%)
+ * - Puntualidad dentro de la ventana horaria: peso configurable (default 40%)
+ */
+export const calculateTechnicianRawQuality = (params: {
+  resolutionRate: number;
+  punctualityRate: number;
+}): number => {
+  const resolutionScore = Math.max(0, Math.min(100, params.resolutionRate));
+  const punctualityScore = Math.max(0, Math.min(100, params.punctualityRate));
+
+  const { resolution, punctuality } = PERFORMANCE_CONFIG.technicians.weights;
+  const raw = resolutionScore * resolution + punctualityScore * punctuality;
+  return Math.round(raw * 10) / 10;
+};
+
+/**
+ * Calcula la media global C del grupo para un período dado.
+ */
+export const calculateGroupAverageQuality = (
+  rawScores: number[],
+  fallbackPrior = 70,
+): number => {
+  if (rawScores.length === 0) return fallbackPrior;
+  const sum = rawScores.reduce((acc, val) => acc + val, 0);
+  return Math.round((sum / rawScores.length) * 10) / 10;
+};
+
+/**
+ * Calcula el puntaje final ajustado para un asesor de oficina aplicando ponderación bayesiana.
+ */
+export const calculateAgentScore = (params: {
+  resolvedCases: number;
+  fcrRate: number;
+  avgDurationMinutes: number;
+  maxCasesInPeriod?: number; // compatibilidad retroactiva
+  groupAverageQuality?: number;
+  minVolumeConfidence?: number;
+}): number => {
+  if (params.resolvedCases === 0) return 0;
+
+  const rawQuality = calculateAgentRawQuality({
+    fcrRate: params.fcrRate,
+    avgDurationMinutes: params.avgDurationMinutes,
+  });
+
+  return calculateBayesianScore({
+    volume: params.resolvedCases,
+    minVolumeConfidence:
+      params.minVolumeConfidence ?? PERFORMANCE_CONFIG.agents.minVolumeConfidence,
+    rawQuality,
+    groupAverageQuality:
+      params.groupAverageQuality ?? PERFORMANCE_CONFIG.agents.defaultPriorQuality,
+  });
+};
+
+/**
+ * Calcula el puntaje final ajustado para un técnico de campo aplicando ponderación bayesiana.
  */
 export const calculateTechnicianScore = (params: {
   totalAssigned: number;
   resolvedCount: number;
-  maxResolvedInPeriod: number;
   resolutionRate: number;
   punctualityRate: number;
+  maxResolvedInPeriod?: number; // compatibilidad retroactiva
+  groupAverageQuality?: number;
+  minVolumeConfidence?: number;
 }): number => {
   if (params.totalAssigned === 0 || params.resolvedCount === 0) return 0;
 
-  const resolutionScore = Math.max(0, Math.min(100, params.resolutionRate));
-  const punctualityScore = Math.max(0, Math.min(100, params.punctualityRate));
+  const rawQuality = calculateTechnicianRawQuality({
+    resolutionRate: params.resolutionRate,
+    punctualityRate: params.punctualityRate,
+  });
 
-  const targetMax = Math.max(1, params.maxResolvedInPeriod);
-  const volumeScore = Math.min(100, (params.resolvedCount / targetMax) * 100);
-
-  const weighted =
-    resolutionScore * 0.45 + punctualityScore * 0.3 + volumeScore * 0.25;
-
-  return Math.round(weighted * 10) / 10;
+  return calculateBayesianScore({
+    volume: params.resolvedCount,
+    minVolumeConfidence:
+      params.minVolumeConfidence ??
+      PERFORMANCE_CONFIG.technicians.minVolumeConfidence,
+    rawQuality,
+    groupAverageQuality:
+      params.groupAverageQuality ??
+      PERFORMANCE_CONFIG.technicians.defaultPriorQuality,
+  });
 };
 
 export const fetchPerformanceDashboardData = async (
@@ -274,13 +355,8 @@ export const fetchPerformanceDashboardData = async (
     }
   }
 
-  for (const stat of agentStatsMap.values()) {
-    if (stat.resolvedCases > maxAgentCases) {
-      maxAgentCases = stat.resolvedCases;
-    }
-  }
-
-  const agentMetrics: AgentPerformanceMetric[] = agents.map((agent) => {
+  // 2. Pre-calcular calidad cruda de agentes para determinar la media global C
+  const rawAgentData = agents.map((agent) => {
     const stat = agentStatsMap.get(agent.id) || {
       resolvedCases: 0,
       reopenedCases: 0,
@@ -299,42 +375,80 @@ export const fetchPerformanceDashboardData = async (
         ? Math.round((successfulCases / stat.resolvedCases) * 100)
         : 100;
 
-    // 1 to 5 scale
+    // Escala 1.0 a 5.0 para representación de estrellas
     const satisfactionRating =
       Math.round((1 + (fcrRate / 100) * 4) * 10) / 10;
 
-    const score = calculateAgentScore({
-      resolvedCases: stat.resolvedCases,
-      maxCasesInPeriod: maxAgentCases,
-      fcrRate,
-      avgDurationMinutes,
-    });
+    const rawScore =
+      stat.resolvedCases > 0
+        ? calculateAgentRawQuality({ fcrRate, avgDurationMinutes })
+        : 0;
 
     return {
-      agentId: agent.id,
-      name: agent.name,
-      email: agent.email,
-      initials: agent.initials,
-      avatarColor: agent.avatar_color,
-      avatarBg: agent.avatar_bg,
-      resolvedCases: stat.resolvedCases,
+      agent,
+      stat,
       avgDurationMinutes,
-      reopenedCases: stat.reopenedCases,
       fcrRate,
       satisfactionRating,
+      rawScore,
+    };
+  });
+
+  const activeAgentRawScores = rawAgentData
+    .filter((a) => a.stat.resolvedCases > 0)
+    .map((a) => a.rawScore);
+
+  const agentGroupAverage = calculateGroupAverageQuality(
+    activeAgentRawScores,
+    PERFORMANCE_CONFIG.agents.defaultPriorQuality,
+  );
+
+  const agentMetrics: AgentPerformanceMetric[] = rawAgentData.map((item) => {
+    const isEligibleForPodium =
+      item.stat.resolvedCases >= PERFORMANCE_CONFIG.agents.minCasesForPodium;
+
+    const score =
+      item.stat.resolvedCases > 0
+        ? calculateBayesianScore({
+            volume: item.stat.resolvedCases,
+            minVolumeConfidence: PERFORMANCE_CONFIG.agents.minVolumeConfidence,
+            rawQuality: item.rawScore,
+            groupAverageQuality: agentGroupAverage,
+          })
+        : 0;
+
+    return {
+      agentId: item.agent.id,
+      name: item.agent.name,
+      email: item.agent.email,
+      initials: item.agent.initials,
+      avatarColor: item.agent.avatar_color,
+      avatarBg: item.agent.avatar_bg,
+      resolvedCases: item.stat.resolvedCases,
+      avgDurationMinutes: item.avgDurationMinutes,
+      reopenedCases: item.stat.reopenedCases,
+      fcrRate: item.fcrRate,
+      satisfactionRating: item.satisfactionRating,
       score,
+      rawScore: item.rawScore,
+      isEligibleForPodium,
       rank: 0,
     };
   });
 
-  // Sort agents by score descending, then resolved cases
+  // Ordenar asesores por puntaje bayesiano descendente, luego volumen
   agentMetrics.sort((a, b) => b.score - a.score || b.resolvedCases - a.resolvedCases);
+
+  let eligibleAgentPodiumCount = 0;
   agentMetrics.forEach((item, index) => {
     item.rank = index + 1;
-    if (item.resolvedCases > 0) {
-      if (index === 0) item.badge = "gold";
-      else if (index === 1) item.badge = "silver";
-      else if (index === 2) item.badge = "bronze";
+    if (item.resolvedCases > 0 && item.isEligibleForPodium) {
+      if (eligibleAgentPodiumCount === 0) item.badge = "gold";
+      else if (eligibleAgentPodiumCount === 1) item.badge = "silver";
+      else if (eligibleAgentPodiumCount === 2) item.badge = "bronze";
+      eligibleAgentPodiumCount += 1;
+    } else {
+      item.badge = null;
     }
   });
 
@@ -405,14 +519,24 @@ export const fetchPerformanceDashboardData = async (
     }
   }
 
-  let maxTechResolved = 0;
-  for (const stat of techStatsMap.values()) {
-    if (stat.resolvedCount > maxTechResolved) {
-      maxTechResolved = stat.resolvedCount;
-    }
-  }
+  // 4. Pre-calcular calidad cruda de técnicos para determinar la media global C
+  const rawTechData: Array<{
+    employeeId: string;
+    stat: {
+      name: string;
+      totalAssigned: number;
+      resolvedCount: number;
+      pendingCount: number;
+      onTimeCount: number;
+      totalResolutionHours: number;
+      resolvedWithTimeCount: number;
+    };
+    resolutionRate: number;
+    punctualityRate: number;
+    avgResolutionHours: number;
+    rawScore: number;
+  }> = [];
 
-  const techMetrics: TechnicianPerformanceMetric[] = [];
   for (const [employeeId, stat] of techStatsMap.entries()) {
     const resolutionRate =
       stat.totalAssigned > 0
@@ -429,36 +553,76 @@ export const fetchPerformanceDashboardData = async (
         ? Math.round((stat.totalResolutionHours / stat.resolvedWithTimeCount) * 10) / 10
         : 0;
 
-    const score = calculateTechnicianScore({
-      totalAssigned: stat.totalAssigned,
-      resolvedCount: stat.resolvedCount,
-      maxResolvedInPeriod: maxTechResolved,
-      resolutionRate,
-      punctualityRate,
-    });
+    const rawScore =
+      stat.resolvedCount > 0
+        ? calculateTechnicianRawQuality({
+            resolutionRate,
+            punctualityRate,
+          })
+        : 0;
 
-    techMetrics.push({
+    rawTechData.push({
       employeeId,
-      name: stat.name,
-      totalAssigned: stat.totalAssigned,
-      resolvedCount: stat.resolvedCount,
-      pendingCount: stat.pendingCount,
+      stat,
       resolutionRate,
-      avgResolutionHours,
       punctualityRate,
-      score,
-      rank: 0,
+      avgResolutionHours,
+      rawScore,
     });
   }
 
-  // Sort technicians by score descending, then resolved count
+  const activeTechRawScores = rawTechData
+    .filter((t) => t.stat.resolvedCount > 0)
+    .map((t) => t.rawScore);
+
+  const techGroupAverage = calculateGroupAverageQuality(
+    activeTechRawScores,
+    PERFORMANCE_CONFIG.technicians.defaultPriorQuality,
+  );
+
+  const techMetrics: TechnicianPerformanceMetric[] = rawTechData.map((item) => {
+    const isEligibleForPodium =
+      item.stat.resolvedCount >= PERFORMANCE_CONFIG.technicians.minTicketsForPodium;
+
+    const score =
+      item.stat.resolvedCount > 0
+        ? calculateBayesianScore({
+            volume: item.stat.resolvedCount,
+            minVolumeConfidence: PERFORMANCE_CONFIG.technicians.minVolumeConfidence,
+            rawQuality: item.rawScore,
+            groupAverageQuality: techGroupAverage,
+          })
+        : 0;
+
+    return {
+      employeeId: item.employeeId,
+      name: item.stat.name,
+      totalAssigned: item.stat.totalAssigned,
+      resolvedCount: item.stat.resolvedCount,
+      pendingCount: item.stat.pendingCount,
+      resolutionRate: item.resolutionRate,
+      avgResolutionHours: item.avgResolutionHours,
+      punctualityRate: item.punctualityRate,
+      score,
+      rawScore: item.rawScore,
+      isEligibleForPodium,
+      rank: 0,
+    };
+  });
+
+  // Ordenar técnicos por puntaje bayesiano descendente, luego volumen
   techMetrics.sort((a, b) => b.score - a.score || b.resolvedCount - a.resolvedCount);
+
+  let eligibleTechPodiumCount = 0;
   techMetrics.forEach((item, index) => {
     item.rank = index + 1;
-    if (item.resolvedCount > 0) {
-      if (index === 0) item.badge = "gold";
-      else if (index === 1) item.badge = "silver";
-      else if (index === 2) item.badge = "bronze";
+    if (item.resolvedCount > 0 && item.isEligibleForPodium) {
+      if (eligibleTechPodiumCount === 0) item.badge = "gold";
+      else if (eligibleTechPodiumCount === 1) item.badge = "silver";
+      else if (eligibleTechPodiumCount === 2) item.badge = "bronze";
+      eligibleTechPodiumCount += 1;
+    } else {
+      item.badge = null;
     }
   });
 
@@ -486,15 +650,12 @@ export const fetchPerformanceDashboardData = async (
       ? Math.round(totalFcr / totalConversationsResolved)
       : 100;
 
+  // El Podio #1 exige haber alcanzado el umbral de volumen mínimo de elegibilidad
   const bestAgent =
-    agentMetrics.length > 0 && agentMetrics[0].resolvedCases > 0
-      ? agentMetrics[0]
-      : null;
+    agentMetrics.find((a) => a.isEligibleForPodium && a.resolvedCases > 0) ?? null;
 
   const bestTechnician =
-    techMetrics.length > 0 && techMetrics[0].resolvedCount > 0
-      ? techMetrics[0]
-      : null;
+    techMetrics.find((t) => t.isEligibleForPodium && t.resolvedCount > 0) ?? null;
 
   return {
     period,
