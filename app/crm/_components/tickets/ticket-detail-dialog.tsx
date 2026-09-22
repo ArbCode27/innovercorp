@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Pencil } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -16,6 +16,7 @@ import { wisproCasoClient } from "../../_lib/wispro-caso-client";
 import { orderKindLabels } from "../../_lib/wispro-caso-schema";
 import { formatCrmDate } from "../../_lib/formatters";
 import { resolveMapsUrl } from "@/lib/maps-link";
+import { PriorityBadge } from "./priority-badge";
 import type { CrmWisproCaso } from "@/lib/wispro-types";
 
 const statusLabel: Record<CrmWisproCaso["status"], string> = {
@@ -60,11 +61,13 @@ const ticketTitle = (caso: CrmWisproCaso) =>
 type TicketDetailDialogProps = {
   caso: CrmWisproCaso | null;
   onOpenChange: (open: boolean) => void;
+  onEdit?: (caso: CrmWisproCaso) => void;
 };
 
 export const TicketDetailDialog = ({
   caso,
   onOpenChange,
+  onEdit,
 }: TicketDetailDialogProps) => {
   const [detail, setDetail] = useState<CrmWisproCaso | null>(caso);
   const [imageFailed, setImageFailed] = useState(false);
@@ -115,7 +118,10 @@ export const TicketDetailDialog = ({
       }}>
       <DialogContent className="flex max-h-[90vh] flex-col overflow-hidden sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{detail ? ticketTitle(detail) : "Ticket"}</DialogTitle>
+          <div className="flex flex-wrap items-center gap-2">
+            <DialogTitle>{detail ? ticketTitle(detail) : "Ticket"}</DialogTitle>
+            {detail ? <PriorityBadge priority={detail.priority} /> : null}
+          </div>
           <DialogDescription>
             {detail
               ? `${statusLabel[detail.status] || detail.status} · ${kindLabel(detail)}`
@@ -152,6 +158,14 @@ export const TicketDetailDialog = ({
                     {detail.employeePhone}
                   </p>
                 ) : null}
+              </DetailField>
+              <DetailField label="Prioridad">
+                <div className="pt-0.5">
+                  <PriorityBadge priority={detail.priority} />
+                </div>
+              </DetailField>
+              <DetailField label="Fecha de creación">
+                <p>{formatCrmDate(detail.createdAt)}</p>
               </DetailField>
               <DetailField label="Causa">
                 {detail.cause || detail.title || "N/D"}
@@ -211,10 +225,21 @@ export const TicketDetailDialog = ({
           </div>
         ) : null}
 
-        <DialogFooter>
+        <DialogFooter className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>
             Cerrar
           </Button>
+          {onEdit && detail ? (
+            <Button
+              type="button"
+              onClick={() => {
+                onOpenChange(false);
+                onEdit(detail);
+              }}>
+              <Pencil className="size-3.5" />
+              Editar ticket
+            </Button>
+          ) : null}
         </DialogFooter>
       </DialogContent>
     </Dialog>

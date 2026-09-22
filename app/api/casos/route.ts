@@ -13,6 +13,7 @@ import {
 } from "@/app/crm/_lib/wispro-caso-schema";
 import { getSupabaseAdmin } from "@/app/api/crm/_lib/supabase-admin";
 import {
+  deleteCrmWisproCaso,
   getCrmWisproCasoByIssueId,
   listCrmWisproCasos,
   patchCrmWisproCaso,
@@ -81,6 +82,7 @@ const buildFichaInput = async (
     | "startAt"
     | "endAt"
     | "gps"
+    | "priority"
   > & {
     wisproIssueId: string;
     wisproPublicId?: number | null;
@@ -119,6 +121,7 @@ const buildFichaInput = async (
     employeeDocument:
       employee?.national_identification_number ?? input.employeeDocument ?? null,
     status: resolveStatus(input),
+    priority: input.priority || "medium",
     kind: input.kind ?? null,
     title: input.title,
     cause: input.cause || input.title,
@@ -324,6 +327,7 @@ export async function PATCH(request: NextRequest) {
       facadeMessageId: input.facadeMessageId ?? existing?.facadeMessageId ?? null,
       title: existing?.title || input.cause || "Ticket Wispro",
       description: existing?.description || input.orderDescription || "Ticket Wispro",
+      priority: existing?.priority || "medium",
       kind: input.kind ?? existing?.kind ?? "technical",
       wisproPublicId: input.publicId ?? existing?.wisproPublicId,
       wisproOrderId: result.orden.ok === true ? result.orden.id : existing?.wisproOrderId,
@@ -388,6 +392,74 @@ export async function PUT(request: NextRequest) {
       });
     }
 
+    if (parsed.data.action === "delete") {
+      await deleteCrmWisproCaso(supabase, parsed.data.issueId);
+      return NextResponse.json({
+        ok: true,
+        action: "delete",
+        issueId: parsed.data.issueId,
+      });
+    }
+
+    if (parsed.data.action === "edit") {
+      let employeePatch: Partial<UpsertCrmWisproCasoInput> = {};
+      if (parsed.data.employeeId !== undefined) {
+        if (parsed.data.employeeId && parsed.data.employeeId !== existing.employeeId) {
+          const employee = await resolveEmployee(parsed.data.employeeId);
+          if (employee) {
+            try {
+              await reassignHelpDeskIssue({
+                issueId: existing.wisproIssueId,
+                employeeId: employee.id,
+              });
+              void upsertCrmTechnicianFromEmployee(supabase, employee).catch((err) => {
+                console.warn("[CASOS] technician_upsert_failed", err);
+              });
+            } catch (reassignError) {
+              console.warn("[CASOS] wispro_reassign_failed", reassignError);
+            }
+            employeePatch = {
+              employeeId: employee.id,
+              employeeName: employee.name,
+              employeePhone: employee.phone_mobile || employee.phone,
+              employeeDocument: employee.national_identification_number,
+            };
+          }
+        } else if (!parsed.data.employeeId) {
+          employeePatch = {
+            employeeId: null,
+            employeeName: null,
+            employeePhone: null,
+            employeeDocument: null,
+          };
+        }
+      }
+
+      const patchData: Partial<UpsertCrmWisproCasoInput> = {
+        title: parsed.data.title,
+        priority: parsed.data.priority,
+        ...employeePatch,
+      };
+      if (parsed.data.cause !== undefined) patchData.cause = parsed.data.cause;
+      if (parsed.data.description !== undefined) patchData.description = parsed.data.description;
+      if (parsed.data.addressText !== undefined) patchData.addressText = parsed.data.addressText;
+      if (parsed.data.mapsUrl !== undefined) patchData.mapsUrl = parsed.data.mapsUrl;
+      if (parsed.data.windowStart !== undefined) patchData.windowStart = parsed.data.windowStart;
+      if (parsed.data.windowEnd !== undefined) patchData.windowEnd = parsed.data.windowEnd;
+      if (parsed.data.status !== undefined) patchData.status = parsed.data.status;
+
+      const caso = await patchCrmWisproCaso(supabase, existing.wisproIssueId, patchData);
+      return NextResponse.json({
+        ok: true,
+        action: "edit",
+        caso: {
+          ...caso,
+          facadeMediaUrl: null,
+          hasFacade: Boolean(caso.hasFacade || caso.facadeMediaUrl),
+        },
+      });
+    }
+
     if (existing.status === "done" || existing.status === "cancelled") {
       return NextResponse.json(
         { error: "Este ticket ya está cerrado" },
@@ -447,5 +519,21 @@ export async function PUT(request: NextRequest) {
           : "No se pudo actualizar el ticket";
     const status = error instanceof WisproHttpError ? error.status : 500;
     return NextResponse.json({ error: message }, { status });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const issueId = request.nextUrl.searchParams.get("issueId")?.trim();
+    if (!issueId) {
+      return NextResponse.json({ error: "Falta issueId" }, { status: 400 });
+    }
+    const supabase = getSupabaseAdmin();
+    await deleteCrmWisproCaso(supabase, issueId);
+    return NextResponse.json({ ok: true, action: "delete", issueId });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "No se pudo eliminar el ticket";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

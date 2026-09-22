@@ -48,6 +48,8 @@ import {
   createCasoSchema,
   orderKindLabels,
   ORDER_KINDS,
+  TICKET_PRIORITIES,
+  ticketPriorityLabels,
 } from "../../_lib/wispro-caso-schema";
 import type { z } from "zod";
 import { collectCasoContextFromMessages } from "@/lib/caso-chat-context";
@@ -168,6 +170,7 @@ export const CrearCasoWisproDialog = ({
     defaultValues: {
       title: "",
       description: "",
+      priority: "medium",
       categoryId: "",
       clientId: wisproClientId || "",
       contractId: "",
@@ -669,6 +672,31 @@ export const CrearCasoWisproDialog = ({
                     </p>
                   ) : null}
                 </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1">
+                    <Label htmlFor="caso-priority">Prioridad</Label>
+                    <Select
+                      value={form.watch("priority") || "medium"}
+                      onValueChange={(val) => {
+                        form.setValue(
+                          "priority",
+                          val as (typeof TICKET_PRIORITIES)[number],
+                          { shouldDirty: true },
+                        );
+                      }}>
+                      <SelectTrigger id="caso-priority">
+                        <SelectValue placeholder="Prioridad" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {TICKET_PRIORITIES.map((level) => (
+                          <SelectItem key={level} value={level}>
+                            {ticketPriorityLabels[level]}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
                 <div className="space-y-1">
                   <Label htmlFor="caso-description">Descripción</Label>
                   <Textarea
@@ -843,7 +871,7 @@ export const CrearCasoWisproDialog = ({
                   chatImages={chatImages}
                   value={{
                     mediaUrl: facadeMediaUrl || "",
-                    messageId: facadeMessageId ?? null,
+                    messageId: typeof facadeMessageId === "number" ? facadeMessageId : null,
                   }}
                   disabled={isSubmitting}
                   onChange={(next) => {

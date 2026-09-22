@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { documentDigits, phoneLast10 } from "./phone-match";
-import type { CrmWisproCaso, CrmWisproCasoStatus } from "./wispro-types";
+import type { CrmWisproCaso, CrmWisproCasoStatus, TicketPriority } from "./wispro-types";
 
 export type UpsertCrmWisproCasoInput = {
   conversationId?: number | null;
@@ -14,6 +14,7 @@ export type UpsertCrmWisproCasoInput = {
   employeePhone?: string | null;
   employeeDocument?: string | null;
   status: CrmWisproCasoStatus;
+  priority?: TicketPriority | null;
   kind?: string | null;
   title: string;
   cause?: string | null;
@@ -53,6 +54,7 @@ const toRow = (input: UpsertCrmWisproCasoInput) => ({
   employee_document: input.employeeDocument ?? null,
   employee_document_digits: documentDigits(input.employeeDocument),
   status: input.status,
+  priority: input.priority || "medium",
   kind: input.kind ?? null,
   title: input.title,
   cause: input.cause ?? null,
@@ -86,6 +88,7 @@ const fromRow = (row: Record<string, unknown>): CrmWisproCaso => ({
   employeePhone: (row.employee_phone as string | null) ?? null,
   employeeDocument: (row.employee_document as string | null) ?? null,
   status: String(row.status) as CrmWisproCasoStatus,
+  priority: ((row.priority as string) || "medium") as TicketPriority,
   kind: (row.kind as string | null) ?? null,
   title: String(row.title || ""),
   cause: (row.cause as string | null) ?? null,
@@ -158,6 +161,7 @@ export const toUpsertCrmWisproCasoInput = (
   employeePhone: caso.employeePhone,
   employeeDocument: caso.employeeDocument,
   status: caso.status,
+  priority: caso.priority,
   kind: caso.kind,
   title: caso.title,
   cause: caso.cause,
@@ -190,6 +194,21 @@ export const patchCrmWisproCaso = async (
     ...patch,
     wisproIssueId,
   });
+};
+
+export const deleteCrmWisproCaso = async (
+  supabase: SupabaseClient,
+  wisproIssueId: string,
+) => {
+  const { error } = await supabase
+    .from("crm_wispro_casos")
+    .delete()
+    .eq("wispro_issue_id", wisproIssueId);
+
+  if (error) {
+    throw new Error(error.message || "No se pudo eliminar el ticket");
+  }
+  return true;
 };
 
 export const listCrmWisproCasos = async (

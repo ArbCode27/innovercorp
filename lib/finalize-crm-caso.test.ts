@@ -17,6 +17,7 @@ const caso = (
   employeePhone: null,
   employeeDocument: null,
   status: "scheduled",
+  priority: "medium",
   kind: "technical",
   title: "Visita técnica",
   cause: "Sin internet",

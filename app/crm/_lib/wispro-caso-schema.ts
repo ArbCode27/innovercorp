@@ -7,6 +7,20 @@ export const ORDER_KINDS = [
   "feasibility",
 ] as const;
 
+export const TICKET_PRIORITIES = [
+  "low",
+  "medium",
+  "high",
+  "urgent",
+] as const;
+
+export const ticketPriorityLabels: Record<(typeof TICKET_PRIORITIES)[number], string> = {
+  low: "Baja",
+  medium: "Media",
+  high: "Alta",
+  urgent: "Urgente",
+};
+
 export const orderKindLabels: Record<(typeof ORDER_KINDS)[number], string> = {
   technical: "Visita técnica por falla",
   installation: "Instalación nueva",
@@ -63,6 +77,7 @@ const crmFichaFields = {
 export const createCasoSchema = z.object({
   title: z.string().trim().min(1, "El título es obligatorio").max(80),
   description: z.string().trim().min(1, "La descripción es obligatoria"),
+  priority: z.enum(TICKET_PRIORITIES).default("medium"),
   categoryId: z.string().uuid("Categoría inválida"),
   clientId: optionalUuid,
   contractId: optionalUuid,
@@ -76,6 +91,22 @@ export const createCasoSchema = z.object({
   gps: gpsSchema,
   ...crmFichaFields,
 });
+
+export const editCasoSchema = z.object({
+  issueId: z.string().uuid("Ticket inválido"),
+  title: z.string().trim().min(1, "El título es obligatorio").max(100),
+  cause: z.string().trim().optional().nullable(),
+  description: z.string().trim().optional().nullable(),
+  priority: z.enum(TICKET_PRIORITIES),
+  employeeId: z.string().trim().optional().nullable(),
+  addressText: z.string().trim().optional().nullable(),
+  mapsUrl: z.string().trim().optional().nullable(),
+  windowStart: z.string().trim().optional().nullable(),
+  windowEnd: z.string().trim().optional().nullable(),
+  status: z.enum(["open", "scheduled", "done", "cancelled"]).optional(),
+});
+
+export type EditCasoInput = z.infer<typeof editCasoSchema>;
 
 export const retryCasoSchema = z.object({
   ticketId: z.string().uuid(),
@@ -104,6 +135,13 @@ export const manageCasoSchema = z.discriminatedUnion("action", [
     action: z.literal("reassign"),
     issueId: z.string().uuid("Ticket inválido"),
     employeeId: z.string().uuid("Técnico inválido"),
+  }),
+  editCasoSchema.extend({
+    action: z.literal("edit"),
+  }),
+  z.object({
+    action: z.literal("delete"),
+    issueId: z.string().uuid("Ticket inválido"),
   }),
 ]);
 

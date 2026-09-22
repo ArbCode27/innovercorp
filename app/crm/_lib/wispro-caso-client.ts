@@ -7,7 +7,12 @@ import type {
   WisproEmployee,
   WisproIssueHit,
 } from "@/lib/wispro-types";
-import type { CreateCasoInput, RetryCasoInput } from "./wispro-caso-schema";
+import type {
+  CreateCasoInput,
+  EditCasoInput,
+  ManageCasoInput,
+  RetryCasoInput,
+} from "./wispro-caso-schema";
 
 const parseError = async (response: Response, fallback: string) => {
   const payload = (await response.json().catch(() => null)) as {
@@ -154,11 +159,7 @@ export const wisproCasoClient = {
     return payload as ResultadoCaso;
   },
 
-  async manageCaso(input: { action: "finalize"; issueId: string } | {
-    action: "reassign";
-    issueId: string;
-    employeeId: string;
-  }) {
+  async manageCaso(input: ManageCasoInput) {
     const response = await fetch("/api/casos", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -168,6 +169,7 @@ export const wisproCasoClient = {
       ok?: boolean;
       action?: string;
       caso?: CrmWisproCaso;
+      issueId?: string;
       error?: string;
       wispro?: { ok?: boolean; state?: string };
       orden?: { ok?: boolean | null; error?: string };
@@ -176,6 +178,20 @@ export const wisproCasoClient = {
       throw new Error(payload.error || `No se actualizó el ticket (HTTP ${response.status})`);
     }
     return payload;
+  },
+
+  async editCaso(input: EditCasoInput) {
+    return this.manageCaso({
+      action: "edit",
+      ...input,
+    });
+  },
+
+  async deleteCaso(issueId: string) {
+    return this.manageCaso({
+      action: "delete",
+      issueId,
+    });
   },
 
   async uploadFacade(file: File) {

@@ -83,6 +83,7 @@ export type CreateOrderInput = {
 };
 
 export type CrmWisproCasoStatus = "open" | "scheduled" | "done" | "cancelled";
+export type TicketPriority = "low" | "medium" | "high" | "urgent";
 
 export type CrmWisproCaso = {
   id: string;
@@ -97,6 +98,7 @@ export type CrmWisproCaso = {
   employeePhone: string | null;
   employeeDocument: string | null;
   status: CrmWisproCasoStatus;
+  priority: TicketPriority;
   kind: string | null;
   title: string;
   cause: string | null;
