@@ -343,6 +343,7 @@ describe("technician inbound helpers", () => {
         names: ["joel"],
         wantsCountOnly: false,
         scope: "pending",
+        temporal: "all",
       },
     );
     expect(
@@ -353,11 +354,13 @@ describe("technician inbound helpers", () => {
       names: ["jonathan"],
       wantsCountOnly: false,
       scope: "done",
+      temporal: "all",
     });
     expect(parseMonitoredTechnicianQuery("cuántos tickets tiene alan")).toEqual({
       names: ["alan"],
       wantsCountOnly: true,
       scope: "pending",
+      temporal: "all",
     });
     expect(
       parseMonitoredTechnicianQuery("cuántos tickets tienen joel y alan").names,
@@ -457,6 +460,7 @@ describe("technician inbound helpers", () => {
       names: ["Jonathan"],
       wantsCountOnly: false,
       scope: "pending",
+      temporal: "today",
     });
     expect(
       parseMonitoredTechnicianQuery(
@@ -466,11 +470,55 @@ describe("technician inbound helpers", () => {
       names: ["joel"],
       wantsCountOnly: false,
       scope: "pending",
+      temporal: "tomorrow",
     });
+    expect(
+      parseMonitoredTechnicianQuery(
+        "dame los tickets resueltos del dia de hoy del tecnico Joel",
+      ),
+    ).toEqual({
+      names: ["Joel"],
+      wantsCountOnly: false,
+      scope: "done",
+      temporal: "today",
+    });
+    expect(
+      parseMonitoredTechnicianQuery("Dame los tickets del dia de hoy").names,
+    ).toEqual([]);
+    expect(
+      parseMonitoredTechnicianQuery("dame los tickets resueltos del dia de hoy").names,
+    ).toEqual([]);
+    expect(
+      parseMonitoredTechnicianQuery("dame los tickets de soporte del dia de hoy").names,
+    ).toEqual([]);
     expect(
       shouldDeliverMonitoredTechnicianQueue({
         isSupervisor: true,
         inboundText: "dame los tickets de Jonathan del día de hoy por favor",
+      }),
+    ).toBe(true);
+    expect(
+      shouldDeliverMonitoredTechnicianQueue({
+        isSupervisor: true,
+        inboundText: "dame los tickets resueltos del dia de hoy del tecnico Joel",
+      }),
+    ).toBe(true);
+    expect(
+      shouldDeliverSupervisorTeamTickets({
+        isSupervisor: true,
+        inboundText: "Dame los tickets del dia de hoy",
+      }),
+    ).toBe(true);
+    expect(
+      shouldDeliverSupervisorTeamTickets({
+        isSupervisor: true,
+        inboundText: "dame los tickets resueltos del dia de hoy",
+      }),
+    ).toBe(true);
+    expect(
+      shouldDeliverSupervisorTeamTickets({
+        isSupervisor: true,
+        inboundText: "dame los tickets de soporte del dia de hoy",
       }),
     ).toBe(true);
   });
@@ -579,6 +627,48 @@ describe("technician inbound helpers", () => {
           }),
         ).toBe(true);
       }
+    });
+
+    describe("manager ticket queries (pending today, resolved today, resolved today for specific technician)", () => {
+      it("Gerente: Dame los tickets del dia de hoy -> sends pending team tickets", () => {
+        const text = "Dame los tickets del dia de hoy";
+        const query = parseMonitoredTechnicianQuery(text);
+        expect(query.names).toEqual([]);
+        expect(query.scope).toBe("pending");
+        expect(query.temporal).toBe("today");
+        expect(shouldDeliverSupervisorTeamTickets({ isSupervisor: true, inboundText: text })).toBe(true);
+        expect(shouldDeliverMonitoredTechnicianQueue({ isSupervisor: true, inboundText: text })).toBe(false);
+      });
+
+      it("Gerente: dame los tickets resueltos del dia de hoy -> sends resolved team tickets for today", () => {
+        const text = "dame los tickets resueltos del dia de hoy";
+        const query = parseMonitoredTechnicianQuery(text);
+        expect(query.names).toEqual([]);
+        expect(query.scope).toBe("done");
+        expect(query.temporal).toBe("today");
+        expect(shouldDeliverSupervisorTeamTickets({ isSupervisor: true, inboundText: text })).toBe(true);
+        expect(shouldDeliverMonitoredTechnicianQueue({ isSupervisor: true, inboundText: text })).toBe(false);
+      });
+
+      it("Gerente: dame los tickets resueltos del dia de hoy del tecnico Joel -> sends Joel's resolved tickets for today", () => {
+        const text = "dame los tickets resueltos del dia de hoy del tecnico Joel";
+        const query = parseMonitoredTechnicianQuery(text);
+        expect(query.names).toEqual(["Joel"]);
+        expect(query.scope).toBe("done");
+        expect(query.temporal).toBe("today");
+        expect(shouldDeliverSupervisorTeamTickets({ isSupervisor: true, inboundText: text })).toBe(false);
+        expect(shouldDeliverMonitoredTechnicianQueue({ isSupervisor: true, inboundText: text })).toBe(true);
+      });
+
+      it("Gerente: dame los tickets de soporte del dia de hoy -> sends pending team tickets for today", () => {
+        const text = "dame los tickets de soporte del dia de hoy";
+        const query = parseMonitoredTechnicianQuery(text);
+        expect(query.names).toEqual([]);
+        expect(query.scope).toBe("pending");
+        expect(query.temporal).toBe("today");
+        expect(shouldDeliverSupervisorTeamTickets({ isSupervisor: true, inboundText: text })).toBe(true);
+        expect(shouldDeliverMonitoredTechnicianQueue({ isSupervisor: true, inboundText: text })).toBe(false);
+      });
     });
 
     it("regular technicians always get their own tickets and never team list", () => {

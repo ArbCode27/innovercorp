@@ -341,6 +341,9 @@ export const listAllOpenTeamCasos = async (
   options?: {
     scope?: TechnicianTicketScope;
     limit?: number;
+    fromDate?: string | null;
+    toDate?: string | null;
+    sinceDays?: number;
   },
 ): Promise<CrmWisproCaso[]> => {
   const scope = options?.scope || "pending";
@@ -355,14 +358,35 @@ export const listAllOpenTeamCasos = async (
     statuses = OPEN_STATUSES;
   }
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("crm_wispro_casos")
     .select("*")
-    .in("status", statuses)
-    .order("employee_name", { ascending: true, nullsFirst: false })
-    .order("window_start", { ascending: true, nullsFirst: false })
-    .order("created_at", { ascending: true })
-    .limit(limit);
+    .in("status", statuses);
+
+  if (scope === "done") {
+    if (options?.fromDate) {
+      query = query.gte("closed_at", options.fromDate);
+    } else {
+      const days = options?.sinceDays ?? DEFAULT_DONE_DAYS;
+      const since = new Date(
+        Date.now() - days * 24 * 60 * 60 * 1000,
+      ).toISOString();
+      query = query.gte("closed_at", since);
+    }
+    if (options?.toDate) {
+      query = query.lte("closed_at", options.toDate);
+    }
+    query = query
+      .order("employee_name", { ascending: true, nullsFirst: false })
+      .order("closed_at", { ascending: false, nullsFirst: false });
+  } else {
+    query = query
+      .order("employee_name", { ascending: true, nullsFirst: false })
+      .order("window_start", { ascending: true, nullsFirst: false })
+      .order("created_at", { ascending: true });
+  }
+
+  const { data, error } = await query.limit(limit);
 
   if (error) {
     throw new Error(

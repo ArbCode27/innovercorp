@@ -20,6 +20,7 @@ import {
   parseTechnicianTicketDetailQuery,
   parseTechnicianTicketScope,
   technicianFirstName,
+  type TemporalDateFilter,
 } from "./technician-identity";
 import {
   formatTechnicianNameMatchMessage,
@@ -426,9 +427,15 @@ export const deliverMonitoredTechnicianTickets = async (input: {
   technicianName: string;
   deliver?: boolean;
   scope?: TechnicianTicketScope;
+  temporal?: TemporalDateFilter;
+  inboundText?: string | null;
 }): Promise<MonitoredTechnicianQueue> => {
   const deliver = input.deliver !== false;
-  const scope: TechnicianTicketScope = input.scope || "pending";
+  const scope: TechnicianTicketScope =
+    input.scope || parseTechnicianTicketScope(input.inboundText) || "pending";
+  const temporal: TemporalDateFilter =
+    input.temporal || parseTemporalDateFilter(input.inboundText);
+
   let resolved;
   try {
     resolved = await resolveTechnicianByName(input.supabase, input.technicianName);
@@ -473,7 +480,10 @@ export const deliverMonitoredTechnicianTickets = async (input: {
   }
 
   const target = resolved.employee;
-  const loaded = await loadCasos(input.supabase, target.id, { scope });
+  const loaded = await loadCasos(input.supabase, target.id, {
+    scope,
+    limit: scope === "done" ? 50 : 25,
+  });
   if (!loaded.casos) {
     return emptyMonitoredQueue({
       message: loaded.message || "No se pudieron leer los tickets del técnico",
@@ -482,7 +492,26 @@ export const deliverMonitoredTechnicianTickets = async (input: {
     });
   }
 
-  const tickets = loaded.casos.map((caso) => ({
+  let dateTitle: string | undefined;
+  let filteredCasos = loaded.casos;
+
+  if (temporal === "today") {
+    const todayKey = getCaracasDateKey(0);
+    dateTitle = `de Hoy (${todayKey})`;
+    filteredCasos = loaded.casos.filter((c) => {
+      const dateToCheck = scope === "done" ? (c.closedAt || c.windowStart) : c.windowStart;
+      return formatScheduleDateKey(dateToCheck) === todayKey;
+    });
+  } else if (temporal === "tomorrow") {
+    const tomorrowKey = getCaracasDateKey(1);
+    dateTitle = `de Mañana (${tomorrowKey})`;
+    filteredCasos = loaded.casos.filter((c) => {
+      const dateToCheck = scope === "done" ? (c.closedAt || c.windowStart) : c.windowStart;
+      return formatScheduleDateKey(dateToCheck) === tomorrowKey;
+    });
+  }
+
+  const tickets = filteredCasos.map((caso) => ({
     public_id: caso.wisproPublicId,
     client_name: caso.clientName,
     cause: caso.cause || caso.title,
@@ -490,18 +519,34 @@ export const deliverMonitoredTechnicianTickets = async (input: {
     status: caso.status,
   }));
   const firstName = target.name.trim() || "el técnico";
-  const officialHeading = technicianResolvedListHeading(
-    firstName,
-    resolved.matchedBy,
-  );
 
-  if (!loaded.casos.length) {
-    const emptyMsg =
-      scope === "done"
-        ? `${firstName} no tiene tickets resueltos en los últimos 7 días. Puedes consultar sus tickets pendientes.`
-        : scope === "all"
-          ? `${firstName} no tiene tickets registrados.`
-          : `${firstName} no tiene tickets pendientes asignados.`;
+  if (!filteredCasos.length) {
+    let emptyMsg: string;
+    if (scope === "done") {
+      if (temporal === "today") {
+        const todayKey = getCaracasDateKey(0);
+        emptyMsg = `${firstName} no tiene tickets resueltos el día de hoy (${todayKey}). Puedes consultar sus tickets pendientes.`;
+      } else if (temporal === "tomorrow") {
+        const tomorrowKey = getCaracasDateKey(1);
+        emptyMsg = `${firstName} no tiene tickets resueltos para mañana (${tomorrowKey}).`;
+      } else {
+        emptyMsg = `${firstName} no tiene tickets resueltos en los últimos 7 días. Puedes consultar sus tickets pendientes.`;
+      }
+    } else if (scope === "all") {
+      emptyMsg = `${firstName} no tiene tickets registrados.`;
+    } else {
+      if (temporal === "today") {
+        const todayKey = getCaracasDateKey(0);
+        emptyMsg = loaded.casos.length > 0
+          ? `${firstName} no tiene tickets agendados para hoy (${todayKey}). Tiene ${loaded.casos.length} tickets pendientes en otras fechas o por definir.`
+          : `${firstName} no tiene tickets agendados para hoy (${todayKey}).`;
+      } else if (temporal === "tomorrow") {
+        const tomorrowKey = getCaracasDateKey(1);
+        emptyMsg = `${firstName} no tiene tickets agendados para mañana (${tomorrowKey}).`;
+      } else {
+        emptyMsg = `${firstName} no tiene tickets pendientes asignados.`;
+      }
+    }
     return {
       ok: true,
       identified: true,
@@ -521,27 +566,16 @@ export const deliverMonitoredTechnicianTickets = async (input: {
     };
   }
 
-  const isDone = scope === "done";
-  const isAll = scope === "all";
-  const countHeading =
-    loaded.casos.length === 1
-      ? isDone
-        ? `${firstName} tiene 1 ticket resuelto en los últimos 7 días:`
-        : isAll
-          ? `${firstName} tiene 1 ticket:`
-          : `${firstName} tiene 1 ticket pendiente:`
-      : isDone
-        ? `${firstName} tiene ${loaded.casos.length} tickets resueltos en los últimos 7 días:`
-        : isAll
-          ? `${firstName} tiene ${loaded.casos.length} tickets (pendientes y resueltos):`
-          : `${firstName} tiene ${loaded.casos.length} tickets pendientes:`;
-  const heading = officialHeading
-    ? `${officialHeading}\n${countHeading}`
-    : countHeading;
-  const body = formatTechnicianList(loaded.casos.map(toTechnicianReport), {
-    heading,
-    hint: null,
+  const reports = filteredCasos.map((c) => ({
+    ...toTechnicianReport(c),
+    employeeName: c.employeeName || target.name,
+  }));
+  const body = formatSupervisorTeamTicketsReport(reports, {
+    dateTitle,
+    totalUnfilteredCount: loaded.casos.length,
+    temporalFilter: temporal,
     scope,
+    technicianName: target.name,
   });
 
   if (deliver) {
@@ -556,6 +590,7 @@ export const deliverMonitoredTechnicianTickets = async (input: {
           action: "supervisor_technician_queue",
           technician: target.id,
           scope,
+          temporal,
         },
       });
     } catch (error) {
@@ -567,7 +602,7 @@ export const deliverMonitoredTechnicianTickets = async (input: {
         technicianName: target.name,
         technicianId: target.id,
         tickets,
-        count: loaded.casos.length,
+        count: filteredCasos.length,
       });
     }
   }
@@ -580,9 +615,10 @@ export const deliverMonitoredTechnicianTickets = async (input: {
     metadata: {
       target_employee_id: target.id,
       target_name: target.name,
-      count: loaded.casos.length,
+      count: filteredCasos.length,
       supervisor_employee_id: input.supervisor.id,
       scope,
+      temporal,
     },
   });
 
@@ -590,8 +626,8 @@ export const deliverMonitoredTechnicianTickets = async (input: {
     ok: true,
     identified: true,
     message: deliver ? "" : body,
-    count: loaded.casos.length,
-    delivered: deliver ? loaded.casos.length : 0,
+    count: filteredCasos.length,
+    delivered: deliver ? filteredCasos.length : 0,
     remaining: 0,
     offset: 0,
     technicianName: target.name,
@@ -612,11 +648,19 @@ export const deliverSupervisorTeamTickets = async (input: {
   supervisor: MatchedWisproEmployee;
   inboundText?: string | null;
   scope?: TechnicianTicketScope;
+  temporal?: TemporalDateFilter;
 }): Promise<TechnicianTicketDelivery> => {
-  const scope: TechnicianTicketScope = input.scope || "pending";
+  const scope: TechnicianTicketScope =
+    input.scope || parseTechnicianTicketScope(input.inboundText) || "pending";
+  const temporal: TemporalDateFilter =
+    input.temporal || parseTemporalDateFilter(input.inboundText);
+
   let allCasos: CrmWisproCaso[];
   try {
-    allCasos = await listAllOpenTeamCasos(input.supabase, { scope });
+    allCasos = await listAllOpenTeamCasos(input.supabase, {
+      scope,
+      limit: scope === "done" ? 150 : 100,
+    });
   } catch (error) {
     return emptyDelivery({
       message:
@@ -626,7 +670,6 @@ export const deliverSupervisorTeamTickets = async (input: {
     });
   }
 
-  const temporal = parseTemporalDateFilter(input.inboundText);
   let dateTitle: string | undefined;
   let filteredCasos = allCasos;
 
@@ -634,15 +677,15 @@ export const deliverSupervisorTeamTickets = async (input: {
     const todayKey = getCaracasDateKey(0);
     dateTitle = `de Hoy (${todayKey})`;
     filteredCasos = allCasos.filter((c) => {
-      const scheduleKey = formatScheduleDateKey(c.windowStart);
-      return scheduleKey === todayKey;
+      const dateToCheck = scope === "done" ? (c.closedAt || c.windowStart) : c.windowStart;
+      return formatScheduleDateKey(dateToCheck) === todayKey;
     });
   } else if (temporal === "tomorrow") {
     const tomorrowKey = getCaracasDateKey(1);
     dateTitle = `de Mañana (${tomorrowKey})`;
     filteredCasos = allCasos.filter((c) => {
-      const scheduleKey = formatScheduleDateKey(c.windowStart);
-      return scheduleKey === tomorrowKey;
+      const dateToCheck = scope === "done" ? (c.closedAt || c.windowStart) : c.windowStart;
+      return formatScheduleDateKey(dateToCheck) === tomorrowKey;
     });
   }
 
@@ -651,6 +694,7 @@ export const deliverSupervisorTeamTickets = async (input: {
     dateTitle,
     totalUnfilteredCount: allCasos.length,
     temporalFilter: temporal,
+    scope,
   });
 
   try {
@@ -659,7 +703,12 @@ export const deliverSupervisorTeamTickets = async (input: {
       body: messageBody,
       supabase: input.supabase,
       conversationId: input.conversationId,
-      metadata: { engine: "ai", action: "supervisor_team_tickets" },
+      metadata: {
+        engine: "ai",
+        action: "supervisor_team_tickets",
+        scope,
+        temporal,
+      },
     });
   } catch (error) {
     return emptyDelivery({

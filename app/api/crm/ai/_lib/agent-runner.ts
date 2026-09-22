@@ -36,6 +36,7 @@ import {
   looksLikeTechnicianRoleClaim,
   looksLikeTechnicianTicketRequest,
   parseMonitoredTechnicianQuery,
+  parseTechnicianTicketScope,
   shouldDeliverMonitoredTechnicianQueue,
   shouldDeliverSupervisorTeamTickets,
   shouldDeliverTechnicianTicketDetail,
@@ -653,6 +654,8 @@ export const runAiAgent = async (input: {
         technicianId: session?.technician?.id ?? null,
         technicianName: monitoredName,
         scope: monitoredQuery.scope,
+        temporal: monitoredQuery.temporal,
+        inboundText,
       });
       return {
         action: "reply",
@@ -684,6 +687,7 @@ export const runAiAgent = async (input: {
         to: phone,
         supervisor: employee,
         inboundText,
+        scope: parseTechnicianTicketScope(inboundText),
       });
       return {
         action: "reply",

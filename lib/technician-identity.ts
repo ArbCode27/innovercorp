@@ -33,7 +33,7 @@ export type TechnicianIdentitySignals = {
 };
 
 const TICKET_REQUEST_RE =
-  /\b(pendiente(s)?|ticket(s)?|ruta|visita(s)?|casos?|cola|lote|asignad[oa]s?|listado)\b/i;
+  /\b(pendiente(s)?|ticket(s)?|ruta|visita(s)?|casos?|cola|lote|asignad[oa]s?|listado|resuelt[oa]s?|cerrad[oa]s?)\b/i;
 
 const TICKET_MONITOR_CAPTURE_RE =
   /\b(?:tickets?|casos?|pendientes?|cola|ruta|visitas?)\s+(?:(?:asignad[oa]s?|resuelt[oa]s?|cerrad[oa]s?|finalizad[oa]s?|terminad[oa]s?|completad[oa]s?|solucionad[oa]s?|atendid[oa]s?|pendientes?|abiert[oa]s?|todos)\s+)*(?:de|del|a|para)\s+(.+)$/i;
@@ -52,7 +52,7 @@ const TICKET_LIST_VERB_RE =
 const OWN_TICKETS_RE = /\bmis\s+(tickets?|pendientes?|casos?|rutas?|cola)\b/i;
 
 const MONITOR_NAME_TRAIL_RE =
-  /\b(por\s+favor|please|hoy|ahora|mañana|ayer|semana|mes|d[ií]a(?:s)?|pendientes?|tickets?|casos?|asignad[oa]s?|resuelt[oa]s?|cerrad[oa]s?|finalizad[oa]s?|terminad[oa]s?|completad[oa]s?|solucionad[oa]s?|atendid[oa]s?|abiert[oa]s?|todos|el|la|los|las|de|del|al|a|para)\b/gi;
+  /\b(por\s+favor|please|hoy|ahora|mañana|ayer|semana|mes|d[ií]a(?:s)?|pendientes?|tickets?|casos?|asignad[oa]s?|resuelt[oa]s?|cerrad[oa]s?|finalizad[oa]s?|terminad[oa]s?|completad[oa]s?|solucionad[oa]s?|atendid[oa]s?|abiert[oa]s?|todos|el|la|los|las|de|del|al|a|para|t[eé]cnic[oa]s?|soporte|equipo|servicio)\b/gi;
 
 const TICKET_LIST_SCOPE_RE =
   /\b(pendiente(s)?|ruta|lote|asignad[oa]s?|listado|todos(?:\s+los)?(?:\s+tickets)?|mis\s+(tickets|casos|pendientes)|los\s+tickets|(?:tickets?|casos?|pendientes?|visitas?|cola|rutas?)\s+(?:del?\s+|para(?:\s+el)?\s+|de\s+)?(?:(?:este\s+)?d[ií]a(?:\s+(?:de\s+)?(?:hoy|mañana|ayer))?|hoy|mañana|ayer|ahora|esta\s+semana|este\s+mes))\b/i;
@@ -195,13 +195,19 @@ export const parseTechnicianTicketScope = (
   value: string | null | undefined,
 ): TechnicianTicketScope => {
   const text = String(value || "").toLowerCase();
-  if (/\b(todos|todas|ambos)\b/i.test(text)) return "all";
   if (
     /\b(resuelt[oa]s?|cerrad[oa]s?|finalizad[oa]s?|terminad[oa]s?|completad[oa]s?|solucionad[oa]s?|atendid[oa]s?)\b/i.test(
       text,
     )
   ) {
     return "done";
+  }
+  if (
+    /\b(ambos|pendientes\s+y\s+resueltos|resueltos\s+y\s+pendientes|historial\s+completo)\b/i.test(
+      text,
+    )
+  ) {
+    return "all";
   }
   return "pending";
 };
@@ -210,6 +216,7 @@ export type MonitoredTechnicianQuery = {
   names: string[];
   wantsCountOnly: boolean;
   scope: TechnicianTicketScope;
+  temporal: TemporalDateFilter;
 };
 
 const cleanMonitoredNameChunk = (value: string) =>
@@ -223,7 +230,7 @@ export const parseMonitoredTechnicianQuery = (
   value: string | null | undefined,
 ): MonitoredTechnicianQuery => {
   const text = String(value || "").replace(/\s+/g, " ").trim();
-  if (!text) return { names: [], wantsCountOnly: false, scope: "pending" };
+  if (!text) return { names: [], wantsCountOnly: false, scope: "pending", temporal: "all" };
 
   const captured =
     TICKET_MONITOR_CAPTURE_RE.exec(text)?.[1] ||
@@ -240,8 +247,9 @@ export const parseMonitoredTechnicianQuery = (
   const wantsCountOnly =
     TICKET_COUNT_RE.test(text) && !TICKET_LIST_VERB_RE.test(text);
   const scope = parseTechnicianTicketScope(text);
+  const temporal = parseTemporalDateFilter(text);
 
-  return { names, wantsCountOnly, scope };
+  return { names, wantsCountOnly, scope, temporal };
 };
 
 export const looksLikeMonitoredTechnicianQuery = (
@@ -447,7 +455,7 @@ export const looksLikeSupervisorTeamTicketsRequest = (
   if (looksLikeSupervisorOwnTicketsRequest(text)) return false;
   if (looksLikeMonitoredTechnicianQuery(text)) return false;
 
-  return /\b(?:tickets?|casos?|pendientes?|visitas?|cola|rutas?|listado)\b/i.test(
+  return /\b(?:tickets?|casos?|pendientes?|resuelt[oa]s?|cerrad[oa]s?|visitas?|cola|rutas?|listado)\b/i.test(
     text,
   );
 };

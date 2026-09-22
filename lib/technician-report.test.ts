@@ -320,4 +320,112 @@ describe("formatSupervisorTeamTicketsReport", () => {
     expect(text).toContain("tickets de [Nombre]");
     expect(text).toContain("mis tickets");
   });
+
+  it("formats resolved tickets grouped by technician and closed date", () => {
+    const text = formatSupervisorTeamTicketsReport(
+      [
+        {
+          wisproPublicId: 2001,
+          employeeName: "Joel Cárdenas",
+          clientName: "Andrea Gómez",
+          clientPhone: "04121234567",
+          cause: "Reconexión de fibra",
+          title: "Soporte",
+          addressText: "Av. Principal",
+          mapsUrl: null,
+          latitude: null,
+          longitude: null,
+          windowStart: "2026-09-22T10:00:00.000Z",
+          windowEnd: "2026-09-22T12:00:00.000Z",
+          facadeMediaUrl: null,
+          status: "done",
+          closedAt: "2026-09-22T17:40:00.000Z",
+        },
+        {
+          wisproPublicId: 2002,
+          employeeName: "Alan Brito",
+          clientName: "José Delgado",
+          clientPhone: null,
+          cause: "Cambio de conector",
+          title: "Visita",
+          addressText: "Calle 4, El Rosario",
+          mapsUrl: null,
+          latitude: null,
+          longitude: null,
+          windowStart: "2026-09-22T09:00:00.000Z",
+          windowEnd: "2026-09-22T11:00:00.000Z",
+          facadeMediaUrl: null,
+          status: "done",
+          closedAt: "2026-09-22T15:15:00.000Z",
+        },
+      ],
+      { scope: "done", dateTitle: "de Hoy (22/09/2026)", temporalFilter: "today" },
+    );
+
+    expect(text).toContain("📋 *Tickets Resueltos del Equipo de Hoy (22/09/2026)*");
+    expect(text).toContain("Total: 2 tickets resueltos distribuidos en 2 colas.");
+    expect(text).toContain("👷 *ALAN BRITO* (1):");
+    expect(text).toContain("👷 *JOEL CÁRDENAS* (1):");
+    expect(text).toContain("📅 22/09/2026:");
+    expect(text).toContain("*Andrea Gómez* (#2001)");
+    expect(text).toContain("Resuelto:");
+    expect(text).toContain("Ubicación: Av. Principal");
+    expect(text).toContain("*José Delgado* (#2002)");
+    expect(text).toContain("Ubicación: Calle 4, El Rosario");
+  });
+
+  it("formats single technician resolved queue indented by date and technician header", () => {
+    const text = formatSupervisorTeamTicketsReport(
+      [
+        {
+          wisproPublicId: 2001,
+          employeeName: "Joel Cárdenas",
+          clientName: "Andrea Gómez",
+          clientPhone: "04121234567",
+          cause: "Reconexión de fibra",
+          title: "Soporte",
+          addressText: "Av. Principal",
+          mapsUrl: null,
+          latitude: null,
+          longitude: null,
+          windowStart: null,
+          windowEnd: null,
+          facadeMediaUrl: null,
+          status: "done",
+          closedAt: "2026-09-22T17:40:00.000Z",
+        },
+      ],
+      {
+        scope: "done",
+        technicianName: "Joel Cárdenas",
+        dateTitle: "de Hoy (22/09/2026)",
+        temporalFilter: "today",
+      },
+    );
+
+    expect(text).toContain("📋 *Tickets Resueltos de Joel Cárdenas de Hoy (22/09/2026)*");
+    expect(text).toContain("Total: 1 ticket resuelto.");
+    expect(text).toContain("👷 *JOEL CÁRDENAS* (1):");
+    expect(text).toContain("📅 22/09/2026:");
+    expect(text).toContain("1. *Andrea Gómez* (#2001)");
+    expect(text).toContain("Reconexión de fibra");
+    expect(text).toContain("Resuelto:");
+    expect(text).toContain("Ubicación: Av. Principal");
+    expect(text).toContain("Para ver la lista completa del equipo escribe «tickets»");
+  });
+
+  it("returns appropriate empty message for resolved queries", () => {
+    const emptyTeam = formatSupervisorTeamTicketsReport([], {
+      scope: "done",
+      temporalFilter: "today",
+    });
+    expect(emptyTeam).toContain("No hay tickets resueltos el día de hoy");
+
+    const emptyTech = formatSupervisorTeamTicketsReport([], {
+      scope: "done",
+      technicianName: "Joel Cárdenas",
+      temporalFilter: "today",
+    });
+    expect(emptyTech).toContain("Joel Cárdenas no tiene tickets resueltos el día de hoy");
+  });
 });

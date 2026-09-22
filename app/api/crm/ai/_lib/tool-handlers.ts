@@ -1714,6 +1714,7 @@ const handleGetTechnicianAssignedTickets = async (
       supervisor: employee,
       inboundText: parsed.data.technician_name,
       scope: parsed.data.scope,
+      temporal: parsed.data.temporal,
     });
 
     if (delivery.ok && !delivery.message.trim()) {
@@ -1744,6 +1745,7 @@ const handleGetTechnicianAssignedTickets = async (
     technicianName: parsed.data.technician_name,
     deliver,
     scope: parsed.data.scope,
+    temporal: parsed.data.temporal,
   });
 
   if (delivery.ok && deliver && !delivery.message.trim()) {

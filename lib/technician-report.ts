@@ -230,6 +230,9 @@ export type SupervisorTeamReportOptions = {
   totalUnfilteredCount?: number;
   temporalFilter?: "today" | "tomorrow" | "all";
   maxItems?: number;
+  scope?: "pending" | "done" | "all";
+  technicianName?: string;
+  heading?: string;
 };
 
 const priorityBadge = (priority?: string | null) => {
@@ -244,6 +247,44 @@ export const formatSupervisorTeamTicketsReport = (
   options?: SupervisorTeamReportOptions,
 ): string => {
   if (!casos.length) {
+    if (options?.technicianName) {
+      const techName = options.technicianName.trim();
+      if (options?.scope === "done") {
+        if (options?.temporalFilter === "today") {
+          const todayKey = getCaracasDateKey(0);
+          return `📋 ${techName} no tiene tickets resueltos el día de hoy (${todayKey}).`;
+        }
+        if (options?.temporalFilter === "tomorrow") {
+          const tomorrowKey = getCaracasDateKey(1);
+          return `📋 ${techName} no tiene tickets resueltos para mañana (${tomorrowKey}).`;
+        }
+        return `📋 ${techName} no tiene tickets resueltos en los últimos 7 días.`;
+      }
+      if (options?.temporalFilter === "today") {
+        const todayKey = getCaracasDateKey(0);
+        return options.totalUnfilteredCount
+          ? `📋 ${techName} no tiene tickets agendados para hoy (${todayKey}). Tiene ${options.totalUnfilteredCount} tickets pendientes en otras fechas o por definir.`
+          : `📋 ${techName} no tiene tickets agendados para hoy (${todayKey}).`;
+      }
+      if (options?.temporalFilter === "tomorrow") {
+        const tomorrowKey = getCaracasDateKey(1);
+        return `📋 ${techName} no tiene tickets agendados para mañana (${tomorrowKey}).`;
+      }
+      return `📋 ${techName} no tiene tickets pendientes asignados.`;
+    }
+
+    if (options?.scope === "done") {
+      if (options?.temporalFilter === "today") {
+        const todayKey = getCaracasDateKey(0);
+        return `📋 No hay tickets resueltos el día de hoy (${todayKey}).`;
+      }
+      if (options?.temporalFilter === "tomorrow") {
+        const tomorrowKey = getCaracasDateKey(1);
+        return `📋 No hay tickets resueltos agendados para mañana (${tomorrowKey}).`;
+      }
+      return "📋 No hay tickets resueltos registrados en el sistema.";
+    }
+
     if (options?.temporalFilter === "today") {
       const todayKey = getCaracasDateKey(0);
       return options.totalUnfilteredCount
@@ -257,6 +298,7 @@ export const formatSupervisorTeamTicketsReport = (
     return "📋 No hay tickets pendientes registrados en el sistema.";
   }
 
+  const isDone = options?.scope === "done";
   const maxItems = options?.maxItems ?? 25;
   const displayCasos = casos.slice(0, maxItems);
   const truncatedCount = casos.length - displayCasos.length;
@@ -265,7 +307,7 @@ export const formatSupervisorTeamTicketsReport = (
   const byTechnician = new Map<string, typeof displayCasos>();
   for (const caso of displayCasos) {
     const rawName = caso.employeeName?.trim();
-    const techName = rawName || "Sin asignar";
+    const techName = rawName || (options?.technicianName?.trim() ?? "Sin asignar");
     if (!byTechnician.has(techName)) {
       byTechnician.set(techName, []);
     }
@@ -281,10 +323,22 @@ export const formatSupervisorTeamTicketsReport = (
 
   const sections: string[] = [];
   const dateTitle = options?.dateTitle ? ` ${options.dateTitle}` : "";
-  sections.push(`📋 *Listado de Tickets del Equipo${dateTitle}*`);
-  sections.push(
-    `Total: ${casos.length} ticket${casos.length === 1 ? "" : "s"} activo${casos.length === 1 ? "" : "s"} distribuido${casos.length === 1 ? "" : "s"} en ${sortedTechKeys.length} cola${sortedTechKeys.length === 1 ? "" : "s"}.`,
-  );
+
+  if (options?.heading) {
+    sections.push(options.heading);
+  } else if (options?.technicianName) {
+    const title = isDone ? "Tickets Resueltos" : "Listado de Tickets";
+    sections.push(`📋 *${title} de ${options.technicianName}${dateTitle}*`);
+    sections.push(
+      `Total: ${casos.length} ticket${casos.length === 1 ? "" : "s"} ${isDone ? "resuelto" : "activo"}${casos.length === 1 ? "" : "s"}.`,
+    );
+  } else {
+    const title = isDone ? "Tickets Resueltos del Equipo" : "Listado de Tickets del Equipo";
+    sections.push(`📋 *${title}${dateTitle}*`);
+    sections.push(
+      `Total: ${casos.length} ticket${casos.length === 1 ? "" : "s"} ${isDone ? "resuelto" : "activo"}${casos.length === 1 ? "" : "s"} distribuido${casos.length === 1 ? "" : "s"} en ${sortedTechKeys.length} cola${sortedTechKeys.length === 1 ? "" : "s"}.`,
+    );
+  }
 
   for (const techKey of sortedTechKeys) {
     const techCasos = byTechnician.get(techKey)!;
@@ -295,8 +349,9 @@ export const formatSupervisorTeamTicketsReport = (
     // Group by Date for this technician
     const dateGroups = new Map<string, typeof techCasos>();
     for (const caso of techCasos) {
-      const dateKey =
-        formatScheduleDateKey(caso.windowStart) || "Fecha por definir";
+      const dateKey = isDone
+        ? formatScheduleDateKey(caso.closedAt) || formatScheduleDateKey(caso.windowStart) || "Fecha por definir"
+        : formatScheduleDateKey(caso.windowStart) || "Fecha por definir";
       if (!dateGroups.has(dateKey)) {
         dateGroups.set(dateKey, []);
       }
@@ -318,10 +373,12 @@ export const formatSupervisorTeamTicketsReport = (
         const location = caso.addressText?.trim();
         const locationLine = location ? `\n   Ubicación: ${location}` : "";
         const title = (caso.cause || caso.title || "Visita técnica").trim();
+        const resDate = (isDone || caso.status === "done") && caso.closedAt ? formatResolvedDate(caso.closedAt) : null;
+        const resLine = resDate ? `\n   Resuelto: ${resDate}` : "";
 
         return [
           `${idx}. *${caso.clientName?.trim() || "Cliente"}* (${publicId})${priority}`,
-          `   ${title}${windowLine}${locationLine}`,
+          `   ${title}${resLine || windowLine}${locationLine}`,
         ].join("\n");
       });
 
@@ -337,9 +394,15 @@ export const formatSupervisorTeamTicketsReport = (
     );
   }
 
-  sections.push(
-    `_Para ver la cola de un solo técnico escribe «tickets de [Nombre]». Para ver tus propias asignaciones escribe «mis tickets»._`,
-  );
+  if (options?.technicianName) {
+    sections.push(
+      `_Para ver la lista completa del equipo escribe «tickets». Para ver tus propias asignaciones escribe «mis tickets»._`,
+    );
+  } else {
+    sections.push(
+      `_Para ver la cola de un solo técnico escribe «tickets de [Nombre]». Para ver tus propias asignaciones escribe «mis tickets»._`,
+    );
+  }
 
   return sections.join("\n\n");
 };
