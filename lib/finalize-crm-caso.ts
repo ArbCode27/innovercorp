@@ -29,6 +29,10 @@ export const finalizeCrmWisproCaso = async (
   input: {
     issueId: string;
     employeeId?: string | null;
+    resolutionObservation?: string | null;
+    resolutionSolution?: string | null;
+    clientStatus?: string | null;
+    resolutionNotes?: string | null;
   },
 ) => {
   const existing = await getCrmWisproCasoByIssueId(supabase, input.issueId);
@@ -48,12 +52,30 @@ export const finalizeCrmWisproCaso = async (
     );
   }
 
+  const observation = input.resolutionObservation?.trim() || null;
+  const solution = input.resolutionSolution?.trim() || null;
+  const clientStatus = input.clientStatus?.trim() || null;
+  const consolidatedNotes =
+    input.resolutionNotes?.trim() ||
+    [
+      observation ? `Observación: ${observation}` : null,
+      solution ? `Solución: ${solution}` : null,
+      clientStatus ? `Estado del cliente: ${clientStatus}` : null,
+    ]
+      .filter(Boolean)
+      .join("\n") ||
+    null;
+
   const issue = await closeHelpDeskIssue(existing.wisproIssueId);
   const order = await closeWorkOrderIfPresent(existing.wisproOrderId);
   const now = new Date().toISOString();
   const caso = await patchCrmWisproCaso(supabase, existing.wisproIssueId, {
     status: "done",
     closedAt: now,
+    resolutionObservation: observation,
+    resolutionSolution: solution,
+    clientStatus,
+    resolutionNotes: consolidatedNotes,
   });
 
   return { caso, issue, order };

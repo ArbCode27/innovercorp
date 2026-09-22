@@ -1,4 +1,4 @@
-import tecnicosConfig from "@/config/tecnicos.json";
+import tecnicosConfig from "../config/tecnicos.json";
 import {
   filterClientsByQuery,
   looksLikeDocumentQuery,

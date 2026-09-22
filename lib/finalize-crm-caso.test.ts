@@ -1,5 +1,13 @@
-import { describe, expect, it } from "vitest";
-import { matchPendingCasosForTechnician, matchTechnicianTicketDetail } from "./match-technician-ticket";
+import { describe, expect, it, vi } from "vitest";
+import {
+  finalizeCrmWisproCaso,
+  FinalizeCasoError,
+} from "./finalize-crm-caso";
+import {
+  matchPendingCasosForTechnician,
+  matchTechnicianTicketDetail,
+} from "./match-technician-ticket";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type { CrmWisproCaso } from "./wispro-types";
 
 const caso = (
@@ -158,5 +166,73 @@ describe("matchTechnicianTicketDetail", () => {
         (item) => item.wisproIssueId,
       ),
     ).toEqual(["a"]);
+  });
+});
+
+describe("finalizeCrmWisproCaso", () => {
+  it("throws not_found if the ticket does not exist in CRM", async () => {
+    const mockSupabase = {
+      from: vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+          }),
+        }),
+      }),
+    } as unknown as SupabaseClient;
+
+    await expect(
+      finalizeCrmWisproCaso(mockSupabase, { issueId: "missing-issue" }),
+    ).rejects.toMatchObject({ code: "not_found" });
+  });
+
+  it("throws already_closed if ticket is already done", async () => {
+    const mockSupabase = {
+      from: vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            maybeSingle: vi.fn().mockResolvedValue({
+              data: {
+                id: "case-1",
+                wispro_issue_id: "issue-1",
+                status: "done",
+              },
+              error: null,
+            }),
+          }),
+        }),
+      }),
+    } as unknown as SupabaseClient;
+
+    await expect(
+      finalizeCrmWisproCaso(mockSupabase, { issueId: "issue-1" }),
+    ).rejects.toMatchObject({ code: "already_closed" });
+  });
+
+  it("throws forbidden if ticket is assigned to another technician", async () => {
+    const mockSupabase = {
+      from: vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            maybeSingle: vi.fn().mockResolvedValue({
+              data: {
+                id: "case-1",
+                wispro_issue_id: "issue-1",
+                employee_id: "tech-1",
+                status: "scheduled",
+              },
+              error: null,
+            }),
+          }),
+        }),
+      }),
+    } as unknown as SupabaseClient;
+
+    await expect(
+      finalizeCrmWisproCaso(mockSupabase, {
+        issueId: "issue-1",
+        employeeId: "tech-2",
+      }),
+    ).rejects.toMatchObject({ code: "forbidden" });
   });
 });

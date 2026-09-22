@@ -49,6 +49,7 @@ import { CrearCasoWisproDialog } from "../wispro/crear-caso-wispro-dialog";
 import { TicketDetailDialog } from "./ticket-detail-dialog";
 import { TicketFilters } from "./ticket-filters";
 import { TicketEditDialog } from "./ticket-edit-dialog";
+import { TicketFinalizeDialog } from "./ticket-finalize-dialog";
 import { PriorityBadge } from "./priority-badge";
 import { wisproCasoClient } from "../../_lib/wispro-caso-client";
 import type { CrmWisproCaso, WisproEmployee } from "@/lib/wispro-types";
@@ -181,33 +182,9 @@ export const WisproIssuesPanel = () => {
     }
   };
 
-  const handleFinalize = async () => {
-    if (!finalizeCaso) return;
-    setBusyIssueId(finalizeCaso.wisproIssueId);
-    try {
-      const result = await wisproCasoClient.manageCaso({
-        action: "finalize",
-        issueId: finalizeCaso.wisproIssueId,
-      });
-      if (result.caso) replaceCaso(result.caso);
-      if (result.orden?.ok === false) {
-        toast.warning(
-          result.orden.error ||
-            "El ticket se cerró, pero la orden no se pudo finalizar.",
-        );
-      } else {
-        toast.success("Ticket finalizado.");
-      }
-      setFinalizeCaso(null);
-    } catch (finalizeError) {
-      toast.error(
-        finalizeError instanceof Error
-          ? finalizeError.message
-          : "No se pudo finalizar el ticket",
-      );
-    } finally {
-      setBusyIssueId(null);
-    }
+  const handleFinalizedCaso = (caso: CrmWisproCaso) => {
+    replaceCaso(caso);
+    setFinalizeCaso(null);
   };
 
   const handleOpenReassign = async (caso: CrmWisproCaso) => {
@@ -558,40 +535,14 @@ export const WisproIssuesPanel = () => {
         </div>
       </Card>
 
-      <Dialog
+      <TicketFinalizeDialog
+        caso={finalizeCaso}
         open={Boolean(finalizeCaso)}
         onOpenChange={(open) => {
           if (!open) setFinalizeCaso(null);
-        }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Finalizar ticket</DialogTitle>
-            <DialogDescription>
-              Se cerrará el ticket{" "}
-              {finalizeCaso?.wisproPublicId != null
-                ? `#${finalizeCaso.wisproPublicId}`
-                : ""}{" "}
-              en el CRM.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="mt-4 gap-2">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => setFinalizeCaso(null)}
-              disabled={Boolean(busyIssueId)}>
-              Cancelar
-            </Button>
-            <Button
-              type="button"
-              variant="success"
-              onClick={() => void handleFinalize()}
-              disabled={Boolean(busyIssueId)}>
-              {busyIssueId ? "Finalizando..." : "Finalizar"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        }}
+        onFinalized={handleFinalizedCaso}
+      />
 
       <Dialog
         open={Boolean(reassignCaso)}

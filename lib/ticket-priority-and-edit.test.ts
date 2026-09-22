@@ -70,5 +70,20 @@ describe("Ticket priority and edit schema", () => {
       issueId: "00000000-0000-0000-0000-000000000003",
     });
     expect(deleteAction.success).toBe(true);
+
+    const validFinalize = manageCasoSchema.safeParse({
+      action: "finalize",
+      issueId: "00000000-0000-0000-0000-000000000003",
+      resolutionObservation: "Conector mecánico partido en roseta",
+      resolutionSolution: "Reemplazo de conector mecánico y calibración de potencia",
+      clientStatus: "Operativo y conforme",
+    });
+    expect(validFinalize.success).toBe(true);
+
+    const invalidFinalizeMissingFields = manageCasoSchema.safeParse({
+      action: "finalize",
+      issueId: "00000000-0000-0000-0000-000000000003",
+    });
+    expect(invalidFinalizeMissingFields.success).toBe(false);
   });
 });

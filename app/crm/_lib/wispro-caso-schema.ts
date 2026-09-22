@@ -126,10 +126,34 @@ export const retryCasoSchema = z.object({
 export type CreateCasoInput = z.infer<typeof createCasoSchema>;
 export type RetryCasoInput = z.infer<typeof retryCasoSchema>;
 
+export const CLIENT_STATUS_OPTIONS = [
+  { value: "Operativo y conforme", label: "🟢 Operativo y conforme" },
+  { value: "Operativo con observación", label: "🟡 Operativo con observación" },
+  { value: "No resuelto / Requiere nueva visita", label: "🔴 No resuelto / Requiere nueva visita" },
+  { value: "Cliente ausente", label: "⚪ Cliente ausente" },
+] as const;
+
+export const finalizeCasoFormSchema = z.object({
+  issueId: z.string().uuid("Ticket inválido"),
+  resolutionObservation: z
+    .string()
+    .trim()
+    .min(3, "La observación o diagnóstico es requerida"),
+  resolutionSolution: z
+    .string()
+    .trim()
+    .min(3, "La descripción de la solución es requerida"),
+  clientStatus: z
+    .string()
+    .trim()
+    .min(2, "El estado del cliente es requerido"),
+});
+
+export type FinalizeCasoFormInput = z.infer<typeof finalizeCasoFormSchema>;
+
 export const manageCasoSchema = z.discriminatedUnion("action", [
-  z.object({
+  finalizeCasoFormSchema.extend({
     action: z.literal("finalize"),
-    issueId: z.string().uuid("Ticket inválido"),
   }),
   z.object({
     action: z.literal("reassign"),

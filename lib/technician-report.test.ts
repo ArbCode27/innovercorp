@@ -340,6 +340,9 @@ describe("formatSupervisorTeamTicketsReport", () => {
           facadeMediaUrl: null,
           status: "done",
           closedAt: "2026-09-22T17:40:00.000Z",
+          resolutionObservation: "Fibra rota en la acometida",
+          resolutionSolution: "Empalme por fusión en caja de paso",
+          clientStatus: "Operativo y conforme",
         },
         {
           wisproPublicId: 2002,
@@ -357,6 +360,9 @@ describe("formatSupervisorTeamTicketsReport", () => {
           facadeMediaUrl: null,
           status: "done",
           closedAt: "2026-09-22T15:15:00.000Z",
+          resolutionObservation: "Conector mecánico sucio y descalibrado",
+          resolutionSolution: "Reemplazo de conector mecánico",
+          clientStatus: "Operativo",
         },
       ],
       { scope: "done", dateTitle: "de Hoy (22/09/2026)", temporalFilter: "today" },
@@ -369,8 +375,14 @@ describe("formatSupervisorTeamTicketsReport", () => {
     expect(text).toContain("📅 22/09/2026:");
     expect(text).toContain("*Andrea Gómez* (#2001)");
     expect(text).toContain("Resuelto:");
+    expect(text).toContain("🔍 Obs: Fibra rota en la acometida");
+    expect(text).toContain("🛠️ Solución: Empalme por fusión en caja de paso");
+    expect(text).toContain("📶 Cliente: Operativo y conforme");
     expect(text).toContain("Ubicación: Av. Principal");
     expect(text).toContain("*José Delgado* (#2002)");
+    expect(text).toContain("🔍 Obs: Conector mecánico sucio y descalibrado");
+    expect(text).toContain("🛠️ Solución: Reemplazo de conector mecánico");
+    expect(text).toContain("📶 Cliente: Operativo");
     expect(text).toContain("Ubicación: Calle 4, El Rosario");
   });
 

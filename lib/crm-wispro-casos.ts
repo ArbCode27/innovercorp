@@ -31,6 +31,9 @@ export type UpsertCrmWisproCasoInput = {
   windowEnd?: string | null;
   closedAt?: string | null;
   resolutionNotes?: string | null;
+  resolutionObservation?: string | null;
+  resolutionSolution?: string | null;
+  clientStatus?: string | null;
 };
 
 export type TechnicianTicketScope = "pending" | "done" | "all";
@@ -71,6 +74,9 @@ const toRow = (input: UpsertCrmWisproCasoInput) => ({
   window_end: input.windowEnd ?? null,
   closed_at: input.closedAt ?? null,
   resolution_notes: input.resolutionNotes ?? null,
+  resolution_observation: input.resolutionObservation ?? null,
+  resolution_solution: input.resolutionSolution ?? null,
+  client_status: input.clientStatus ?? null,
   updated_at: new Date().toISOString(),
 });
 
@@ -109,6 +115,9 @@ const fromRow = (row: Record<string, unknown>): CrmWisproCaso => ({
   lastTechnicianReportKey: (row.last_technician_report_key as string | null) ?? null,
   closedAt: (row.closed_at as string | null) ?? null,
   resolutionNotes: (row.resolution_notes as string | null) ?? null,
+  resolutionObservation: (row.resolution_observation as string | null) ?? null,
+  resolutionSolution: (row.resolution_solution as string | null) ?? null,
+  clientStatus: (row.client_status as string | null) ?? null,
   createdAt: (row.created_at as string | null) ?? null,
   updatedAt: (row.updated_at as string | null) ?? null,
 });
@@ -178,6 +187,9 @@ export const toUpsertCrmWisproCasoInput = (
   windowEnd: caso.windowEnd,
   closedAt: caso.closedAt,
   resolutionNotes: caso.resolutionNotes,
+  resolutionObservation: caso.resolutionObservation,
+  resolutionSolution: caso.resolutionSolution,
+  clientStatus: caso.clientStatus,
 });
 
 export const patchCrmWisproCaso = async (

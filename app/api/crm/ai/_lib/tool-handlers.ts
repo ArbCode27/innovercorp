@@ -1598,9 +1598,41 @@ const handleFinalizeMyTicket = async (
     }
 
     const target = matches[0];
+    const ticketLabel =
+      target.wisproPublicId != null ? `#${target.wisproPublicId}` : "el ticket";
+
+    const observation = parsed.data.observation?.trim();
+    const solution = parsed.data.solution?.trim();
+    const clientStatus = parsed.data.client_status?.trim();
+
+    if (!observation || !solution || !clientStatus) {
+      const missingList: string[] = [];
+      if (!observation) missingList.push("1. Observación o diagnóstico del caso");
+      if (!solution) missingList.push("2. Cómo lo resolviste (solución técnica)");
+      if (!clientStatus) missingList.push("3. Estado en que quedó el cliente/servicio (ej: operativo y conforme)");
+
+      return {
+        name: FINALIZE_MY_TICKET_TOOL,
+        ok: true,
+        stopAgent: true,
+        directReply: `Para cerrar ${ticketLabel} (${target.clientName || "Cliente"}), por favor indícame:\n${missingList.join("\n")}`,
+        response: {
+          ok: false,
+          closed: false,
+          public_id: target.wisproPublicId,
+          client_name: target.clientName,
+          needs_resolution_details: true,
+          hint: "Faltan los datos obligatorios de cierre. Pídeselos al técnico en una sola frase clara antes de cerrar.",
+        },
+      };
+    }
+
     const result = await finalizeCrmWisproCaso(ctx.supabase, {
       issueId: target.wisproIssueId,
       employeeId: employee.id,
+      resolutionObservation: observation,
+      resolutionSolution: solution,
+      clientStatus,
     });
     await recordTechnicianEvent(ctx.supabase, {
       conversationId: ctx.conversationId,
@@ -1609,11 +1641,12 @@ const handleFinalizeMyTicket = async (
       metadata: {
         public_id: target.wisproPublicId,
         issue_id: target.wisproIssueId,
+        observation,
+        solution,
+        client_status: clientStatus,
       },
     });
 
-    const ticketLabel =
-      target.wisproPublicId != null ? `#${target.wisproPublicId}` : "el ticket";
     const orderWarning =
       result.order.ok === false
         ? " El ticket se cerró, pero la orden Wispro no se pudo finalizar."
@@ -1623,7 +1656,7 @@ const handleFinalizeMyTicket = async (
       name: FINALIZE_MY_TICKET_TOOL,
       ok: true,
       stopAgent: true,
-      directReply: `Listo. Cerré ${ticketLabel} en el CRM y en Wispro.${orderWarning}`,
+      directReply: `Listo. Cerré ${ticketLabel} (${target.clientName || "Cliente"}) en el CRM y en Wispro con la observación y solución registradas.${orderWarning}`,
       response: {
         ok: true,
         closed: true,
@@ -1631,6 +1664,9 @@ const handleFinalizeMyTicket = async (
         client_name: target.clientName,
         wispro_state: result.issue.state,
         order_closed: result.order.ok,
+        observation,
+        solution,
+        client_status: clientStatus,
         hint: "Confirma el cierre en un mensaje corto. No menciones tools.",
       },
     };

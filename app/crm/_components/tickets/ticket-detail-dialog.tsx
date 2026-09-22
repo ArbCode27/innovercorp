@@ -200,6 +200,51 @@ export const TicketDetailDialog = ({
               </DetailField>
             ) : null}
 
+            {detail.status === "done" || detail.closedAt ? (
+              <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3.5 space-y-2.5">
+                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
+                  Verificación de Soporte / Cierre
+                </p>
+                {detail.closedAt ? (
+                  <p className="text-xs text-muted-foreground">
+                    Cerrado el {formatCrmDate(detail.closedAt)}
+                  </p>
+                ) : null}
+                {detail.resolutionObservation ? (
+                  <div>
+                    <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground block">
+                      Observación / Diagnóstico:
+                    </span>
+                    <p className="text-sm font-medium text-foreground">{detail.resolutionObservation}</p>
+                  </div>
+                ) : null}
+                {detail.resolutionSolution ? (
+                  <div>
+                    <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground block">
+                      Solución Aplicada:
+                    </span>
+                    <p className="text-sm font-medium text-foreground">{detail.resolutionSolution}</p>
+                  </div>
+                ) : null}
+                {detail.clientStatus ? (
+                  <div>
+                    <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground block">
+                      Estado del Cliente / Servicio:
+                    </span>
+                    <p className="text-sm font-medium text-foreground">{detail.clientStatus}</p>
+                  </div>
+                ) : null}
+                {detail.resolutionNotes && !detail.resolutionObservation ? (
+                  <div>
+                    <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground block">
+                      Notas de Resolución:
+                    </span>
+                    <p className="text-sm whitespace-pre-wrap text-foreground">{detail.resolutionNotes}</p>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
             <DetailField label="Fachada">
               {facadeUrl && !imageFailed ? (
                 // eslint-disable-next-line @next/next/no-img-element

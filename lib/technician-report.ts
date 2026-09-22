@@ -21,6 +21,10 @@ export type TechnicianReportCaso = {
   closedAt?: string | null;
   priority?: string | null;
   employeeName?: string | null;
+  resolutionObservation?: string | null;
+  resolutionSolution?: string | null;
+  clientStatus?: string | null;
+  resolutionNotes?: string | null;
 };
 
 export const formatWindow = (start: string | null, end: string | null) => {
@@ -138,6 +142,15 @@ const formatSingleCasoBlock = (
   if (caso.status === "done" && caso.closedAt) {
     const resDate = formatResolvedDate(caso.closedAt);
     if (resDate) lines.push(`   Resuelto: ${resDate}`);
+    if (caso.resolutionObservation?.trim()) {
+      lines.push(`   Obs: ${caso.resolutionObservation.trim()}`);
+    }
+    if (caso.resolutionSolution?.trim()) {
+      lines.push(`   Solución: ${caso.resolutionSolution.trim()}`);
+    }
+    if (caso.clientStatus?.trim()) {
+      lines.push(`   Cliente: ${caso.clientStatus.trim()}`);
+    }
   }
   return lines.join("\n");
 };
@@ -375,10 +388,19 @@ export const formatSupervisorTeamTicketsReport = (
         const title = (caso.cause || caso.title || "Visita técnica").trim();
         const resDate = (isDone || caso.status === "done") && caso.closedAt ? formatResolvedDate(caso.closedAt) : null;
         const resLine = resDate ? `\n   Resuelto: ${resDate}` : "";
+        const obsLine = (isDone || caso.status === "done") && caso.resolutionObservation?.trim()
+          ? `\n   🔍 Obs: ${caso.resolutionObservation.trim()}`
+          : "";
+        const solLine = (isDone || caso.status === "done") && caso.resolutionSolution?.trim()
+          ? `\n   🛠️ Solución: ${caso.resolutionSolution.trim()}`
+          : "";
+        const clientStatusLine = (isDone || caso.status === "done") && caso.clientStatus?.trim()
+          ? `\n   📶 Cliente: ${caso.clientStatus.trim()}`
+          : "";
 
         return [
           `${idx}. *${caso.clientName?.trim() || "Cliente"}* (${publicId})${priority}`,
-          `   ${title}${resLine || windowLine}${locationLine}`,
+          `   ${title}${resLine || windowLine}${obsLine}${solLine}${clientStatusLine}${locationLine}`,
         ].join("\n");
       });
 

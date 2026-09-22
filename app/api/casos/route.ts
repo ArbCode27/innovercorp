@@ -378,6 +378,9 @@ export async function PUT(request: NextRequest) {
     if (parsed.data.action === "finalize") {
       const { caso, issue, order } = await finalizeCrmWisproCaso(supabase, {
         issueId: parsed.data.issueId,
+        resolutionObservation: parsed.data.resolutionObservation,
+        resolutionSolution: parsed.data.resolutionSolution,
+        clientStatus: parsed.data.clientStatus,
       });
       return NextResponse.json({
         ok: true,

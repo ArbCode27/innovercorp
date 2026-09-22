@@ -94,6 +94,10 @@ const toTechnicianReport = (caso: CrmWisproCaso): TechnicianReportCaso => ({
   closedAt: caso.closedAt,
   priority: caso.priority,
   employeeName: caso.employeeName,
+  resolutionObservation: caso.resolutionObservation,
+  resolutionSolution: caso.resolutionSolution,
+  clientStatus: caso.clientStatus,
+  resolutionNotes: caso.resolutionNotes,
 });
 
 const loadCasos = async (

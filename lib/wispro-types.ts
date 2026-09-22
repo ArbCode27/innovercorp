@@ -118,6 +118,9 @@ export type CrmWisproCaso = {
   lastTechnicianReportKey: string | null;
   closedAt?: string | null;
   resolutionNotes?: string | null;
+  resolutionObservation?: string | null;
+  resolutionSolution?: string | null;
+  clientStatus?: string | null;
   createdAt: string | null;
   updatedAt: string | null;
 };
