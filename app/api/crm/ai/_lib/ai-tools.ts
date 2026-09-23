@@ -300,7 +300,7 @@ export const AI_TOOL_DECLARATIONS = [
       properties: {
         public_id: {
           type: "number",
-          description: "Número público del ticket Wispro (sin #).",
+          description: "Número público del ticket (sin #).",
         },
         client_name: {
           type: "string",
@@ -321,13 +321,13 @@ export const AI_TOOL_DECLARATIONS = [
   {
     name: FINALIZE_MY_TICKET_TOOL,
     description:
-      "SOLO técnicos identificados. Finaliza un ticket asignado a ESTE técnico en CRM y Wispro. Para cerrar, es OBLIGATORIO que el técnico proporcione la observación o reporte del trabajo realizado en sitio (observation). El técnico puede dar esta observación por escrito o mediante nota de voz (audio transcrito). Si el técnico solo dice 'listo', 'ya terminé' o 'cierra' sin dar ninguna observación, NO cierres el ticket: pídele la observación en una sola frase breve. Si ya la dio (en texto o nota de voz), toma todo el reporte como 'observation' y llama la tool con public_id/client_name y observation.",
+      "SOLO técnicos identificados. Finaliza un ticket asignado a ESTE técnico en el CRM. Para cerrar, es OBLIGATORIO que el técnico proporcione la observación o reporte del trabajo realizado en sitio (observation). El técnico puede dar esta observación por escrito o mediante nota de voz (audio transcrito). Si el técnico solo dice 'listo', 'ya terminé' o 'cierra' sin dar ninguna observación, NO cierres el ticket: pídele la observación en una sola frase breve. Si ya la dio (en texto o nota de voz), toma todo el reporte como 'observation' y llama la tool con public_id/client_name y observation. En el mensaje al técnico no menciones sistemas internos.",
     parameters: {
       type: "object",
       properties: {
         public_id: {
           type: "number",
-          description: "Número público del ticket Wispro (sin #).",
+          description: "Número público del ticket (sin #).",
         },
         client_name: {
           type: "string",
@@ -394,7 +394,7 @@ export const AI_TOOLS_CONTRACT_PROMPT = `Herramientas disponibles (obligatorio r
 6) get_client_ticket — ticket abierto de ESTE cliente (número, estado, ventana). Si el remitente es técnico, NO la uses.
 7) list_my_pending_tickets — SOLO técnicos identificados. Envía un listado de texto (nombre, título, ubicación). SIN fotos ni ficha. Si delivered=true, no escribas nada más.
 8) get_my_ticket_detail — SOLO técnicos identificados. Envía la ficha completa de UN caso (con foto). Pasa public_id, client_name o list_index. Si delivered=true, no escribas nada más.
-9) finalize_my_ticket — SOLO técnicos identificados. Cierra en CRM y Wispro. Requiere OBLIGATORIAMENTE una sola observación o reporte del trabajo técnico realizado (observation). El técnico puede dar esta observación por escrito o mediante nota de voz (audio transcrito). Si el técnico solo dice "listo", "ya terminé" o "cierra" sin dar observación, NO cierres el ticket: pídele la observación en una sola frase breve. Cuando el técnico la dé (por audio o texto), llama la tool pasando public_id/client_name y observation. No ofrezcas el listado.
+9) finalize_my_ticket — SOLO técnicos identificados. Cierra el ticket en el CRM. Requiere OBLIGATORIAMENTE una sola observación o reporte del trabajo técnico realizado (observation). El técnico puede dar esta observación por escrito o mediante nota de voz (audio transcrito). Si el técnico solo dice "listo", "ya terminé" o "cierra" sin dar observación, NO cierres el ticket: pídele la observación en una sola frase breve. Cuando el técnico la dé (por audio o texto), llama la tool pasando public_id/client_name y observation. Confirma el cierre en una frase corta. No ofrezcas el listado ni menciones sistemas internos.
 10) get_technician_assigned_tickets — SOLO supervisores (rol=supervisor_wispro). Pasa el nombre TAL CUAL lo dijo el gerente (no lo corrijas). Si el gerente pide los tickets en general o de todo el equipo (ej: todos, equipo, general, tickets de hoy, resueltos de hoy), pasa technician_name='todos'. El sistema resuelve contra el catálogo (resolved/ambiguous/not_found). No inventes nombres. Si pide tickets resueltos, usa scope='done' (por defecto scope='pending'). Si pide hoy, usa temporal='today'. mode=list envía el listado; mode=summary para conteos. Si delivered=true, no escribas nada más. Si pide SUS propios tickets ('mis tickets', 'mi ruta', 'lo mío'), usa list_my_pending_tickets.
 
 Tasa BCV / bolívares (CRÍTICO):

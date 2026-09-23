@@ -1642,16 +1642,18 @@ const handleFinalizeMyTicket = async (
       },
     });
 
-    const orderWarning =
-      result.order?.ok === false
-        ? " El ticket se cerró, pero la orden Wispro no se pudo finalizar."
-        : "";
+    if (result.order?.ok === false) {
+      console.warn("[AI_TOOL] ticket_order_close_skipped", {
+        public_id: target.wisproPublicId,
+        issue_id: target.wisproIssueId,
+      });
+    }
 
     return {
       name: FINALIZE_MY_TICKET_TOOL,
       ok: true,
       stopAgent: true,
-      directReply: `Listo. Cerré ${ticketLabel} (${target.clientName || "Cliente"}) en el CRM y en Wispro con la observación registrada.${orderWarning}`,
+      directReply: `Listo. Cerré ${ticketLabel} (${target.clientName || "Cliente"}) con la observación registrada.`,
       response: {
         ok: true,
         closed: true,
@@ -1662,7 +1664,7 @@ const handleFinalizeMyTicket = async (
         observation,
         solution,
         client_status: clientStatus,
-        hint: "Confirma el cierre en un mensaje corto. No menciones tools.",
+        hint: "Confirma el cierre en un mensaje corto. No menciones tools ni sistemas internos.",
       },
     };
   } catch (error) {
