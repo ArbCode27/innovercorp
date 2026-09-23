@@ -24,10 +24,13 @@ import {
 } from "@/components/ui/select";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
 import {
+  DEFAULT_TICKET_STATUS_FILTER,
   TICKET_PRIORITIES,
   ticketPriorityLabels,
 } from "../../_lib/wispro-caso-schema";
 import type { TicketPriority, WisproEmployee } from "@/lib/wispro-types";
+
+export { DEFAULT_TICKET_STATUS_FILTER };
 
 interface StatusTabConfig {
   id: string;
@@ -90,7 +93,7 @@ export const TicketFilters = ({
 }: TicketFiltersProps) => {
   const hasActiveFilters =
     Boolean(searchQuery.trim()) ||
-    statusFilter !== "all" ||
+    statusFilter !== DEFAULT_TICKET_STATUS_FILTER ||
     priorityFilter !== "all" ||
     employeeFilter !== "all";
 
@@ -101,7 +104,7 @@ export const TicketFilters = ({
 
   const activeFiltersCount =
     (searchQuery.trim() ? 1 : 0) +
-    (statusFilter !== "all" ? 1 : 0) +
+    (statusFilter !== DEFAULT_TICKET_STATUS_FILTER ? 1 : 0) +
     (priorityFilter !== "all" ? 1 : 0) +
     (employeeFilter !== "all" ? 1 : 0);
 
@@ -157,7 +160,7 @@ export const TicketFilters = ({
               }`}
               aria-hidden="true"
             />
-            {hasActiveFilters ? (
+            {filteredCount !== totalCount ? (
               <span>
                 Mostrando{" "}
                 <strong className={`font-semibold ${CRM_SURFACES.textPrimary}`}>
@@ -298,6 +301,20 @@ export const TicketFilters = ({
         </div>
 
         {/* Chips de filtros activos para limpiar individualmente */}
+        {statusFilter !== DEFAULT_TICKET_STATUS_FILTER ? (
+          <button
+            type="button"
+            onClick={() => onStatusChange(DEFAULT_TICKET_STATUS_FILTER)}
+            className="inline-flex items-center gap-1 rounded-lg border border-blue-500/30 bg-blue-500/10 px-2 py-1 text-xs text-blue-600 hover:bg-blue-500/20 dark:text-blue-400 transition-colors"
+            title="Restaurar filtro de agendados">
+            <span>
+              Estado:{" "}
+              {STATUS_TABS.find((tab) => tab.id === statusFilter)?.label || statusFilter}
+            </span>
+            <X className="size-3" />
+          </button>
+        ) : null}
+
         {priorityFilter !== "all" ? (
           <button
             type="button"

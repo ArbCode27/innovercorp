@@ -22,7 +22,7 @@ const GRAPH_API_VERSION = "v19.0";
 /** Soft holds allowed in the window before hard human handoff. */
 const SOFT_FAIL_LIMIT = 2;
 const SOFT_FAIL_WINDOW_MS = 15 * 60 * 1000;
-const ACK_WINDOW_MS = 45 * 1000;
+const ACK_WINDOW_MS = 2 * 60 * 1000;
 
 const normalizePhone = (value: string) => value.replace(/\D/g, "");
 

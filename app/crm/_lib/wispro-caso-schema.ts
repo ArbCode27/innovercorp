@@ -28,6 +28,9 @@ export const orderKindLabels: Record<(typeof ORDER_KINDS)[number], string> = {
   feasibility: "Estudio de factibilidad",
 };
 
+/** Filtro de estado por defecto en la tabla de tickets del CRM ("agendadas"). */
+export const DEFAULT_TICKET_STATUS_FILTER = "scheduled";
+
 const emptyToNull = z
   .union([z.string(), z.null(), z.undefined()])
   .transform((value) => {

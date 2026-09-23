@@ -49,7 +49,7 @@ import { CRM_SURFACES } from "../../_lib/crm-theme";
 import { EmployeePicker } from "../wispro/employee-picker";
 import { CrearCasoWisproDialog } from "../wispro/crear-caso-wispro-dialog";
 import { TicketDetailDialog } from "./ticket-detail-dialog";
-import { TicketFilters } from "./ticket-filters";
+import { DEFAULT_TICKET_STATUS_FILTER, TicketFilters } from "./ticket-filters";
 import { TicketEditDialog } from "./ticket-edit-dialog";
 import { TicketFinalizeDialog } from "./ticket-finalize-dialog";
 import { PriorityBadge } from "./priority-badge";
@@ -134,7 +134,7 @@ export const WisproIssuesPanel = () => {
 
   // Filtros
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState(DEFAULT_TICKET_STATUS_FILTER);
   const [priorityFilter, setPriorityFilter] = useState("all");
   const [employeeFilter, setEmployeeFilter] = useState("all");
   const [sortOrder, setSortOrder] = useState<"desc" | "asc">("desc");
@@ -265,7 +265,7 @@ export const WisproIssuesPanel = () => {
 
   const handleResetFilters = () => {
     setSearchQuery("");
-    setStatusFilter("all");
+    setStatusFilter(DEFAULT_TICKET_STATUS_FILTER);
     setPriorityFilter("all");
     setEmployeeFilter("all");
   };

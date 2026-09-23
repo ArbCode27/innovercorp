@@ -36,7 +36,19 @@ import {
 const LOG_PREFIX = "[AI_AGENT]";
 const GRAPH_API_VERSION = "v19.0";
 const HISTORY_LIMIT = 24;
-const ACK_DELAY_MS = 5000;
+
+const parsePositiveIntEnv = (key: string, fallback: number) => {
+  const raw = process.env[key];
+  if (!raw) return fallback;
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+/**
+ * Tiempo de espera antes de emitir el feedback de procesamiento ("dame un momento").
+ * Por requerimiento: solo se envía si la IA tarda más de un minuto (60.000 ms).
+ */
+export const ACK_DELAY_MS = parsePositiveIntEnv("AI_ACK_DELAY_MS", 60_000);
 const HISTORY_SELECT =
   "id, type, content, sender_type, created_at, media_url, media_type, mime_type, caption, metadata, latitude, longitude, location_name, location_address";
 
@@ -146,7 +158,7 @@ const mapFallbackResult = (
   };
 };
 
-const startDelayedAck = (input: {
+export const startDelayedAck = (input: {
   supabase: SupabaseClient;
   conversationId: number;
   triggerMessageId?: number | null;
@@ -158,6 +170,7 @@ const startDelayedAck = (input: {
   intent: InboundIntent;
   recoveryMessages?: AiRecoveryMessages | null;
   runHandle: AiRunHandle | null;
+  delayMs?: number;
 }) => {
   let cancelled = false;
   let started = false;
@@ -173,6 +186,8 @@ const startDelayedAck = (input: {
     settled = true;
     settle?.(value);
   };
+
+  const delayMs = input.delayMs ?? ACK_DELAY_MS;
 
   const timer = setTimeout(() => {
     started = true;
@@ -207,7 +222,7 @@ const startDelayedAck = (input: {
         resolveOnce({ sent });
       }
     })();
-  }, ACK_DELAY_MS);
+  }, delayMs);
 
   return {
     cancel: () => {
