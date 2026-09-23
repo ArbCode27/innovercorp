@@ -1,8 +1,7 @@
+import { randomUUID } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import {
-  createCaso,
   listTechnicians,
-  reassignHelpDeskIssue,
   retryCasoSteps,
   WisproHttpError,
 } from "@/lib/wispro";
@@ -54,6 +53,39 @@ const resolveStatus = (input: {
 
 const resolveEmployee = async (employeeId?: string | null) => {
   if (!employeeId) return null;
+  const supabase = getSupabaseAdmin();
+  try {
+    const { data: tech } = await supabase
+      .from("crm_technicians")
+      .select("*")
+      .or(`employee_id.eq.${employeeId},id.eq.${employeeId}`)
+      .maybeSingle();
+
+    if (tech) {
+      return {
+        id: String(tech.employee_id || tech.id),
+        name: String(tech.name),
+        phone:
+          (tech.phone_e164 as string | null) ||
+          (tech.phone_last10 as string | null) ||
+          null,
+        phone_mobile:
+          (tech.whatsapp_phone_e164 as string | null) ||
+          (tech.whatsapp_phone_last10 as string | null) ||
+          (tech.phone_e164 as string | null) ||
+          null,
+        national_identification_number:
+          (tech.document as string | null) ||
+          (tech.document_last4 as string | null) ||
+          null,
+        public_id: null,
+        enabled: tech.active !== false,
+      };
+    }
+  } catch (error) {
+    console.warn("[CASOS] resolve_crm_technician_failed", error);
+  }
+
   try {
     const employees = await listTechnicians();
     return employees.find((item) => item.id === employeeId) || null;
@@ -238,44 +270,70 @@ export async function POST(request: NextRequest) {
     });
     const description = withMapsInDescription(input.description, mapsUrl);
 
-    const result = await createCaso({
-      issue: {
-        title: input.title,
-        description,
-        categoryId: input.categoryId,
-        clientId: input.clientId,
-        contractId: input.contractId,
-        assignableId: input.assignableId,
-      },
-      order: input.generateOrder
-        ? {
-            kind: input.kind,
-            description: input.orderDescription,
-            ticketId: "",
-            contractId: input.contractId,
-            startAt: input.startAt,
-            endAt: input.endAt,
-            gps: hasGps(input.gps) ? input.gps : null,
-          }
-          : null,
-    });
+    const supabase = getSupabaseAdmin();
+    const issueId = randomUUID();
 
-    const withFicha = await persistFicha(result, {
+    // Generate publicId sequentially
+    let publicId: number | null = null;
+    try {
+      const { data: seqResult } = await supabase.rpc(
+        "nextval_crm_tickets_public_id",
+      );
+      if (typeof seqResult === "number" && seqResult > 0) {
+        publicId = seqResult;
+      }
+    } catch {
+      // Fallback if rpc is pending execution
+    }
+
+    if (!publicId) {
+      const { data: maxRow } = await supabase
+        .from("crm_wispro_casos")
+        .select("wispro_public_id")
+        .order("wispro_public_id", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const currentMax = Number(maxRow?.wispro_public_id) || 1999;
+      publicId = currentMax >= 2000 ? currentMax + 1 : 2000;
+    }
+
+    const orderId = `ord-${issueId}`;
+    const fichaInput = await buildFichaInput({
       ...input,
+      wisproIssueId: issueId,
+      wisproPublicId: publicId,
+      wisproOrderId: orderId,
       mapsUrl,
       description,
     });
 
-    return NextResponse.json(withFicha);
+    const ficha = await upsertCrmWisproCaso(supabase, fichaInput);
+
+    const result: ResultadoCaso = {
+      ticket: {
+        ok: true,
+        id: ficha.wisproIssueId,
+        publicId: ficha.wisproPublicId,
+        subject: ficha.title,
+        assignedTo: ficha.employeeName,
+      },
+      orden: {
+        ok: true,
+        id: ficha.wisproOrderId || orderId,
+      },
+      crm: {
+        ok: true,
+        id: ficha.id,
+        publicId: ficha.wisproPublicId,
+      },
+      ficha,
+    };
+
+    return NextResponse.json(result);
   } catch (error) {
     const message =
-      error instanceof WisproHttpError
-        ? error.message
-        : error instanceof Error
-          ? error.message
-          : "No se pudo crear el caso en Wispro";
-    const status = error instanceof WisproHttpError ? error.status : 500;
-    return NextResponse.json({ error: message }, { status });
+      error instanceof Error ? error.message : "No se pudo crear el ticket";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -376,7 +434,7 @@ export async function PUT(request: NextRequest) {
     }
 
     if (parsed.data.action === "finalize") {
-      const { caso, issue, order } = await finalizeCrmWisproCaso(supabase, {
+      const { caso } = await finalizeCrmWisproCaso(supabase, {
         issueId: parsed.data.issueId,
         resolutionObservation: parsed.data.resolutionObservation,
         resolutionSolution: parsed.data.resolutionSolution,
@@ -390,8 +448,6 @@ export async function PUT(request: NextRequest) {
           facadeMediaUrl: null,
           hasFacade: Boolean(caso.hasFacade || caso.facadeMediaUrl),
         },
-        wispro: { ok: true, state: issue.state },
-        orden: order,
       });
     }
 
@@ -407,20 +463,12 @@ export async function PUT(request: NextRequest) {
     if (parsed.data.action === "edit") {
       let employeePatch: Partial<UpsertCrmWisproCasoInput> = {};
       if (parsed.data.employeeId !== undefined) {
-        if (parsed.data.employeeId && parsed.data.employeeId !== existing.employeeId) {
+        if (
+          parsed.data.employeeId &&
+          parsed.data.employeeId !== existing.employeeId
+        ) {
           const employee = await resolveEmployee(parsed.data.employeeId);
           if (employee) {
-            try {
-              await reassignHelpDeskIssue({
-                issueId: existing.wisproIssueId,
-                employeeId: employee.id,
-              });
-              void upsertCrmTechnicianFromEmployee(supabase, employee).catch((err) => {
-                console.warn("[CASOS] technician_upsert_failed", err);
-              });
-            } catch (reassignError) {
-              console.warn("[CASOS] wispro_reassign_failed", reassignError);
-            }
             employeePatch = {
               employeeId: employee.id,
               employeeName: employee.name,
@@ -473,18 +521,11 @@ export async function PUT(request: NextRequest) {
     const employee = await resolveEmployee(parsed.data.employeeId);
     if (!employee) {
       return NextResponse.json(
-        { error: "No se encontró el técnico en Wispro" },
+        { error: "No se encontró el técnico" },
         { status: 404 },
       );
     }
 
-    await reassignHelpDeskIssue({
-      issueId: existing.wisproIssueId,
-      employeeId: employee.id,
-    });
-    void upsertCrmTechnicianFromEmployee(supabase, employee).catch((error) => {
-      console.warn("[CASOS] technician_upsert_failed", error);
-    });
     const caso = await patchCrmWisproCaso(supabase, existing.wisproIssueId, {
       employeeId: employee.id,
       employeeName: employee.name,
@@ -500,7 +541,6 @@ export async function PUT(request: NextRequest) {
         facadeMediaUrl: null,
         hasFacade: Boolean(caso.hasFacade || caso.facadeMediaUrl),
       },
-      wispro: { ok: true },
     });
   } catch (error) {
     if (error instanceof FinalizeCasoError) {

@@ -28,8 +28,8 @@ const loadCrmTechnicianNames = async (
 ): Promise<NamedEmployee[]> => {
   const { data, error } = await supabase
     .from("crm_technicians")
-    .select("employee_id, name")
-    .not("employee_id", "is", null)
+    .select("employee_id, id, name")
+    .eq("active", true)
     .limit(500);
 
   if (error) {
@@ -39,7 +39,7 @@ const loadCrmTechnicianNames = async (
 
   return (data || [])
     .map((row) => ({
-      id: String(row.employee_id || "").trim(),
+      id: String(row.employee_id || row.id || "").trim(),
       name: String(row.name || "").trim(),
     }))
     .filter((item) => item.id && item.name);

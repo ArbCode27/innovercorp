@@ -40,6 +40,7 @@ export type CrmView =
   | "labels"
   | "agents"
   | "supervisors"
+  | "technicians"
   | "settings";
 
 export type ConversationFilter = "all" | "unread" | "bot" | "human";
@@ -356,5 +357,31 @@ export interface UpsertSupervisorInput {
   name: string;
   phone: string;
   wisproEmployeeId?: string | null;
+  active?: boolean;
+}
+
+export interface Technician {
+  id: string;
+  employeeId: string;
+  name: string;
+  document: string | null;
+  documentLast4: string | null;
+  phone: string | null;
+  phoneLast10: string | null;
+  whatsappPhone: string | null;
+  whatsappPhoneLast10: string | null;
+  active: boolean;
+  notes: string | null;
+  createdBy: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UpsertTechnicianInput {
+  id?: string;
+  name: string;
+  whatsappPhone: string;
+  document?: string | null;
+  notes?: string | null;
   active?: boolean;
 }

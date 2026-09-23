@@ -10,6 +10,7 @@ import {
   Trophy,
   Users,
   Wallet,
+  Wrench,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -34,6 +35,7 @@ const SETTINGS_ITEMS: Array<{ id: CrmView; label: string; icon: typeof Users }> 
   { id: "labels", label: "Etiquetas", icon: Tags },
   { id: "agents", label: "Agentes", icon: Bot },
   { id: "supervisors", label: "Gerentes", icon: ShieldCheck },
+  { id: "technicians", label: "Técnicos", icon: Wrench },
   { id: "settings", label: "Ajustes", icon: Settings2 },
 ];
 

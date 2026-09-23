@@ -17,6 +17,7 @@ export const CRM_NAV_ITEMS: Array<{
   { id: "labels", label: "Etiquetas" },
   { id: "agents", label: "Agentes" },
   { id: "supervisors", label: "Gerentes" },
+  { id: "technicians", label: "Técnicos" },
   { id: "settings", label: "Ajustes" },
 ];
 

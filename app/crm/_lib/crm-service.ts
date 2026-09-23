@@ -24,6 +24,8 @@ import type {
   UpsertAgentInput,
   Supervisor,
   UpsertSupervisorInput,
+  Technician,
+  UpsertTechnicianInput,
 } from "./types";
 import {
   EMPTY_AI_RECOVERY_MESSAGES,
@@ -730,5 +732,81 @@ export const crmService = {
       throw new Error(data.error || "No se pudo cambiar el estado del gerente");
     }
     return data.supervisor as Supervisor;
+  },
+
+  async listTechnicians(agentId: number): Promise<Technician[]> {
+    const response = await fetch(`/api/crm/technicians?agent_id=${agentId}`);
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "No se pudieron cargar los técnicos");
+    }
+    return (data.technicians || []) as Technician[];
+  },
+
+  async upsertTechnician(
+    input: UpsertTechnicianInput,
+    agentId: number,
+  ): Promise<Technician> {
+    const isEditing = Boolean(input.id);
+    const method = isEditing ? "PATCH" : "POST";
+    const response = await fetch("/api/crm/technicians", {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        agent_id: agentId,
+        id: input.id,
+        name: input.name,
+        whatsapp_phone: input.whatsappPhone,
+        document: input.document,
+        notes: input.notes,
+        active: input.active,
+      }),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "No se pudo guardar el técnico");
+    }
+    return data.technician as Technician;
+  },
+
+  async toggleTechnicianStatus(
+    technician: Technician,
+    agentId: number,
+  ): Promise<Technician> {
+    const response = await fetch("/api/crm/technicians", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        agent_id: agentId,
+        id: technician.id,
+        active: !technician.active,
+      }),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "No se pudo cambiar el estado del técnico");
+    }
+    return data.technician as Technician;
+  },
+
+  async deleteTechnician(
+    technicianId: string,
+    agentId: number,
+  ): Promise<void> {
+    const response = await fetch("/api/crm/technicians", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        agent_id: agentId,
+        id: technicianId,
+      }),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "No se pudo eliminar el técnico");
+    }
   },
 };

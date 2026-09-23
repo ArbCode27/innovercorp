@@ -66,8 +66,24 @@ export const finalizeCrmWisproCaso = async (
       .join("\n") ||
     null;
 
-  const issue = await closeHelpDeskIssue(existing.wisproIssueId);
-  const order = await closeWorkOrderIfPresent(existing.wisproOrderId);
+  let issue = null;
+  let order = null;
+  try {
+    if (existing.wisproIssueId && !existing.wisproIssueId.includes("-")) {
+      issue = await closeHelpDeskIssue(existing.wisproIssueId);
+    }
+  } catch (error) {
+    console.warn("[FINALIZE] wispro_close_issue_skipped", error);
+  }
+
+  try {
+    if (existing.wisproOrderId && !existing.wisproOrderId.startsWith("order-")) {
+      order = await closeWorkOrderIfPresent(existing.wisproOrderId);
+    }
+  } catch (error) {
+    console.warn("[FINALIZE] wispro_close_order_skipped", error);
+  }
+
   const now = new Date().toISOString();
   const caso = await patchCrmWisproCaso(supabase, existing.wisproIssueId, {
     status: "done",

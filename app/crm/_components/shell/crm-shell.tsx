@@ -16,6 +16,7 @@ import { LabelsView } from "../labels/labels-view";
 import { QuickRepliesView } from "../quick-replies/quick-replies-view";
 import { SettingsView } from "../settings/settings-view";
 import { SupervisorsView } from "../supervisors/supervisors-view";
+import { TechniciansView } from "../technicians/technicians-view";
 import { PaymentsView } from "../payments/payments-view";
 import { TicketsView } from "../tickets/tickets-view";
 import { PerformanceView } from "../performance/performance-view";
@@ -257,6 +258,9 @@ export const CrmShell = () => {
             ) : null}
             {activeView === "supervisors" && auth.agent ? (
               <SupervisorsView currentAgent={auth.agent} />
+            ) : null}
+            {activeView === "technicians" && auth.agent ? (
+              <TechniciansView currentAgent={auth.agent} />
             ) : null}
             {activeView === "settings" ? (
               <SettingsView

@@ -40,6 +40,8 @@ const optionalUuid = emptyToNull.refine(
   "UUID inválido",
 );
 
+const optionalStringId = emptyToNull;
+
 export const gpsSchema = z
   .object({
     street: z.string().trim().optional().nullable(),
@@ -78,27 +80,27 @@ export const createCasoSchema = z.object({
   title: z.string().trim().min(1, "El título es obligatorio").max(80),
   description: z.string().trim().min(1, "La descripción es obligatoria"),
   priority: z.enum(TICKET_PRIORITIES).default("medium"),
-  categoryId: z.string().uuid("Categoría inválida"),
-  clientId: optionalUuid,
-  contractId: optionalUuid,
-  assignableId: optionalUuid,
+  categoryId: z.string().trim().min(1, "Categoría requerida"),
+  clientId: optionalStringId,
+  contractId: optionalStringId,
+  assignableId: optionalStringId,
   generateOrder: z.boolean().default(true),
   kind: z.enum(ORDER_KINDS).default("technical"),
   orderDescription: z.string().trim().optional().nullable(),
   startAt: z.string().trim().optional().nullable(),
   endAt: z.string().trim().optional().nullable(),
-  employeeId: optionalUuid,
+  employeeId: optionalStringId,
   gps: gpsSchema,
   ...crmFichaFields,
 });
 
 export const editCasoSchema = z.object({
-  issueId: z.string().uuid("Ticket inválido"),
+  issueId: z.string().trim().min(1, "Ticket inválido"),
   title: z.string().trim().min(1, "El título es obligatorio").max(100),
   cause: z.string().trim().optional().nullable(),
   description: z.string().trim().optional().nullable(),
   priority: z.enum(TICKET_PRIORITIES),
-  employeeId: z.string().trim().optional().nullable(),
+  employeeId: optionalStringId,
   addressText: z.string().trim().optional().nullable(),
   mapsUrl: z.string().trim().optional().nullable(),
   windowStart: z.string().trim().optional().nullable(),
@@ -109,16 +111,16 @@ export const editCasoSchema = z.object({
 export type EditCasoInput = z.infer<typeof editCasoSchema>;
 
 export const retryCasoSchema = z.object({
-  ticketId: z.string().uuid(),
+  ticketId: z.string().trim().min(1, "Ticket inválido"),
   publicId: z.number().int().optional().nullable(),
   generateOrder: z.boolean().default(true),
-  existingOrderId: z.string().uuid().optional().nullable(),
+  existingOrderId: optionalStringId,
   kind: z.enum(ORDER_KINDS).default("technical"),
   orderDescription: z.string().trim().optional().nullable(),
   startAt: z.string().trim().optional().nullable(),
   endAt: z.string().trim().optional().nullable(),
-  contractId: optionalUuid,
-  employeeId: optionalUuid,
+  contractId: optionalStringId,
+  employeeId: optionalStringId,
   gps: gpsSchema,
   ...crmFichaFields,
 });

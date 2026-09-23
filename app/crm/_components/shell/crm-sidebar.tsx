@@ -15,6 +15,7 @@ import {
   Trophy,
   Users,
   Wallet,
+  Wrench,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -54,6 +55,7 @@ const icons = {
   labels: Tags,
   agents: Bot,
   supervisors: ShieldCheck,
+  technicians: Wrench,
   settings: Settings2,
 } as const;
 

@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { documentDigits, digitsOnly, phoneLast10 } from "./phone-match";
 import {
@@ -27,6 +28,7 @@ export type CrmTechnician = {
   id: string;
   employeeId: string;
   name: string;
+  document?: string | null;
   documentLast4: string | null;
   phone: string | null;
   phoneLast10: string | null;
@@ -35,6 +37,10 @@ export type CrmTechnician = {
   whatsappVerifiedAt: string | null;
   whatsappVerificationMethod: string | null;
   active: boolean;
+  notes?: string | null;
+  createdBy?: number | null;
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 type MatchedEmployee = {
@@ -92,8 +98,9 @@ const toE164Digits = (value: string | null | undefined) => {
 
 const fromTechnicianRow = (row: Record<string, unknown>): CrmTechnician => ({
   id: String(row.id),
-  employeeId: String(row.employee_id),
+  employeeId: String(row.employee_id || row.id),
   name: String(row.name || "Técnico"),
+  document: (row.document as string | null) ?? null,
   documentLast4: (row.document_last4 as string | null) ?? null,
   phone: (row.phone_e164 as string | null) ?? null,
   phoneLast10: (row.phone_last10 as string | null) ?? null,
@@ -103,6 +110,10 @@ const fromTechnicianRow = (row: Record<string, unknown>): CrmTechnician => ({
   whatsappVerificationMethod:
     (row.whatsapp_verification_method as string | null) ?? null,
   active: row.active !== false,
+  notes: (row.notes as string | null) ?? null,
+  createdBy: row.created_by == null ? null : Number(row.created_by),
+  createdAt: row.created_at ? String(row.created_at) : undefined,
+  updatedAt: row.updated_at ? String(row.updated_at) : undefined,
 });
 
 const toIdentityRow = (technician: CrmTechnician): TechnicianIdentityRow => ({
@@ -316,6 +327,216 @@ export const findCrmTechnician = async (
   }
 
   return null;
+};
+
+export type UpsertTechnicianInput = {
+  id?: string;
+  name: string;
+  whatsappPhone: string;
+  document?: string | null;
+  notes?: string | null;
+  active?: boolean;
+};
+
+export const normalizeTechnicianPhoneLast10 = (
+  value: string | null | undefined,
+): string | null => {
+  const digits = digitsOnly(value);
+  if (digits.length < 10) return null;
+  return digits.slice(-10);
+};
+
+export const listAllTechnicians = async (
+  supabase: SupabaseClient,
+): Promise<CrmTechnician[]> => {
+  const { data, error } = await supabase
+    .from("crm_technicians")
+    .select("*")
+    .order("active", { ascending: false })
+    .order("name", { ascending: true });
+
+  if (error) {
+    if (isMissingSchema(error)) return [];
+    throw new Error(error.message || "No se pudieron cargar los técnicos");
+  }
+
+  return (data || []).map((row) =>
+    fromTechnicianRow(row as Record<string, unknown>),
+  );
+};
+
+export const upsertTechnician = async (
+  supabase: SupabaseClient,
+  input: UpsertTechnicianInput,
+  agentId?: number | null,
+): Promise<CrmTechnician> => {
+  const normalizedName = input.name.trim();
+  if (!normalizedName) {
+    throw new Error("El nombre del técnico es requerido");
+  }
+
+  const phoneLast10Val = normalizeTechnicianPhoneLast10(input.whatsappPhone);
+  if (!phoneLast10Val) {
+    throw new Error("El WhatsApp debe tener al menos 10 dígitos");
+  }
+
+  const isActive = input.active !== false;
+
+  if (isActive) {
+    const { data: existingActive } = await supabase
+      .from("crm_technicians")
+      .select("id, name")
+      .eq("whatsapp_phone_last10", phoneLast10Val)
+      .eq("active", true)
+      .maybeSingle();
+
+    if (existingActive && (!input.id || existingActive.id !== input.id)) {
+      throw new Error(
+        `Ya existe un técnico activo (${existingActive.name}) con este número de WhatsApp.`,
+      );
+    }
+  }
+
+  const digits = documentDigits(input.document);
+  const docLast4 = documentLast4(input.document);
+  const secret = resolveTechnicianHmacSecret();
+  const docHash =
+    secret && digits ? hashTechnicianDocument(digits, secret) : null;
+  const now = new Date().toISOString();
+  const e164 = `+58${phoneLast10Val}`;
+
+  if (input.id) {
+    const patchPayload: Record<string, unknown> = {
+      name: normalizedName,
+      whatsapp_phone_last10: phoneLast10Val,
+      whatsapp_phone_e164: e164,
+      phone_last10: phoneLast10Val,
+      phone_e164: e164,
+      document: input.document?.trim() || null,
+      document_last4: docLast4,
+      active: isActive,
+      notes: input.notes?.trim() || null,
+      updated_at: now,
+    };
+    if (docHash) {
+      patchPayload.document_hash = docHash;
+    }
+
+    const { data, error } = await supabase
+      .from("crm_technicians")
+      .update(patchPayload)
+      .eq("id", input.id)
+      .select("*")
+      .single();
+
+    if (error) {
+      if (error.code === "23505") {
+        throw new Error("Ya existe un técnico con este número o datos únicos.");
+      }
+      throw new Error(error.message || "No se pudo actualizar el técnico");
+    }
+
+    return fromTechnicianRow(data as Record<string, unknown>);
+  }
+
+  const employeeId = randomUUID();
+  const insertPayload: Record<string, unknown> = {
+    employee_id: employeeId,
+    name: normalizedName,
+    whatsapp_phone_last10: phoneLast10Val,
+    whatsapp_phone_e164: e164,
+    phone_last10: phoneLast10Val,
+    phone_e164: e164,
+    document: input.document?.trim() || null,
+    document_last4: docLast4,
+    document_hash: docHash,
+    active: isActive,
+    notes: input.notes?.trim() || null,
+    created_by: agentId ?? null,
+    created_at: now,
+    updated_at: now,
+  };
+
+  const { data, error } = await supabase
+    .from("crm_technicians")
+    .insert(insertPayload)
+    .select("*")
+    .single();
+
+  if (error) {
+    if (error.code === "23505") {
+      throw new Error(
+        "Ya existe un técnico con este número de WhatsApp o identificación.",
+      );
+    }
+    throw new Error(error.message || "No se pudo crear el técnico");
+  }
+
+  return fromTechnicianRow(data as Record<string, unknown>);
+};
+
+export const toggleTechnicianStatus = async (
+  supabase: SupabaseClient,
+  technicianId: string,
+): Promise<CrmTechnician> => {
+  const { data: current, error: fetchError } = await supabase
+    .from("crm_technicians")
+    .select("*")
+    .eq("id", technicianId)
+    .single();
+
+  if (fetchError || !current) {
+    throw new Error("Técnico no encontrado");
+  }
+
+  const nextActive = !current.active;
+  if (nextActive && current.whatsapp_phone_last10) {
+    const { data: conflict } = await supabase
+      .from("crm_technicians")
+      .select("id, name")
+      .eq("whatsapp_phone_last10", current.whatsapp_phone_last10)
+      .eq("active", true)
+      .neq("id", technicianId)
+      .maybeSingle();
+
+    if (conflict) {
+      throw new Error(
+        `No se puede activar: el número de WhatsApp ya está en uso por ${conflict.name}.`,
+      );
+    }
+  }
+
+  const { data, error } = await supabase
+    .from("crm_technicians")
+    .update({
+      active: nextActive,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", technicianId)
+    .select("*")
+    .single();
+
+  if (error) {
+    throw new Error(
+      error.message || "No se pudo actualizar el estado del técnico",
+    );
+  }
+
+  return fromTechnicianRow(data as Record<string, unknown>);
+};
+
+export const deleteTechnician = async (
+  supabase: SupabaseClient,
+  technicianId: string,
+): Promise<void> => {
+  const { error } = await supabase
+    .from("crm_technicians")
+    .delete()
+    .eq("id", technicianId);
+
+  if (error) {
+    throw new Error(error.message || "No se pudo eliminar el técnico");
+  }
 };
 
 const loadConversationIdentity = async (
