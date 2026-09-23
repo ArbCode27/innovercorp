@@ -58,7 +58,7 @@ const TICKET_LIST_SCOPE_RE =
   /\b(pendiente(s)?|ruta|lote|asignad[oa]s?|listado|todos(?:\s+los)?(?:\s+tickets)?|mis\s+(tickets|casos|pendientes)|los\s+tickets|(?:tickets?|casos?|pendientes?|visitas?|cola|rutas?)\s+(?:del?\s+|para(?:\s+el)?\s+|de\s+)?(?:(?:este\s+)?d[ií]a(?:\s+(?:de\s+)?(?:hoy|mañana|ayer))?|hoy|mañana|ayer|ahora|esta\s+semana|este\s+mes))\b/i;
 
 const TICKET_DETAIL_KEYWORD_RE =
-  /\b(detalle|ficha|completo|m[aá]s\s+(datos|info|informaci[oó]n)|foto(?:s)?\s+d(?:e|el|la)|fachada)\b/i;
+  /\b(detalle|ficha|(?:datos|info|informaci[oó]n|ficha)\s+complet[oa]s?|ver\s+completo|m[aá]s\s+(datos|info|informaci[oó]n)|foto(?:s)?\s+d(?:e|el|la)|fachada)\b/i;
 
 const TICKET_DETAIL_PUBLIC_ID_RE =
   /#\s*(\d{3,})\b|\b(?:ticket|caso)\s+#?\s*(\d{3,})\b/i;
@@ -123,6 +123,34 @@ const looksLikeFinalizeClientName = (value: string) => {
   return FINALIZE_NAME_RE.test(rest);
 };
 
+export const looksLikeTechnicianObservationReport = (
+  value: string | null | undefined,
+): boolean => {
+  const text = String(value || "").toLowerCase();
+  if (!text) return false;
+  return (
+    /\b(?:reemplaz[oóeé]|cambi[oóeé]|instal[oóeé]|repar[oóeé]|arregl[oóeé]|empalme|fusi[oó]n|conector|potencia|atenuaci[oó]n|dbm|figura|roseta|patchcord|ont|router|partid[oa]|dañad[oa]|averiad[oa]|operativ[oa]|conforme|navegando)\b/i.test(
+      text,
+    )
+  );
+};
+
+export const looksLikeTechnicianFinalizePrompt = (
+  value: string | null | undefined,
+): boolean => {
+  const text = String(value || "").toLowerCase();
+  if (!text) return false;
+  return (
+    /para\s+cerrar\b/i.test(text) ||
+    (/\b(?:cerrar|cierre)\b/i.test(text) &&
+      /\b(?:observaci[oó]n|trabajo|diagn[oó]stico|soluci[oó]n|ind[ií]came|reporte|sitio|servicio)\b/i.test(
+        text,
+      )) ||
+    (/\b(?:observaci[oó]n|trabajo\s+realizado)\b/i.test(text) &&
+      /\b(?:ticket|caso)\b/i.test(text))
+  );
+};
+
 export const looksLikeOtpCode = (value: string | null | undefined) => {
   const text = String(value || "").trim();
   if (!text) return false;
@@ -162,7 +190,7 @@ export const parseTechnicianTicketDetailQuery = (
   }
 
   let clientName: string | null = null;
-  if (publicId == null) {
+  if (publicId == null && !looksLikeTechnicianObservationReport(text)) {
     const rest = text
       .replace(TICKET_DETAIL_KEYWORD_RE, " ")
       .replace(DETAIL_NAME_NOISE_RE, " ")
@@ -278,6 +306,9 @@ export const looksLikeTechnicianTicketDetailRequest = (
   ) {
     return false;
   }
+  if (looksLikeTechnicianObservationReport(text)) {
+    return false;
+  }
   const hasListScope = TICKET_LIST_SCOPE_RE.test(text);
   const hasDetailKeyword = TICKET_DETAIL_KEYWORD_RE.test(text);
   if (hasListScope && !hasDetailKeyword) return false;
@@ -287,11 +318,15 @@ export const looksLikeTechnicianTicketDetailRequest = (
   ) {
     return false;
   }
-  if (hasDetailKeyword) return true;
 
   const query = parseTechnicianTicketDetailQuery(text);
   if (query.publicId != null || query.listIndex != null) return true;
   if (query.clientName) return true;
+
+  // A bare detail keyword without a specific target is only a request if it's a short command
+  const words = text.split(/\s+/).filter(Boolean);
+  if (hasDetailKeyword && words.length <= 6) return true;
+
   return false;
 };
 
@@ -497,6 +532,7 @@ export const shouldDeliverTechnicianTickets = (input: {
   isSupervisor?: boolean;
 }) => {
   if (looksLikeTechnicianFinalizeRequest(input.inboundText)) return false;
+  if (looksLikeTechnicianObservationReport(input.inboundText)) return false;
   if (input.isSupervisor) {
     return looksLikeSupervisorOwnTicketsRequest(input.inboundText);
   }

@@ -419,6 +419,7 @@ Flujo obligatorio de soporte técnico:
 Tickets y técnicos:
 - Si identidad dice rol=tecnico_wispro: la cola inyectada es la fuente de verdad. No la reenvíes ni ofrezcas el listado salvo que pida pendientes/reenviar/siguiente.
 - Intención informal de cierre (esa de sandra, ya esa, listo esa visita, finaliza key): llama finalize_my_ticket con client_name o public_id de la cola. No pidas el número si hay un match único o un solo pendiente.
+- Si previamente le pediste al técnico la observación o trabajo realizado para cerrar un ticket y el técnico responde (en texto o nota de voz), toma esa respuesta como observation y llama finalize_my_ticket inmediatamente con el client_name o public_id del caso que se estaba cerrando.
 - Si rol=supervisor_wispro: NO uses list_my_pending_tickets ni finalize_my_ticket salvo que pida SU propia cola. Para Joel/Alan u otro técnico llama get_technician_assigned_tickets. Si delivered=true, no escribas nada más.
 - Si pide pendientes/hoy/ruta/listado: llama list_my_pending_tickets (solo nombres, títulos y ubicaciones; sin fotos). Si delivered=true, no escribas nada más.
 - Si pide detalle/ficha/foto de un caso, o nombra uno de la lista (tania, el 3, #1842): llama get_my_ticket_detail. Si delivered=true, no escribas nada más.

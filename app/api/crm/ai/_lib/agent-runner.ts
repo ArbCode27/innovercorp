@@ -32,6 +32,7 @@ import {
   formatTechnicianAgentQueue,
   formatTechnicianWelcome,
   looksLikeCustomerPaymentOverride,
+  looksLikeTechnicianFinalizePrompt,
   looksLikeTechnicianListOffer,
   looksLikeTechnicianRoleClaim,
   looksLikeTechnicianTicketRequest,
@@ -606,32 +607,47 @@ export const runAiAgent = async (input: {
     input.onBeforeLongRunningWork?.();
     const isSupervisor = Boolean(employee.isSupervisor);
     const lastOutbound = getLatestOutboundMessage(input.messages);
-    const listOfferPending = looksLikeTechnicianListOffer(
-      [lastOutbound?.content, lastOutbound?.caption]
-        .map((value) => String(value || "").trim())
-        .filter(Boolean)
-        .join(" "),
-    );
+    const lastOutboundText = [lastOutbound?.content, lastOutbound?.caption]
+      .map((value) => String(value || "").trim())
+      .filter(Boolean)
+      .join(" ");
+    const listOfferPending = looksLikeTechnicianListOffer(lastOutboundText);
+    const finalizePromptPending =
+      looksLikeTechnicianFinalizePrompt(lastOutboundText);
+    const isAudioInbound =
+      String(latestInbound?.media_type || "").toLowerCase() === "audio";
+
     const shouldDeliverDetail =
       !isSupervisor &&
+      !finalizePromptPending &&
+      !isAudioInbound &&
       shouldDeliverTechnicianTicketDetail({
         inboundText,
       });
-    const shouldDeliver = shouldDeliverTechnicianTickets({
-      justVerified: Boolean(session?.justVerified),
-      inboundText,
-      inboundIsCedula: looksLikeCedula(inboundText) || Boolean(inboundCedula),
-      listOfferPending,
-      isSupervisor,
-    });
-    const shouldDeliverMonitored = shouldDeliverMonitoredTechnicianQueue({
-      isSupervisor,
-      inboundText,
-    });
-    const shouldDeliverTeam = shouldDeliverSupervisorTeamTickets({
-      isSupervisor,
-      inboundText,
-    });
+    const shouldDeliver =
+      !finalizePromptPending &&
+      !isAudioInbound &&
+      shouldDeliverTechnicianTickets({
+        justVerified: Boolean(session?.justVerified),
+        inboundText,
+        inboundIsCedula: looksLikeCedula(inboundText) || Boolean(inboundCedula),
+        listOfferPending,
+        isSupervisor,
+      });
+    const shouldDeliverMonitored =
+      !finalizePromptPending &&
+      !isAudioInbound &&
+      shouldDeliverMonitoredTechnicianQueue({
+        isSupervisor,
+        inboundText,
+      });
+    const shouldDeliverTeam =
+      !finalizePromptPending &&
+      !isAudioInbound &&
+      shouldDeliverSupervisorTeamTickets({
+        isSupervisor,
+        inboundText,
+      });
 
     if (shouldDeliverMonitored) {
       if (!phone) {

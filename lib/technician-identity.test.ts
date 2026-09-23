@@ -4,9 +4,11 @@ import {
   formatTechnicianWelcome,
   looksLikeBareTechnicianGreeting,
   looksLikeOtpCode,
+  looksLikeTechnicianFinalizePrompt,
   looksLikeTechnicianFinalizeRequest,
   looksLikeTechnicianListOffer,
   looksLikeTechnicianNextPage,
+  looksLikeTechnicianObservationReport,
   looksLikeTechnicianOfferAccept,
   looksLikeTechnicianResend,
   looksLikeTechnicianTicketRequest,
@@ -690,6 +692,60 @@ describe("technician inbound helpers", () => {
           }),
         ).toBe(false);
       }
+    });
+
+    describe("technician ticket finalization observation & audio routing", () => {
+      it("detects bot prompt waiting for closing observation", () => {
+        expect(
+          looksLikeTechnicianFinalizePrompt(
+            "Para cerrar el ticket de **Luismar Martinez**, ¿podrías indicarme brevemente qué trabajo realizaste en sitio? (puede ser por texto o nota de voz) 😊",
+          ),
+        ).toBe(true);
+        expect(
+          looksLikeTechnicianFinalizePrompt(
+            "Para cerrar #2004 (Jeiderlin Sevilla), indícame brevemente la observación o trabajo realizado.",
+          ),
+        ).toBe(true);
+        expect(
+          looksLikeTechnicianFinalizePrompt(
+            "Para cerrar el ticket de **Jeiderlin Sevilla (#2004)** necesito que me indiques brevemente:",
+          ),
+        ).toBe(true);
+        expect(
+          looksLikeTechnicianFinalizePrompt(
+            "Hola José Pérez. Te identifiqué como técnico. ¿Quieres que te envíe tu listado de tickets pendientes?",
+          ),
+        ).toBe(false);
+        expect(
+          looksLikeTechnicianFinalizePrompt("Tienes 1 ticket pendiente:"),
+        ).toBe(false);
+      });
+
+      it("detects technician observation reports and prevents misrouting to ticket detail", () => {
+        const observationReports = [
+          "La figura (conector óptico) estaba partida, se cambió la figura del cliente, servicio quedó operativo en 26.60",
+          "Buenas tardes, ya cambié la fibra partida y el servicio quedó operativo y conforme",
+          "Se reemplazó roseta averiada, potencia en -22 dBm",
+          "Se cambió la figura óptica que estaba rota, trabajo completo y funcionando con potencia de -21 dBm",
+          "Buenas tardes amigo, ya se terminó el servicio de Luismar, todo completo y navegando",
+        ];
+
+        for (const report of observationReports) {
+          expect(looksLikeTechnicianObservationReport(report)).toBe(true);
+          expect(looksLikeTechnicianTicketDetailRequest(report)).toBe(false);
+          expect(
+            shouldDeliverTechnicianTicketDetail({ inboundText: report }),
+          ).toBe(false);
+          expect(
+            shouldDeliverTechnicianTickets({
+              justVerified: false,
+              inboundText: report,
+              inboundIsCedula: false,
+            }),
+          ).toBe(false);
+          expect(parseTechnicianTicketDetailQuery(report).clientName).toBeNull();
+        }
+      });
     });
   });
 });
