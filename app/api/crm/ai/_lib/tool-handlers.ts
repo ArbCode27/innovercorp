@@ -1602,27 +1602,22 @@ const handleFinalizeMyTicket = async (
       target.wisproPublicId != null ? `#${target.wisproPublicId}` : "el ticket";
 
     const observation = parsed.data.observation?.trim();
-    const solution = parsed.data.solution?.trim();
-    const clientStatus = parsed.data.client_status?.trim();
+    const solution = parsed.data.solution?.trim() || null;
+    const clientStatus = parsed.data.client_status?.trim() || null;
 
-    if (!observation || !solution || !clientStatus) {
-      const missingList: string[] = [];
-      if (!observation) missingList.push("1. Observación o diagnóstico del caso");
-      if (!solution) missingList.push("2. Cómo lo resolviste (solución técnica)");
-      if (!clientStatus) missingList.push("3. Estado en que quedó el cliente/servicio (ej: operativo y conforme)");
-
+    if (!observation) {
       return {
         name: FINALIZE_MY_TICKET_TOOL,
         ok: true,
         stopAgent: true,
-        directReply: `Para cerrar ${ticketLabel} (${target.clientName || "Cliente"}), por favor indícame:\n${missingList.join("\n")}`,
+        directReply: `Para cerrar ${ticketLabel} (${target.clientName || "Cliente"}), indícame brevemente la observación o trabajo realizado.`,
         response: {
           ok: false,
           closed: false,
           public_id: target.wisproPublicId,
           client_name: target.clientName,
           needs_resolution_details: true,
-          hint: "Faltan los datos obligatorios de cierre. Pídeselos al técnico en una sola frase clara antes de cerrar.",
+          hint: "Falta la observación de cierre. Pídesela al técnico en una sola frase breve antes de cerrar.",
         },
       };
     }
@@ -1648,7 +1643,7 @@ const handleFinalizeMyTicket = async (
     });
 
     const orderWarning =
-      result.order.ok === false
+      result.order?.ok === false
         ? " El ticket se cerró, pero la orden Wispro no se pudo finalizar."
         : "";
 
@@ -1656,14 +1651,14 @@ const handleFinalizeMyTicket = async (
       name: FINALIZE_MY_TICKET_TOOL,
       ok: true,
       stopAgent: true,
-      directReply: `Listo. Cerré ${ticketLabel} (${target.clientName || "Cliente"}) en el CRM y en Wispro con la observación y solución registradas.${orderWarning}`,
+      directReply: `Listo. Cerré ${ticketLabel} (${target.clientName || "Cliente"}) en el CRM y en Wispro con la observación registrada.${orderWarning}`,
       response: {
         ok: true,
         closed: true,
         public_id: target.wisproPublicId,
         client_name: target.clientName,
-        wispro_state: result.issue.state,
-        order_closed: result.order.ok,
+        wispro_state: result.issue?.state || "closed",
+        order_closed: result.order?.ok ?? null,
         observation,
         solution,
         client_status: clientStatus,

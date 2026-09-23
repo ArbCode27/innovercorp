@@ -3,6 +3,7 @@ import {
   finalizeCrmWisproCaso,
   FinalizeCasoError,
 } from "./finalize-crm-caso";
+import { finalizeCasoFormSchema } from "../app/crm/_lib/wispro-caso-schema";
 import {
   matchPendingCasosForTechnician,
   matchTechnicianTicketDetail,
@@ -234,5 +235,68 @@ describe("finalizeCrmWisproCaso", () => {
         employeeId: "tech-2",
       }),
     ).rejects.toMatchObject({ code: "forbidden" });
+  });
+
+  it("finalizes a ticket with a single observation without requiring solution or client status", async () => {
+    let upsertPayload: Record<string, unknown> | null = null;
+    const mockSupabase = {
+      from: vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            maybeSingle: vi.fn().mockResolvedValue({
+              data: {
+                id: "case-1",
+                wispro_issue_id: "issue-1",
+                employee_id: "tech-1",
+                status: "scheduled",
+              },
+              error: null,
+            }),
+          }),
+        }),
+        upsert: vi.fn().mockImplementation((payload) => {
+          upsertPayload = payload;
+          return {
+            select: vi.fn().mockReturnValue({
+              single: vi.fn().mockResolvedValue({
+                data: {
+                  ...payload,
+                  id: "case-1",
+                  status: "done",
+                },
+                error: null,
+              }),
+            }),
+          };
+        }),
+      }),
+    } as unknown as SupabaseClient;
+
+    const res = await finalizeCrmWisproCaso(mockSupabase, {
+      issueId: "issue-1",
+      employeeId: "tech-1",
+      resolutionObservation: "Se cambió figura óptica partida, potencia en -26.60 dBm",
+    });
+
+    expect(res.caso.status).toBe("done");
+    expect(upsertPayload).toMatchObject({
+      status: "done",
+      resolution_observation: "Se cambió figura óptica partida, potencia en -26.60 dBm",
+      resolution_notes: "Observación: Se cambió figura óptica partida, potencia en -26.60 dBm",
+    });
+  });
+
+  it("validates form schema with only a single observation", () => {
+    const valid = finalizeCasoFormSchema.safeParse({
+      issueId: "issue-1",
+      resolutionObservation: "Se cambió conector óptico y quedó operativo",
+    });
+    expect(valid.success).toBe(true);
+
+    const invalid = finalizeCasoFormSchema.safeParse({
+      issueId: "issue-1",
+      resolutionObservation: "",
+    });
+    expect(invalid.success).toBe(false);
   });
 });

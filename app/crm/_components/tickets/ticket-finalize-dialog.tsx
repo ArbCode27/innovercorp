@@ -114,8 +114,7 @@ export const TicketFinalizeDialog = ({
         <DialogHeader>
           <DialogTitle>Finalizar y Verificar Ticket {ticketNumber}</DialogTitle>
           <DialogDescription>
-            Para corroborar que el soporte técnico se realizó correctamente, es obligatorio
-            registrar el diagnóstico, la solución aplicada y el estado final del cliente.
+            Registra la observación o reporte del soporte técnico realizado para finalizar y verificar el ticket.
           </DialogDescription>
         </DialogHeader>
 
@@ -136,13 +135,13 @@ export const TicketFinalizeDialog = ({
 
           <div className="space-y-1.5">
             <Label htmlFor="finalize-observation" className="text-sm font-medium">
-              1. Observación / Diagnóstico en sitio <span className="text-destructive">*</span>
+              Observación / Reporte técnico <span className="text-destructive">*</span>
             </Label>
             <Textarea
               id="finalize-observation"
-              rows={3}
-              placeholder="Ej: Pérdida óptica por conector mecánico quebrado en roseta, potencia en -31 dBm..."
-              aria-label="Observación o diagnóstico del caso"
+              rows={4}
+              placeholder="Ej: Se reemplazó figura óptica partida, empalme verificado y potencia normalizada en -26.60 dBm..."
+              aria-label="Observación o reporte técnico del caso"
               {...form.register("resolutionObservation")}
             />
             {form.formState.errors.resolutionObservation ? (
@@ -151,39 +150,17 @@ export const TicketFinalizeDialog = ({
               </p>
             ) : (
               <p className={`text-[11px] ${CRM_SURFACES.textMuted}`}>
-                Describe la causa real o el problema detectado al llegar al domicilio.
-              </p>
-            )}
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="finalize-solution" className="text-sm font-medium">
-              2. Solución técnica aplicada <span className="text-destructive">*</span>
-            </Label>
-            <Textarea
-              id="finalize-solution"
-              rows={3}
-              placeholder="Ej: Se rehizo empalme mecánico, se limpió fibra y potencia quedó normalizada en -19 dBm..."
-              aria-label="Solución técnica aplicada"
-              {...form.register("resolutionSolution")}
-            />
-            {form.formState.errors.resolutionSolution ? (
-              <p className="text-xs text-destructive">
-                {form.formState.errors.resolutionSolution.message}
-              </p>
-            ) : (
-              <p className={`text-[11px] ${CRM_SURFACES.textMuted}`}>
-                Describe detalladamente qué trabajo o reemplazo se llevó a cabo.
+                Describe la observación del técnico y el trabajo realizado en sitio.
               </p>
             )}
           </div>
 
           <div className="space-y-1.5">
             <Label htmlFor="finalize-status" className="text-sm font-medium">
-              3. Estado del cliente / servicio <span className="text-destructive">*</span>
+              Estado del cliente / servicio
             </Label>
             <Select
-              value={selectedStatus}
+              value={selectedStatus || "Operativo y conforme"}
               onValueChange={(value) => form.setValue("clientStatus", value, { shouldValidate: true })}>
               <SelectTrigger id="finalize-status" aria-label="Estado del cliente">
                 <SelectValue placeholder="Selecciona el estado..." />
@@ -202,7 +179,7 @@ export const TicketFinalizeDialog = ({
               </p>
             ) : (
               <p className={`text-[11px] ${CRM_SURFACES.textMuted}`}>
-                Indica si el servicio quedó operativo y si el cliente confirmó su conformidad.
+                Indica cómo quedó el cliente y la conformidad del servicio.
               </p>
             )}
           </div>

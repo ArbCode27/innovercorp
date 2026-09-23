@@ -143,15 +143,19 @@ export const finalizeCasoFormSchema = z.object({
   resolutionObservation: z
     .string()
     .trim()
-    .min(3, "La observación o diagnóstico es requerida"),
+    .min(3, "La observación o reporte de cierre es requerido"),
   resolutionSolution: z
     .string()
     .trim()
-    .min(3, "La descripción de la solución es requerida"),
+    .optional()
+    .nullable()
+    .or(z.literal("")),
   clientStatus: z
     .string()
     .trim()
-    .min(2, "El estado del cliente es requerido"),
+    .optional()
+    .nullable()
+    .or(z.literal("")),
 });
 
 export type FinalizeCasoFormInput = z.infer<typeof finalizeCasoFormSchema>;

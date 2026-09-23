@@ -213,7 +213,7 @@ export const TicketDetailDialog = ({
                 {detail.resolutionObservation ? (
                   <div>
                     <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground block">
-                      Observación / Diagnóstico:
+                      Observación / Reporte:
                     </span>
                     <p className="text-sm font-medium text-foreground">{detail.resolutionObservation}</p>
                   </div>
