@@ -47,6 +47,8 @@ export const formatWindow = (start: string | null, end: string | null) => {
   }
 };
 
+export const FACADE_IMAGE_CAPTION = "Fachada del cliente";
+
 export const formatTechnicianCaption = (caso: TechnicianReportCaso) => {
   const ticket =
     caso.wisproPublicId != null ? `#${caso.wisproPublicId}` : "Ticket";
@@ -75,6 +77,12 @@ export const formatTechnicianCaption = (caso: TechnicianReportCaso) => {
     ? caption
     : caption.slice(0, TECHNICIAN_CAPTION_MAX - 1);
 };
+
+export const buildTechnicianTicketCardPlan = (caso: TechnicianReportCaso) => ({
+  text: formatTechnicianCaption(caso),
+  facadeUrl: caso.facadeMediaUrl?.trim() || null,
+  facadeCaption: FACADE_IMAGE_CAPTION,
+});
 
 export type FormatTechnicianListOptions = {
   startIndex?: number;

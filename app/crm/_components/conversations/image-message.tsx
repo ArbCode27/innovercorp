@@ -17,6 +17,17 @@ export const ImageMessage = ({ src, caption }: ImageMessageProps) => {
   const altText = visibleCaption || "Imagen enviada en la conversación";
 
   return (
-    <ImageLightbox src={src} alt={altText} caption={visibleCaption || undefined} />
+    <div className="flex flex-col gap-2">
+      <ImageLightbox
+        src={src}
+        alt={altText}
+        caption={visibleCaption || undefined}
+      />
+      {visibleCaption ? (
+        <p className="whitespace-pre-wrap break-words text-xs leading-relaxed opacity-90">
+          {visibleCaption}
+        </p>
+      ) : null}
+    </div>
   );
 };

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildTechnicianTicketCardPlan,
+  FACADE_IMAGE_CAPTION,
   formatSupervisorTeamTicketsReport,
   formatTechnicianCaption,
   formatTechnicianList,
@@ -28,6 +30,35 @@ describe("formatTechnicianCaption", () => {
     expect(caption).toContain("04123920137");
     expect(caption).toContain("sin internet");
     expect(caption).toContain("https://maps.google.com/?q=10.12,-64.68");
+  });
+
+  it("keeps the ticket ficha as standalone text and the facade as a separate image", () => {
+    const report = {
+      wisproPublicId: 2004,
+      kindLabel: "Visita técnica",
+      clientName: "José Granados",
+      clientPhone: "04121234567",
+      cause: "sin internet",
+      title: "Falla",
+      addressText: "Calle 8",
+      mapsUrl: "https://maps.google.com/?q=10,-64",
+      latitude: 10,
+      longitude: -64,
+      windowStart: null,
+      windowEnd: null,
+      facadeMediaUrl: "https://cdn.example/router.jpg",
+    };
+    const withFacade = buildTechnicianTicketCardPlan(report);
+    expect(withFacade.text).toContain("José Granados");
+    expect(withFacade.text).toContain("Ticket #2004");
+    expect(withFacade.facadeUrl).toBe("https://cdn.example/router.jpg");
+    expect(withFacade.facadeCaption).toBe(FACADE_IMAGE_CAPTION);
+
+    const withoutFacade = buildTechnicianTicketCardPlan({
+      ...report,
+      facadeMediaUrl: "  ",
+    });
+    expect(withoutFacade.facadeUrl).toBeNull();
   });
 });
 

@@ -62,7 +62,9 @@ export const ImageLightbox = ({
             className="mx-auto max-h-[80vh] w-auto max-w-full object-contain"
           />
           {caption ? (
-            <p className="mt-2 text-center text-sm text-white/80">{caption}</p>
+            <p className="mt-2 whitespace-pre-wrap break-words text-left text-sm text-white/80">
+              {caption}
+            </p>
           ) : null}
         </DialogContent>
       </Dialog>

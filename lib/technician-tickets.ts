@@ -29,7 +29,7 @@ import {
 import {
   formatScheduleDateKey,
   formatSupervisorTeamTicketsReport,
-  formatTechnicianCaption,
+  buildTechnicianTicketCardPlan,
   formatTechnicianList,
   type TechnicianReportCaso,
 } from "./technician-report";
@@ -137,43 +137,35 @@ const sendTechnicianTicketCard = async (input: {
   to: string;
   report: TechnicianReportCaso;
 }) => {
-  const caption = formatTechnicianCaption(input.report);
+  const plan = buildTechnicianTicketCardPlan(input.report);
   const metadata = {
     engine: "ai",
     action: "technician_report",
     ticket: input.report.wisproPublicId,
   };
 
-  if (input.report.facadeMediaUrl) {
-    try {
-      await sendWhatsAppImageFromUrl({
-        to: input.to,
-        imageUrl: input.report.facadeMediaUrl,
-        caption,
-        supabase: input.supabase,
-        conversationId: input.conversationId,
-        metadata,
-      });
-      return;
-    } catch {
-      await sendWhatsAppText({
-        to: input.to,
-        body: caption,
-        supabase: input.supabase,
-        conversationId: input.conversationId,
-        metadata: { ...metadata, action: "technician_report_fallback" },
-      });
-      return;
-    }
-  }
-
   await sendWhatsAppText({
     to: input.to,
-    body: caption,
+    body: plan.text,
     supabase: input.supabase,
     conversationId: input.conversationId,
     metadata,
   });
+
+  if (!plan.facadeUrl) return;
+
+  try {
+    await sendWhatsAppImageFromUrl({
+      to: input.to,
+      imageUrl: plan.facadeUrl,
+      caption: plan.facadeCaption,
+      supabase: input.supabase,
+      conversationId: input.conversationId,
+      metadata: { ...metadata, action: "technician_report_facade" },
+    });
+  } catch (error) {
+    console.warn("[TECHNICIAN_TICKETS] facade_image_skipped", error);
+  }
 };
 
 export const deliverTechnicianPendingTickets = async (input: {
