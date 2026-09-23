@@ -136,7 +136,7 @@ export const CLIENT_STATUS_OPTIONS = [
 ] as const;
 
 export const finalizeCasoFormSchema = z.object({
-  issueId: z.string().uuid("Ticket inválido"),
+  issueId: z.string().trim().min(1, "Ticket inválido"),
   resolutionObservation: z
     .string()
     .trim()
@@ -159,15 +159,15 @@ export const manageCasoSchema = z.discriminatedUnion("action", [
   }),
   z.object({
     action: z.literal("reassign"),
-    issueId: z.string().uuid("Ticket inválido"),
-    employeeId: z.string().uuid("Técnico inválido"),
+    issueId: z.string().trim().min(1, "Ticket inválido"),
+    employeeId: z.string().trim().min(1, "Técnico inválido"),
   }),
   editCasoSchema.extend({
     action: z.literal("edit"),
   }),
   z.object({
     action: z.literal("delete"),
-    issueId: z.string().uuid("Ticket inválido"),
+    issueId: z.string().trim().min(1, "Ticket inválido"),
   }),
 ]);
 

@@ -194,6 +194,30 @@ export const wisproCasoClient = {
     });
   },
 
+  async bulkDeleteCasos(issueIds: string[]) {
+    const results = await Promise.allSettled(
+      issueIds.map((issueId) => this.deleteCaso(issueId)),
+    );
+    const succeeded = results.filter((r) => r.status === "fulfilled").length;
+    const failed = results.filter((r) => r.status === "rejected").length;
+    return { succeeded, failed };
+  },
+
+  async bulkReassignCasos(issueIds: string[], employeeId: string) {
+    const results = await Promise.allSettled(
+      issueIds.map((issueId) =>
+        this.manageCaso({
+          action: "reassign",
+          issueId,
+          employeeId,
+        }),
+      ),
+    );
+    const succeeded = results.filter((r) => r.status === "fulfilled").length;
+    const failed = results.filter((r) => r.status === "rejected").length;
+    return { succeeded, failed };
+  },
+
   async uploadFacade(file: File) {
     const body = new FormData();
     body.append("image", file);

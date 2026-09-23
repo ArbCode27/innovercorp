@@ -143,11 +143,35 @@ export const upsertCrmWisproCaso = async (
   supabase: SupabaseClient,
   input: UpsertCrmWisproCasoInput,
 ) => {
-  const { data, error } = await supabase
+  const row = toRow(input);
+  let { data, error } = await supabase
     .from("crm_wispro_casos")
-    .upsert(toRow(input), { onConflict: "wispro_issue_id" })
+    .upsert(row, { onConflict: "wispro_issue_id" })
     .select("*")
     .single();
+
+  if (
+    error &&
+    /client_status|resolution_observation|resolution_solution/i.test(
+      error.message || "",
+    )
+  ) {
+    const sanitizedRow: Record<string, unknown> = { ...row };
+    delete sanitizedRow.client_status;
+    delete sanitizedRow.resolution_observation;
+    delete sanitizedRow.resolution_solution;
+
+    const retry = await supabase
+      .from("crm_wispro_casos")
+      .upsert(sanitizedRow, { onConflict: "wispro_issue_id" })
+      .select("*")
+      .single();
+
+    if (!retry.error && retry.data) {
+      data = retry.data;
+      error = null;
+    }
+  }
 
   if (error) {
     throw new Error(error.message || "No se pudo guardar la ficha del caso");
