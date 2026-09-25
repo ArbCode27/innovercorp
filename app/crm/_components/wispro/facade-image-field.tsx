@@ -120,7 +120,7 @@ export const FacadeImageField = ({
   return (
     <div className="space-y-2">
       <p className={`text-xs ${CRM_SURFACES.textMuted}`}>
-        Foto de fachada (se reenvía al técnico con el reporte)
+        Foto de fachada. Puedes reemplazarla, quitarla o subir una si el ticket no tiene.
       </p>
 
       {value.mediaUrl ? (

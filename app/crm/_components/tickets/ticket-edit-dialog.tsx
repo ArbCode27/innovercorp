@@ -32,6 +32,7 @@ import {
 } from "../../_lib/wispro-caso-schema";
 import { wisproCasoClient } from "../../_lib/wispro-caso-client";
 import { EmployeePicker } from "../wispro/employee-picker";
+import { FacadeImageField } from "../wispro/facade-image-field";
 import type { CrmWisproCaso, WisproEmployee } from "@/lib/wispro-types";
 
 interface TicketEditDialogProps {
@@ -63,11 +64,13 @@ export const TicketEditDialog = ({
       addressText: caso?.addressText || "",
       mapsUrl: caso?.mapsUrl || "",
       status: caso?.status || "open",
+      facadeMediaUrl: caso?.facadeMediaUrl || "",
+      facadeMessageId: caso?.facadeMessageId ?? null,
     },
   });
 
   useEffect(() => {
-    if (!caso) return;
+    if (!caso || !open) return;
     form.reset({
       issueId: caso.wisproIssueId,
       title: caso.title || "",
@@ -78,8 +81,38 @@ export const TicketEditDialog = ({
       addressText: caso.addressText || "",
       mapsUrl: caso.mapsUrl || "",
       status: caso.status,
+      facadeMediaUrl: caso.facadeMediaUrl || "",
+      facadeMessageId: caso.facadeMessageId ?? null,
     });
-  }, [caso, form]);
+
+    if (caso.facadeMediaUrl?.trim()) return;
+
+    let cancelled = false;
+    const loadFacade = async () => {
+      try {
+        const detail = await wisproCasoClient.getCrmCaso(caso.wisproIssueId);
+        if (cancelled || !detail.facadeMediaUrl?.trim()) return;
+        form.setValue("facadeMediaUrl", detail.facadeMediaUrl, {
+          shouldDirty: false,
+        });
+        form.setValue("facadeMessageId", detail.facadeMessageId ?? null, {
+          shouldDirty: false,
+        });
+      } catch {
+        // El listado no trae la URL; si falla el detalle, se puede subir una nueva.
+      }
+    };
+    void loadFacade();
+    return () => {
+      cancelled = true;
+    };
+  }, [caso, form, open]);
+
+  const currentPriority = form.watch("priority") || "medium";
+  const currentStatus = form.watch("status") || "open";
+  const currentEmployeeId = form.watch("employeeId") || "";
+  const facadeMediaUrl = form.watch("facadeMediaUrl") || "";
+  const facadeMessageId = form.watch("facadeMessageId");
 
   if (!caso) return null;
 
@@ -105,10 +138,6 @@ export const TicketEditDialog = ({
     if (isSubmitting) return;
     onOpenChange(false);
   };
-
-  const currentPriority = form.watch("priority") || "medium";
-  const currentStatus = form.watch("status") || "open";
-  const currentEmployeeId = form.watch("employeeId") || "";
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -233,6 +262,25 @@ export const TicketEditDialog = ({
               id="edit-maps"
               placeholder="https://maps.google.com/..."
               {...form.register("mapsUrl")}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Foto de fachada</Label>
+            <FacadeImageField
+              value={{
+                mediaUrl: facadeMediaUrl,
+                messageId: typeof facadeMessageId === "number" ? facadeMessageId : null,
+              }}
+              disabled={isSubmitting}
+              onChange={(next) => {
+                form.setValue("facadeMediaUrl", next.mediaUrl, {
+                  shouldDirty: true,
+                });
+                form.setValue("facadeMessageId", next.messageId, {
+                  shouldDirty: true,
+                });
+              }}
             />
           </div>
 

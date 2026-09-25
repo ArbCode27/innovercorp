@@ -109,6 +109,8 @@ export const editCasoSchema = z.object({
   windowStart: z.string().trim().optional().nullable(),
   windowEnd: z.string().trim().optional().nullable(),
   status: z.enum(["open", "scheduled", "done", "cancelled"]).optional(),
+  facadeMediaUrl: emptyToNull.optional(),
+  facadeMessageId: optionalPositiveInt,
 });
 
 export type EditCasoInput = z.infer<typeof editCasoSchema>;

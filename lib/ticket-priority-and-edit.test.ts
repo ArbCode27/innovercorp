@@ -56,6 +56,34 @@ describe("Ticket priority and edit schema", () => {
     }
   });
 
+  it("allows replacing or clearing the facade image on edit", () => {
+    const withImage = editCasoSchema.safeParse({
+      issueId: "00000000-0000-0000-0000-000000000002",
+      title: "Falla de fibra",
+      priority: "high",
+      facadeMediaUrl: "https://cdn.example/fachada.jpg",
+      facadeMessageId: 42,
+    });
+    expect(withImage.success).toBe(true);
+    if (withImage.success) {
+      expect(withImage.data.facadeMediaUrl).toBe("https://cdn.example/fachada.jpg");
+      expect(withImage.data.facadeMessageId).toBe(42);
+    }
+
+    const cleared = editCasoSchema.safeParse({
+      issueId: "00000000-0000-0000-0000-000000000002",
+      title: "Falla de fibra",
+      priority: "high",
+      facadeMediaUrl: "",
+      facadeMessageId: null,
+    });
+    expect(cleared.success).toBe(true);
+    if (cleared.success) {
+      expect(cleared.data.facadeMediaUrl).toBeNull();
+      expect(cleared.data.facadeMessageId).toBeNull();
+    }
+  });
+
   it("validates manageCasoSchema for edit and delete actions", () => {
     const editAction = manageCasoSchema.safeParse({
       action: "edit",

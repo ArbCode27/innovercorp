@@ -498,6 +498,12 @@ export async function PUT(request: NextRequest) {
       if (parsed.data.windowStart !== undefined) patchData.windowStart = parsed.data.windowStart;
       if (parsed.data.windowEnd !== undefined) patchData.windowEnd = parsed.data.windowEnd;
       if (parsed.data.status !== undefined) patchData.status = parsed.data.status;
+      if (parsed.data.facadeMediaUrl !== undefined) {
+        patchData.facadeMediaUrl = parsed.data.facadeMediaUrl;
+      }
+      if (parsed.data.facadeMessageId !== undefined) {
+        patchData.facadeMessageId = parsed.data.facadeMessageId ?? null;
+      }
 
       const caso = await patchCrmWisproCaso(supabase, existing.wisproIssueId, patchData);
       return NextResponse.json({
@@ -505,7 +511,6 @@ export async function PUT(request: NextRequest) {
         action: "edit",
         caso: {
           ...caso,
-          facadeMediaUrl: null,
           hasFacade: Boolean(caso.hasFacade || caso.facadeMediaUrl),
         },
       });
