@@ -30,7 +30,8 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
 import { getManualPaymentBlockReason } from "../../_lib/client-profile-utils";
-import type { Agent, Client, Conversation, Label, Message, QuickReply, Ticket, WisproCustomer, WisproSearchResult } from "../../_lib/types";
+import type { CrmWisproCaso } from "@/lib/crm-wispro-casos";
+import type { Agent, Client, Conversation, Label, Message, QuickReply, WisproCustomer, WisproSearchResult } from "../../_lib/types";
 import { AssignAgentDialog } from "../agents/assign-agent-dialog";
 import { UnknownClientBanner } from "../wispro/unknown-client-banner";
 import { WisproSearchDialog } from "../wispro/wispro-search-dialog";
@@ -52,7 +53,7 @@ interface ConversationPanelProps {
   agents: Agent[];
   conversations: Conversation[];
   currentAgent: Agent;
-  tickets: Ticket[];
+  openCasos: CrmWisproCaso[];
   isMessagesLoading: boolean;
   isSendingMessage: boolean;
   isResolvingConversation?: boolean;
@@ -75,6 +76,7 @@ interface ConversationPanelProps {
   onAssociateWispro: (result: WisproSearchResult) => Promise<void>;
   onUnlinkWispro: () => Promise<void>;
   onCreatePaymentPromise: () => Promise<void>;
+  onCasoCreated?: () => void;
 }
 
 export const ConversationPanel = ({
@@ -87,8 +89,8 @@ export const ConversationPanel = ({
   agents,
   conversations,
   currentAgent,
-  tickets,
-  isMessagesLoading,
+  openCasos,
+  isMessagesLoading;
   isSendingMessage,
   isResolvingConversation = false,
   onBackToList,
@@ -107,6 +109,7 @@ export const ConversationPanel = ({
   onAssociateWispro,
   onUnlinkWispro,
   onCreatePaymentPromise,
+  onCasoCreated,
 }: ConversationPanelProps) => {
   const [isNoteDialogOpen, setIsNoteDialogOpen] = useState(false);
   const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false);
@@ -280,7 +283,7 @@ export const ConversationPanel = ({
             client={client}
             wisproSnapshot={wisproSnapshot}
             labels={allLabels}
-            tickets={tickets}
+            openCasos={openCasos}
             agents={agents}
             className="block h-full w-full border-l-0 bg-transparent lg:hidden"
             onToggleLabel={onQuickToggleLabel}
@@ -302,7 +305,7 @@ export const ConversationPanel = ({
         client={client}
         wisproSnapshot={wisproSnapshot}
         labels={allLabels}
-        tickets={tickets}
+        openCasos={openCasos}
         agents={agents}
         onToggleLabel={onQuickToggleLabel}
         onOpenWispro={() => setIsWisproDialogOpen(true)}
@@ -344,6 +347,7 @@ export const ConversationPanel = ({
           client?.whatsapp_id || client?.phone || conversation?.customer_phone
         }
         messages={messages}
+        onCreated={onCasoCreated}
       />
 
       <AlertDialog

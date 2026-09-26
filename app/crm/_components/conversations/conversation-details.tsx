@@ -2,19 +2,19 @@
 
 import { cn } from "@/lib/utils";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
+import type { CrmWisproCaso } from "@/lib/crm-wispro-casos";
 import type {
   Agent,
   Client,
   Conversation,
   Label,
-  Ticket,
   WisproCustomer,
 } from "../../_lib/types";
+import { casoStatusLabels } from "../../_lib/wispro-caso-schema";
 import { formatCrmDate } from "../../_lib/formatters";
 import { AvatarInitials } from "../shared/avatar-initials";
 import { Button } from "@/components/ui/button";
 import { LabelChip } from "../shared/label-chip";
-import { StatusBadge } from "../shared/status-badge";
 import { ClientProfileSection } from "./client-profile-section";
 
 interface ConversationDetailsProps {
@@ -22,7 +22,7 @@ interface ConversationDetailsProps {
   client: Client | null;
   wisproSnapshot?: WisproCustomer | null;
   labels: Label[];
-  tickets: Ticket[];
+  openCasos: CrmWisproCaso[];
   agents: Agent[];
   className?: string;
   onToggleLabel: (labelId: number) => Promise<void>;
@@ -39,7 +39,7 @@ export const ConversationDetails = ({
   client,
   wisproSnapshot,
   labels,
-  tickets,
+  openCasos,
   agents,
   className,
   onToggleLabel,
@@ -50,10 +50,6 @@ export const ConversationDetails = ({
   isCreatingPaymentPromise = false,
   onOpenCreateCaso,
 }: ConversationDetailsProps) => {
-  const activeTicket =
-    tickets.find((ticket) => ticket.status !== "Resuelto") ||
-    tickets[0] ||
-    null;
   const onlineAgents = agents.filter(
     (agent) => agent.status === "online" || agent.status === "busy",
   );
@@ -124,16 +120,22 @@ export const ConversationDetails = ({
         <h3 className={`text-[11px] font-semibold uppercase tracking-wide ${CRM_SURFACES.textMuted}`}>
           Ticket activo
         </h3>
-        {activeTicket ? (
-          <div className="space-y-2">
-            <p className={`font-mono text-sm ${CRM_SURFACES.textPrimary}`}>
-              {activeTicket.id}
-            </p>
-            <p className={`text-sm ${CRM_SURFACES.textSecondary}`}>{activeTicket.type}</p>
-            <StatusBadge status={activeTicket.status} />
-            <p className={`text-xs ${CRM_SURFACES.textMuted}`}>
-              Agente: {activeTicket.agent}
-            </p>
+        {openCasos.length ? (
+          <div className="space-y-3">
+            {openCasos.map((caso) => (
+              <div key={caso.wisproIssueId} className="space-y-1.5">
+                <p className={`font-mono text-sm ${CRM_SURFACES.textPrimary}`}>
+                  {caso.wisproPublicId != null ? `#${caso.wisproPublicId}` : "Ticket"}
+                </p>
+                <p className={`text-sm ${CRM_SURFACES.textSecondary}`}>
+                  {caso.cause || caso.title}
+                </p>
+                <p className={`text-xs ${CRM_SURFACES.textMuted}`}>
+                  {casoStatusLabels[caso.status]}
+                  {caso.employeeName ? ` · ${caso.employeeName}` : " · sin asignar"}
+                </p>
+              </div>
+            ))}
           </div>
         ) : (
           <p className={`text-xs ${CRM_SURFACES.textLabel}`}>Sin tickets activos</p>

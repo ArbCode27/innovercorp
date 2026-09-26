@@ -1,6 +1,8 @@
 "use client";
 
 import { Inbox } from "lucide-react";
+import type { CrmWisproCaso } from "@/lib/crm-wispro-casos";
+import { openCasosForConversation } from "@/lib/ticket-chat-link";
 import type {
   Agent,
   Client,
@@ -9,7 +11,6 @@ import type {
   Label,
   Message,
   QuickReply,
-  Ticket,
   WisproCustomer,
   WisproSearchResult,
 } from "../../_lib/types";
@@ -30,7 +31,7 @@ interface MyConversationsViewProps {
   labels: Label[];
   quickReplies: QuickReply[];
   agents: Agent[];
-  ticketsByClientId: Map<number, Ticket[]>;
+  openCasos: CrmWisproCaso[];
   messages: Message[];
   selectedConversation: Conversation | null;
   selectedClient: Client | null;
@@ -64,6 +65,7 @@ interface MyConversationsViewProps {
   onAssociateWispro: (result: WisproSearchResult) => Promise<void>;
   onUnlinkWispro: () => Promise<void>;
   onCreatePaymentPromise: () => Promise<void>;
+  onCasoCreated?: () => void;
   onOpenSettingsView: (view: CrmView) => void;
 }
 
@@ -76,7 +78,7 @@ export const MyConversationsView = ({
   labels,
   quickReplies,
   agents,
-  ticketsByClientId,
+  openCasos,
   messages,
   selectedConversation,
   selectedClient,
@@ -107,12 +109,12 @@ export const MyConversationsView = ({
   onAssociateWispro,
   onUnlinkWispro,
   onCreatePaymentPromise,
+  onCasoCreated,
   onOpenSettingsView,
 }: MyConversationsViewProps) => {
-  const selectedTickets =
-    selectedConversation?.client_id
-      ? ticketsByClientId.get(selectedConversation.client_id) || []
-      : [];
+  const selectedOpenCasos = selectedConversation
+    ? openCasosForConversation(selectedConversation, openCasos)
+    : [];
 
   const scopeConversations = includeResolved
     ? assignedConversations
@@ -160,6 +162,7 @@ export const MyConversationsView = ({
             clientsById={clientsById}
             labelsById={labelsById}
             selectedConversationId={selectedConversationId}
+            openCasos={openCasos}
             onSelect={onSelectConversation}
           />
         ) : (
@@ -185,7 +188,7 @@ export const MyConversationsView = ({
           agents={agents}
           conversations={assignedConversations}
           currentAgent={currentAgent}
-          tickets={selectedTickets}
+          openCasos={selectedOpenCasos}
           isMessagesLoading={isMessagesLoading}
           isSendingMessage={isSendingMessage}
           isResolvingConversation={isResolvingConversation}
@@ -205,6 +208,7 @@ export const MyConversationsView = ({
           onAssociateWispro={onAssociateWispro}
           onUnlinkWispro={onUnlinkWispro}
           onCreatePaymentPromise={onCreatePaymentPromise}
+          onCasoCreated={onCasoCreated}
         />
       </div>
     </div>

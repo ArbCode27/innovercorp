@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   Eye,
   ExternalLink,
+  MessageCircle,
   Pencil,
   Plus,
   RefreshCw,
@@ -108,7 +109,15 @@ const TicketLocationCell = ({ caso }: { caso: CrmWisproCaso }) => {
   );
 };
 
-export const WisproIssuesPanel = () => {
+interface WisproIssuesPanelProps {
+  onOpenClientChat?: (caso: CrmWisproCaso) => void;
+  onCasosChanged?: () => void;
+}
+
+export const WisproIssuesPanel = ({
+  onOpenClientChat,
+  onCasosChanged,
+}: WisproIssuesPanelProps) => {
   const [casos, setCasos] = useState<CrmWisproCaso[]>([]);
   const [employees, setEmployees] = useState<WisproEmployee[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -145,6 +154,7 @@ export const WisproIssuesPanel = () => {
       const next = await wisproCasoClient.listCrmCasos();
       setCasos(next);
       setError(null);
+      onCasosChanged?.();
     } catch (loadError) {
       const message =
         loadError instanceof Error
@@ -155,7 +165,7 @@ export const WisproIssuesPanel = () => {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [onCasosChanged]);
 
   const loadEmployees = useCallback(async () => {
     if (employees.length) return employees;
@@ -681,6 +691,17 @@ export const WisproIssuesPanel = () => {
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-wrap items-center gap-1.5">
+                          {onOpenClientChat ? (
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              size="sm"
+                              aria-label={`Abrir chat del ticket ${caso.wisproPublicId ?? ""}`}
+                              onClick={() => onOpenClientChat(caso)}>
+                              <MessageCircle className="size-3.5" />
+                              Chat
+                            </Button>
+                          ) : null}
                           <Button
                             type="button"
                             variant="secondary"

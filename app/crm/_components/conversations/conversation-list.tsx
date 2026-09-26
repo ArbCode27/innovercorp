@@ -1,6 +1,8 @@
 "use client";
 
 import { MessageCircle } from "lucide-react";
+import type { CrmWisproCaso } from "@/lib/crm-wispro-casos";
+import { conversationHasOpenTicket } from "@/lib/ticket-chat-link";
 import type { Client, Conversation, Label } from "../../_lib/types";
 import { EmptyState } from "../shared/empty-state";
 import { ConversationListItem } from "./conversation-list-item";
@@ -10,6 +12,7 @@ interface ConversationListProps {
   clientsById: Map<number, Client>;
   labelsById: Map<number, Label>;
   selectedConversationId: number | null;
+  openCasos?: CrmWisproCaso[];
   onSelect: (id: number) => void;
 }
 
@@ -18,6 +21,7 @@ export const ConversationList = ({
   clientsById,
   labelsById,
   selectedConversationId,
+  openCasos = [],
   onSelect,
 }: ConversationListProps) => {
   if (!conversations.length) {
@@ -45,6 +49,7 @@ export const ConversationList = ({
             .map((id) => labelsById.get(id))
             .filter((label): label is Label => Boolean(label))}
           isActive={selectedConversationId === conversation.id}
+          hasOpenTicket={conversationHasOpenTicket(conversation, openCasos)}
           onSelect={onSelect}
         />
       ))}

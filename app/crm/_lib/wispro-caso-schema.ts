@@ -21,6 +21,16 @@ export const ticketPriorityLabels: Record<(typeof TICKET_PRIORITIES)[number], st
   urgent: "Urgente",
 };
 
+export const casoStatusLabels: Record<
+  "open" | "scheduled" | "done" | "cancelled",
+  string
+> = {
+  open: "Abierto",
+  scheduled: "Agendado",
+  done: "Cerrado",
+  cancelled: "Cancelado",
+};
+
 export const orderKindLabels: Record<(typeof ORDER_KINDS)[number], string> = {
   technical: "Visita técnica por falla",
   installation: "Instalación nueva",

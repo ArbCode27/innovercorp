@@ -1,11 +1,15 @@
 "use client";
 
 import { useState } from "react";
+import { toast } from "sonner";
+import { resolveTicketConversationId } from "@/lib/ticket-chat-link";
+import type { CrmWisproCaso } from "@/lib/wispro-types";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
 import { LoadingState } from "../shared/loading-state";
 import { CrmLogin } from "../auth/crm-login";
 import { useCrmAuth } from "../../_hooks/use-crm-auth";
 import { useCrmData } from "../../_hooks/use-crm-data";
+import { useOpenCrmCasos } from "../../_hooks/use-open-crm-casos";
 import type { Agent, CrmView } from "../../_lib/types";
 import { AgentsView } from "../agents/agents-view";
 import { ClientsView } from "../clients/clients-view";
@@ -28,6 +32,7 @@ export const CrmShell = () => {
   const [activeView, setActiveView] = useState<CrmView>("conversations");
   const auth = useCrmAuth();
   const crm = useCrmData(auth.agent);
+  const { openCasos, refreshOpenCasos } = useOpenCrmCasos(Boolean(auth.agent));
 
   if (auth.isLoading) {
     return (
@@ -42,6 +47,15 @@ export const CrmShell = () => {
   }
 
   const handleSelectView = (view: CrmView) => setActiveView(view);
+  const handleOpenTicketChat = (caso: CrmWisproCaso) => {
+    const conversationId = resolveTicketConversationId(caso, crm.conversations);
+    if (!conversationId) {
+      toast.error("Este ticket no tiene un chat vinculado");
+      return;
+    }
+    setActiveView("conversations");
+    void crm.selectConversation(conversationId);
+  };
   const handleUpdateAppearance = async (patch: {
     ui_accent?: CrmAccentId;
     ui_mode?: CrmColorMode;
@@ -97,7 +111,7 @@ export const CrmShell = () => {
                 labelsById={crm.labelsById}
                 labels={crm.labels}
                 agents={crm.agents}
-                ticketsByClientId={crm.ticketsByClientId}
+                openCasos={openCasos}
                 messages={crm.messages}
                 selectedConversation={crm.selectedConversation}
                 selectedClient={crm.selectedClient}
@@ -132,6 +146,7 @@ export const CrmShell = () => {
                 onCreatePaymentPromise={async () => {
                   await crm.createWisproPaymentPromise();
                 }}
+                onCasoCreated={refreshOpenCasos}
                 onOpenSettingsView={handleSelectView}
               />
             ) : null}
@@ -144,7 +159,7 @@ export const CrmShell = () => {
                 labelsById={crm.labelsById}
                 labels={crm.labels}
                 agents={crm.agents}
-                ticketsByClientId={crm.ticketsByClientId}
+                openCasos={openCasos}
                 messages={crm.messages}
                 selectedConversation={crm.selectedConversation}
                 selectedClient={crm.selectedClient}
@@ -178,6 +193,7 @@ export const CrmShell = () => {
                 onCreatePaymentPromise={async () => {
                   await crm.createWisproPaymentPromise();
                 }}
+                onCasoCreated={refreshOpenCasos}
                 onOpenSettingsView={handleSelectView}
               />
             ) : null}
@@ -237,7 +253,12 @@ export const CrmShell = () => {
                 onDeleteQuickReply={crm.deleteQuickReply}
               />
             ) : null}
-            {activeView === "tickets" ? <TicketsView /> : null}
+            {activeView === "tickets" ? (
+              <TicketsView
+                onOpenClientChat={handleOpenTicketChat}
+                onCasosChanged={refreshOpenCasos}
+              />
+            ) : null}
             {activeView === "performance" ? <PerformanceView /> : null}
             {activeView === "labels" ? (
               <LabelsView

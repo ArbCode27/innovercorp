@@ -2,6 +2,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { documentDigits, phoneLast10 } from "./phone-match";
 import type { CrmWisproCaso, CrmWisproCasoStatus, TicketPriority } from "./wispro-types";
 
+export type { CrmWisproCaso, CrmWisproCasoStatus, TicketPriority };
+
 export type UpsertCrmWisproCasoInput = {
   conversationId?: number | null;
   crmClientId?: number | null;

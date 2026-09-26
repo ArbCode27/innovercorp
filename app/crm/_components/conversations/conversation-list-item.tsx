@@ -1,6 +1,6 @@
 "use client";
 
-import { Bot, CheckCircle2, Headphones } from "lucide-react";
+import { Bot, CheckCircle2, Headphones, Ticket } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   getConversationActivityTimestamp,
@@ -21,6 +21,7 @@ interface ConversationListItemProps {
   client: Client | null;
   labels: Label[];
   isActive: boolean;
+  hasOpenTicket?: boolean;
   onSelect: (id: number) => void;
 }
 
@@ -29,6 +30,7 @@ export const ConversationListItem = ({
   client,
   labels,
   isActive,
+  hasOpenTicket = false,
   onSelect,
 }: ConversationListItemProps) => {
   const displayName =
@@ -46,11 +48,13 @@ export const ConversationListItem = ({
     <button
       type="button"
       onClick={() => onSelect(conversation.id)}
-      aria-label={
-        hasUnread
-          ? `${displayName}, ${unreadCount} mensajes sin leer`
-          : displayName
-      }
+      aria-label={[
+        displayName,
+        hasUnread ? `${unreadCount} mensajes sin leer` : null,
+        hasOpenTicket ? "ticket activo" : null,
+      ]
+        .filter(Boolean)
+        .join(", ")}
       className={cn(
         "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
         "group w-full rounded-2xl p-3 text-left transition",
@@ -107,6 +111,12 @@ export const ConversationListItem = ({
               </Badge>
             ) : shouldShowStatusBadge ? (
               <StatusBadge status={conversation.status} />
+            ) : null}
+            {hasOpenTicket ? (
+              <Badge variant="outline" className="gap-1 text-[10px]">
+                <Ticket className="size-3" aria-hidden="true" />
+                Ticket
+              </Badge>
             ) : null}
             {agentControlName ? (
               <Badge variant="outline" className="max-w-[9rem] text-[10px]" title={agentControlName}>

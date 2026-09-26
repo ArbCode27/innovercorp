@@ -1,6 +1,8 @@
 "use client";
 
 import type { ConversationFilterCounts } from "../../_lib/conversation-filter-utils";
+import type { CrmWisproCaso } from "@/lib/crm-wispro-casos";
+import { openCasosForConversation } from "@/lib/ticket-chat-link";
 import type {
   Agent,
   Client,
@@ -10,7 +12,6 @@ import type {
   Label,
   Message,
   QuickReply,
-  Ticket,
   WisproCustomer,
   WisproSearchResult,
 } from "../../_lib/types";
@@ -30,7 +31,7 @@ interface ConversationsViewProps {
   labels: Label[];
   quickReplies: QuickReply[];
   agents: Agent[];
-  ticketsByClientId: Map<number, Ticket[]>;
+  openCasos: CrmWisproCaso[];
   messages: Message[];
   selectedConversation: Conversation | null;
   selectedClient: Client | null;
@@ -65,6 +66,7 @@ interface ConversationsViewProps {
   onAssociateWispro: (result: WisproSearchResult) => Promise<void>;
   onUnlinkWispro: () => Promise<void>;
   onCreatePaymentPromise: () => Promise<void>;
+  onCasoCreated?: () => void;
   onOpenSettingsView: (view: CrmView) => void;
 }
 
@@ -77,7 +79,7 @@ export const ConversationsView = ({
   labels,
   quickReplies,
   agents,
-  ticketsByClientId,
+  openCasos,
   messages,
   selectedConversation,
   selectedClient,
@@ -109,12 +111,12 @@ export const ConversationsView = ({
   onAssociateWispro,
   onUnlinkWispro,
   onCreatePaymentPromise,
+  onCasoCreated,
   onOpenSettingsView,
 }: ConversationsViewProps) => {
-  const selectedTickets =
-    selectedConversation?.client_id
-      ? ticketsByClientId.get(selectedConversation.client_id) || []
-      : [];
+  const selectedOpenCasos = selectedConversation
+    ? openCasosForConversation(selectedConversation, openCasos)
+    : [];
   const isConversationOpen = selectedConversationId !== null;
 
   return (
@@ -150,6 +152,7 @@ export const ConversationsView = ({
           clientsById={clientsById}
           labelsById={labelsById}
           selectedConversationId={selectedConversationId}
+          openCasos={openCasos}
           onSelect={onSelectConversation}
         />
       </aside>
@@ -167,7 +170,7 @@ export const ConversationsView = ({
           agents={agents}
           conversations={conversations}
           currentAgent={currentAgent}
-          tickets={selectedTickets}
+          openCasos={selectedOpenCasos}
           isMessagesLoading={isMessagesLoading}
           isSendingMessage={isSendingMessage}
           isResolvingConversation={isResolvingConversation}
@@ -187,6 +190,7 @@ export const ConversationsView = ({
           onAssociateWispro={onAssociateWispro}
           onUnlinkWispro={onUnlinkWispro}
           onCreatePaymentPromise={onCreatePaymentPromise}
+          onCasoCreated={onCasoCreated}
         />
       </div>
     </div>
