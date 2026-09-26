@@ -56,6 +56,30 @@ describe("Ticket priority and edit schema", () => {
     }
   });
 
+  it("allows editing the visit window dates", () => {
+    const parsed = editCasoSchema.safeParse({
+      issueId: "00000000-0000-0000-0000-000000000002",
+      title: "Visita reprogramada",
+      priority: "medium",
+      windowStart: "2026-09-28T12:00:00.000Z",
+      windowEnd: "2026-09-28T14:00:00.000Z",
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.windowStart).toBe("2026-09-28T12:00:00.000Z");
+      expect(parsed.data.windowEnd).toBe("2026-09-28T14:00:00.000Z");
+    }
+
+    const cleared = editCasoSchema.safeParse({
+      issueId: "00000000-0000-0000-0000-000000000002",
+      title: "Visita reprogramada",
+      priority: "medium",
+      windowStart: "",
+      windowEnd: "",
+    });
+    expect(cleared.success).toBe(true);
+  });
+
   it("allows replacing or clearing the facade image on edit", () => {
     const withImage = editCasoSchema.safeParse({
       issueId: "00000000-0000-0000-0000-000000000002",

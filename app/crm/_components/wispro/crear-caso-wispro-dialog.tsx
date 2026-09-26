@@ -53,17 +53,13 @@ import {
 } from "../../_lib/wispro-caso-schema";
 import type { z } from "zod";
 import { collectCasoContextFromMessages } from "@/lib/caso-chat-context";
+import { datetimeLocalToIso, toDatetimeLocalValue } from "@/lib/datetime-local";
 import { buildMapsUrl, parseCoordsFromMapsUrl } from "@/lib/maps-link";
 import type { Message } from "../../_lib/types";
 import { looksLikeDocumentQuery } from "@/lib/wispro-client-search";
 import { wisproCasoClient } from "../../_lib/wispro-caso-client";
 import { EmployeePicker } from "./employee-picker";
 import { FacadeImageField } from "./facade-image-field";
-
-const toDatetimeLocal = (date: Date) => {
-  const pad = (value: number) => String(value).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-};
 
 const defaultWindow = () => {
   const start = new Date();
@@ -72,15 +68,9 @@ const defaultWindow = () => {
   const end = new Date(start);
   end.setHours(10, 0, 0, 0);
   return {
-    startAt: toDatetimeLocal(start),
-    endAt: toDatetimeLocal(end),
+    startAt: toDatetimeLocalValue(start),
+    endAt: toDatetimeLocalValue(end),
   };
-};
-
-const toIso = (localValue: string) => {
-  if (!localValue) return null;
-  const date = new Date(localValue);
-  return Number.isNaN(date.getTime()) ? localValue : date.toISOString();
 };
 
 const findLatestAiReport = (messages: Array<{ type?: string; content?: string | null }>) => {
@@ -441,8 +431,8 @@ export const CrearCasoWisproDialog = ({
       }
       const payload = {
         ...parsedValues,
-        startAt: toIso(values.startAt || "") || parsedValues.startAt,
-        endAt: toIso(values.endAt || "") || parsedValues.endAt,
+        startAt: datetimeLocalToIso(values.startAt) || parsedValues.startAt,
+        endAt: datetimeLocalToIso(values.endAt) || parsedValues.endAt,
         conversationId: conversationId || parsedValues.conversationId,
         crmClientId: crmClientId || parsedValues.crmClientId,
         clientName:

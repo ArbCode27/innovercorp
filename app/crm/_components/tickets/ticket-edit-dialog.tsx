@@ -23,6 +23,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  datetimeLocalToIso,
+  isDatetimeRangeValid,
+  toDatetimeLocalValue,
+} from "@/lib/datetime-local";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
 import {
   editCasoSchema,
@@ -63,6 +68,8 @@ export const TicketEditDialog = ({
       employeeId: caso?.employeeId || null,
       addressText: caso?.addressText || "",
       mapsUrl: caso?.mapsUrl || "",
+      windowStart: toDatetimeLocalValue(caso?.windowStart),
+      windowEnd: toDatetimeLocalValue(caso?.windowEnd),
       status: caso?.status || "open",
       facadeMediaUrl: caso?.facadeMediaUrl || "",
       facadeMessageId: caso?.facadeMessageId ?? null,
@@ -80,6 +87,8 @@ export const TicketEditDialog = ({
       employeeId: caso.employeeId || null,
       addressText: caso.addressText || "",
       mapsUrl: caso.mapsUrl || "",
+      windowStart: toDatetimeLocalValue(caso.windowStart),
+      windowEnd: toDatetimeLocalValue(caso.windowEnd),
       status: caso.status,
       facadeMediaUrl: caso.facadeMediaUrl || "",
       facadeMessageId: caso.facadeMessageId ?? null,
@@ -117,9 +126,20 @@ export const TicketEditDialog = ({
   if (!caso) return null;
 
   const handleSubmit = async (values: EditCasoInput) => {
+    if (!isDatetimeRangeValid(values.windowStart, values.windowEnd)) {
+      form.setError("windowEnd", {
+        message: "El fin debe ser posterior al inicio",
+      });
+      return;
+    }
+
     setIsSubmitting(true);
     try {
-      const response = await wisproCasoClient.editCaso(values);
+      const response = await wisproCasoClient.editCaso({
+        ...values,
+        windowStart: datetimeLocalToIso(values.windowStart),
+        windowEnd: datetimeLocalToIso(values.windowEnd),
+      });
       if (response.caso) {
         onSaved(response.caso);
         toast.success("Ticket actualizado correctamente.");
@@ -149,7 +169,7 @@ export const TicketEditDialog = ({
           <DialogDescription>
             {caso.clientName
               ? `Cliente: ${caso.clientName}`
-              : "Actualiza los datos del ticket y su prioridad."}
+              : "Actualiza los datos del ticket, la ventana de visita y su prioridad."}
           </DialogDescription>
         </DialogHeader>
 
@@ -245,6 +265,35 @@ export const TicketEditDialog = ({
               placeholder="Detalles sobre el problema o la orden de trabajo"
               {...form.register("description")}
             />
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1">
+              <Label htmlFor="edit-window-start">Inicio de visita</Label>
+              <Input
+                id="edit-window-start"
+                type="datetime-local"
+                {...form.register("windowStart")}
+              />
+              {form.formState.errors.windowStart ? (
+                <p className="text-xs text-red-500">
+                  {form.formState.errors.windowStart.message}
+                </p>
+              ) : null}
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="edit-window-end">Fin de visita</Label>
+              <Input
+                id="edit-window-end"
+                type="datetime-local"
+                {...form.register("windowEnd")}
+              />
+              {form.formState.errors.windowEnd ? (
+                <p className="text-xs text-red-500">
+                  {form.formState.errors.windowEnd.message}
+                </p>
+              ) : null}
+            </div>
           </div>
 
           <div className="space-y-1">
