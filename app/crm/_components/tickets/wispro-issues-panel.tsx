@@ -46,6 +46,7 @@ import {
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ORDER_KINDS, orderKindLabels } from "../../_lib/wispro-caso-schema";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
 import { EmployeePicker } from "../wispro/employee-picker";
 import { CrearCasoWisproDialog } from "../wispro/crear-caso-wispro-dialog";
@@ -59,18 +60,18 @@ import type { CrmWisproCaso, WisproEmployee } from "@/lib/wispro-types";
 import { resolveMapsUrl } from "@/lib/maps-link";
 import { formatCrmDate } from "../../_lib/formatters";
 
-const statusLabel: Record<CrmWisproCaso["status"], string> = {
-  open: "Abierto",
-  scheduled: "Agendado",
-  done: "Cerrado",
-  cancelled: "Cancelado",
+const isOrderKind = (
+  value: string | null | undefined,
+): value is (typeof ORDER_KINDS)[number] =>
+  Boolean(value && ORDER_KINDS.includes(value as (typeof ORDER_KINDS)[number]));
+
+const casoCategoryLabel = (caso: CrmWisproCaso) => {
+  if (isOrderKind(caso.kind)) return orderKindLabels[caso.kind];
+  return caso.kind?.trim() || caso.title || "—";
 };
 
 const isOpenCaso = (caso: CrmWisproCaso) =>
   caso.status === "open" || caso.status === "scheduled";
-
-const hasFacade = (caso: CrmWisproCaso) =>
-  Boolean(caso.hasFacade || caso.facadeMediaUrl);
 
 const casoMapsUrl = (caso: CrmWisproCaso) =>
   resolveMapsUrl({
@@ -309,7 +310,7 @@ export const WisproIssuesPanel = ({
           const clientName = caso.clientName?.toLowerCase() || "";
           const clientPhone = caso.clientPhone?.toLowerCase() || "";
           const title = caso.title?.toLowerCase() || "";
-          const cause = caso.cause?.toLowerCase() || "";
+          const category = casoCategoryLabel(caso).toLowerCase();
           const employeeName = caso.employeeName?.toLowerCase() || "";
           const address = caso.addressText?.toLowerCase() || "";
 
@@ -318,7 +319,7 @@ export const WisproIssuesPanel = ({
             clientName.includes(q) ||
             clientPhone.includes(q) ||
             title.includes(q) ||
-            cause.includes(q) ||
+            category.includes(q) ||
             employeeName.includes(q) ||
             address.includes(q);
 
@@ -585,7 +586,7 @@ export const WisproIssuesPanel = ({
 
       <Card className="overflow-hidden py-0">
         <div className="overflow-x-auto">
-          <Table className="min-w-[1220px]">
+          <Table className="min-w-[980px]">
             <TableHeader>
               <TableRow className={`${CRM_SURFACES.border} hover:bg-transparent`}>
                 <TableHead className="w-12 px-3 text-center">
@@ -604,11 +605,9 @@ export const WisproIssuesPanel = ({
                 <TableHead className={CRM_SURFACES.textMuted}>#</TableHead>
                 <TableHead className={CRM_SURFACES.textMuted}>Prioridad</TableHead>
                 <TableHead className={CRM_SURFACES.textMuted}>Cliente</TableHead>
-                <TableHead className={CRM_SURFACES.textMuted}>Causa</TableHead>
+                <TableHead className={CRM_SURFACES.textMuted}>Categoría</TableHead>
                 <TableHead className={CRM_SURFACES.textMuted}>Técnico</TableHead>
                 <TableHead className={CRM_SURFACES.textMuted}>Ubicación</TableHead>
-                <TableHead className={CRM_SURFACES.textMuted}>Fachada</TableHead>
-                <TableHead className={CRM_SURFACES.textMuted}>Estado</TableHead>
                 <TableHead className={CRM_SURFACES.textMuted}>
                   <button
                     type="button"
@@ -665,8 +664,8 @@ export const WisproIssuesPanel = ({
                         </p>
                       </TableCell>
                       <TableCell className={CRM_SURFACES.textSecondary}>
-                        <p className="line-clamp-2 max-w-[200px]" title={caso.cause || caso.title}>
-                          {caso.cause || caso.title}
+                        <p className="max-w-[220px] truncate" title={casoCategoryLabel(caso)}>
+                          {casoCategoryLabel(caso)}
                         </p>
                       </TableCell>
                       <TableCell className={CRM_SURFACES.textSecondary}>
@@ -679,12 +678,6 @@ export const WisproIssuesPanel = ({
                       </TableCell>
                       <TableCell className={CRM_SURFACES.textSecondary}>
                         <TicketLocationCell caso={caso} />
-                      </TableCell>
-                      <TableCell className={CRM_SURFACES.textSecondary}>
-                        {hasFacade(caso) ? "Sí" : "No"}
-                      </TableCell>
-                      <TableCell className={CRM_SURFACES.textSecondary}>
-                        {statusLabel[caso.status] || caso.status}
                       </TableCell>
                       <TableCell className={`text-xs ${CRM_SURFACES.textMuted}`}>
                         {formatCrmDate(caso.createdAt)}
@@ -762,7 +755,7 @@ export const WisproIssuesPanel = ({
               ) : (
                 <TableRow className={CRM_SURFACES.border}>
                   <TableCell
-                    colSpan={11}
+                    colSpan={9}
                     className={`h-24 text-center ${CRM_SURFACES.textMuted}`}>
                     {isLoading
                       ? "Cargando tickets..."

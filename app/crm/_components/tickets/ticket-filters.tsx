@@ -206,7 +206,7 @@ export const TicketFilters = ({
           <Input
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Buscar por cliente, #, causa, técnico..."
+            placeholder="Buscar por cliente, #, categoría, técnico..."
             aria-label="Buscar tickets"
             className={`h-9 rounded-xl pl-9 pr-8 text-xs sm:text-sm bg-background/50 ${CRM_SURFACES.border} ${CRM_SURFACES.textPrimary} ${CRM_SURFACES.placeholder} focus:border-primary/50 transition-all`}
           />
