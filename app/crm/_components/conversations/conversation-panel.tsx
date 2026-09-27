@@ -90,7 +90,7 @@ export const ConversationPanel = ({
   conversations,
   currentAgent,
   openCasos,
-  isMessagesLoading;
+  isMessagesLoading,
   isSendingMessage,
   isResolvingConversation = false,
   onBackToList,
