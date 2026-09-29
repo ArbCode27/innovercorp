@@ -42,7 +42,7 @@ export const ConversationList = ({
           conversation={conversation}
           client={
             conversation.client_id
-              ? clientsById.get(conversation.client_id) || null
+              ? clientsById.get(Number(conversation.client_id)) || null
               : null
           }
           labels={conversation.label_ids

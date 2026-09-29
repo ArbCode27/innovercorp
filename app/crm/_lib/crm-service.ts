@@ -44,8 +44,57 @@ import type { CrmAccentId, CrmColorMode } from "./crm-accents";
 
 const db = () => getSupabaseClient();
 
+const POSTGREST_MAX_ROWS = 1000;
+const CLIENT_IN_CHUNK = 100;
+
 const throwIfError = (error: unknown) => {
   if (error) throw error;
+};
+
+const fetchAllRows = async <T>(
+  loadPage: (
+    from: number,
+    to: number,
+  ) => PromiseLike<{ data: T[] | null; error: unknown }>,
+): Promise<T[]> => {
+  const rows: T[] = [];
+  let offset = 0;
+
+  for (;;) {
+    const to = offset + POSTGREST_MAX_ROWS - 1;
+    const { data, error } = await loadPage(offset, to);
+    throwIfError(error);
+    const page = data ?? [];
+    rows.push(...page);
+    if (page.length < POSTGREST_MAX_ROWS) break;
+    offset += POSTGREST_MAX_ROWS;
+  }
+
+  return rows;
+};
+
+const fetchClientsByIds = async (ids: number[]): Promise<Client[]> => {
+  const unique = [
+    ...new Set(
+      ids
+        .map((id) => Number(id))
+        .filter((id) => Number.isInteger(id) && id > 0),
+    ),
+  ];
+  const rows: Client[] = [];
+
+  for (let index = 0; index < unique.length; index += CLIENT_IN_CHUNK) {
+    const slice = unique.slice(index, index + CLIENT_IN_CHUNK);
+    const { data, error } = await db()
+      .from("clients")
+      .select("*")
+      .in("id", slice);
+
+    throwIfError(error);
+    rows.push(...((data || []) as Client[]));
+  }
+
+  return rows;
 };
 
 const ensureData = <T,>(data: T | null, message: string) => {
@@ -95,18 +144,26 @@ export const crmService = {
   },
 
   async loadAll(currentAgent: Agent): Promise<CrmData> {
-    const [labels, clients, tickets, conversations, agents, quickReplies, settings] =
+    const [labels, tickets, conversationRows, agents, quickReplies, settings, clientRows] =
       await Promise.all([
         db().from("labels").select("*").order("created_at"),
-        db().from("clients").select("*").order("created_at"),
         db().from("tickets").select("*").order("created_at", { ascending: false }),
-        db().from("conversations").select("*").order("updated_at", { ascending: false }),
+        fetchAllRows<Conversation>((from, to) =>
+          db()
+            .from("conversations")
+            .select("*")
+            .order("updated_at", { ascending: false })
+            .range(from, to),
+        ).then((data) => ({ data, error: null })),
         db().from("agents").select("*").order("created_at"),
         db().from("quick_replies").select("*").order("title"),
         db().from("crm_settings").select("*").eq("id", 1).maybeSingle(),
+        fetchAllRows<Client>((from, to) =>
+          db().from("clients").select("*").order("created_at").range(from, to),
+        ).then((data) => ({ data, error: null })),
       ]);
 
-    [labels, clients, tickets, conversations, agents, quickReplies].forEach((result) =>
+    [labels, tickets, agents, quickReplies].forEach((result) =>
       throwIfError(result.error)
     );
 
@@ -115,7 +172,7 @@ export const crmService = {
       console.warn("[crm_settings] load_failed", settings.error.message);
     }
 
-    const rawConversations = ((conversations.data || []) as Conversation[]).map(
+    const rawConversations = (conversationRows.data || []).map(
       (conversation) => ({
         ...conversation,
         label_ids: conversation.label_ids || [],
@@ -125,6 +182,19 @@ export const crmService = {
           : null,
       })
     );
+
+    const loadedClients = [...(clientRows.data || [])];
+    const loadedClientIds = new Set(
+      loadedClients.map((client) => Number(client.id)),
+    );
+    const missingClientIds = rawConversations
+      .map((conversation) => Number(conversation.client_id || 0))
+      .filter((clientId) => clientId > 0 && !loadedClientIds.has(clientId));
+
+    if (missingClientIds.length) {
+      const extraClients = await fetchClientsByIds(missingClientIds);
+      loadedClients.push(...extraClients);
+    }
 
     const settingsRow = settings.data as Record<string, unknown> | null;
     const crmSettings: CrmSettings = settingsRow
@@ -186,7 +256,7 @@ export const crmService = {
 
     return {
       labels: (labels.data || []) as Label[],
-      clients: (clients.data || []) as Client[],
+      clients: loadedClients,
       tickets: (tickets.data || []) as Ticket[],
       quickReplies: (quickReplies.data || []) as QuickReply[],
       conversations:
@@ -519,6 +589,10 @@ export const crmService = {
 
     throwIfError(error);
     return data;
+  },
+
+  async getClientsByIds(clientIds: number[]) {
+    return fetchClientsByIds(clientIds);
   },
 
   async createTicket(input: CreateTicketInput) {

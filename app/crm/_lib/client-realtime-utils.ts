@@ -6,13 +6,14 @@ export const upsertClientInList = (
   clients: Client[],
   incoming: Client,
 ): Client[] => {
-  const exists = clients.some((client) => client.id === incoming.id);
+  const incomingId = Number(incoming.id);
+  const exists = clients.some((client) => Number(client.id) === incomingId);
   if (!exists) {
     return [...clients, incoming];
   }
 
   return clients.map((client) =>
-    client.id === incoming.id ? { ...client, ...incoming } : client,
+    Number(client.id) === incomingId ? { ...client, ...incoming } : client,
   );
 };
 
@@ -26,15 +27,16 @@ export const syncWisproSnapshotFromClient = (
 ): Record<number, WisproCustomer> => {
   const next = { ...current };
   const wisproId = String(client.wispro_id || "").trim();
+  const clientId = Number(client.id);
 
   if (!wisproId) {
-    delete next[client.id];
+    delete next[clientId];
     return next;
   }
 
   const snapshot = parseWisproCustomerFromEnvoicing(client.envoicing);
   if (snapshot) {
-    next[client.id] = snapshot;
+    next[clientId] = snapshot;
   }
 
   return next;

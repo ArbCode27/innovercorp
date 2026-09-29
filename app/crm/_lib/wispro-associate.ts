@@ -1,5 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getColorByIndex, getInitials } from "./formatters";
+import {
+  claimWhatsappIdentity,
+  findExistingClientForWhatsapp,
+  isUniqueViolation,
+  releaseWhatsappIdentityFromOthers,
+} from "./client-identity";
 import { serializeWisproLinkForDb } from "./wispro-webhook";
 import type { AssociateWisproInput, Client } from "./types";
 
@@ -67,14 +73,6 @@ const normalizePhone = (value?: string | null) => {
   return digits.length >= 8 ? digits : "";
 };
 
-const isUniqueViolation = (error: unknown) =>
-  Boolean(
-    error &&
-      typeof error === "object" &&
-      "code" in error &&
-      String((error as { code?: string }).code) === "23505",
-  );
-
 const findClientByWhatsappOrPhone = async (
   supabase: SupabaseClient,
   whatsappId: string | null | undefined,
@@ -84,49 +82,19 @@ const findClientByWhatsappOrPhone = async (
   const wa = normalizePhone(whatsappId) || normalizePhone(conversationPhone);
   if (!wa) return null;
 
-  const { data: byWhatsapp, error: byWhatsappError } = await supabase
-    .from("clients")
-    .select("*")
-    .eq("whatsapp_id", wa)
-    .limit(1)
-    .maybeSingle<Client>();
-
-  throwDbError(byWhatsappError, "No se pudo buscar el cliente por WhatsApp", {
-    linkId,
-    step: "lookup_by_whatsapp",
-    phone: maskPhone(wa),
-  });
-  if (byWhatsapp) {
-    console.log(`${LOG_PREFIX} lookup_by_whatsapp_hit`, {
+  const resolved = await findExistingClientForWhatsapp(supabase, wa);
+  if (resolved) {
+    console.log(`${LOG_PREFIX} lookup_by_identity_hit`, {
       linkId,
-      clientId: byWhatsapp.id,
+      clientId: resolved.client.id,
+      source: resolved.source,
       phone: maskPhone(wa),
+      hasWispro: Boolean(resolved.client.wispro_id),
     });
-    return byWhatsapp;
+    return resolved.client;
   }
 
-  const { data: byPhone, error: byPhoneError } = await supabase
-    .from("clients")
-    .select("*")
-    .eq("phone", wa)
-    .limit(1)
-    .maybeSingle<Client>();
-
-  throwDbError(byPhoneError, "No se pudo buscar el cliente por teléfono", {
-    linkId,
-    step: "lookup_by_phone",
-    phone: maskPhone(wa),
-  });
-
-  if (byPhone) {
-    console.log(`${LOG_PREFIX} lookup_by_phone_hit`, {
-      linkId,
-      clientId: byPhone.id,
-      phone: maskPhone(wa),
-    });
-  }
-
-  return byPhone;
+  return null;
 };
 
 const createAnchorClient = async (
@@ -370,11 +338,9 @@ export const associateWisproClient = async (
   const updatePayload: Record<string, string | null> = { ...wisproPayload };
 
   if (waIdentity) {
+    updatePayload.whatsapp_id = waIdentity;
     if (!anchor.phone?.trim()) {
       updatePayload.phone = waIdentity;
-    }
-    if (!anchor.whatsapp_id?.trim()) {
-      updatePayload.whatsapp_id = waIdentity;
     }
   } else if (!anchor.phone?.trim() && customer.phone_mobile?.trim()) {
     updatePayload.phone = customer.phone_mobile.trim();
@@ -395,6 +361,21 @@ export const associateWisproClient = async (
     envoicingBytes: envoicingPayload.length,
   });
 
+  if (waIdentity) {
+    const releasedIds = await releaseWhatsappIdentityFromOthers(
+      supabase,
+      anchor.id,
+      waIdentity,
+    );
+    if (releasedIds.length) {
+      console.log(`${LOG_PREFIX} released_whatsapp_from_stubs`, {
+        linkId,
+        anchorClientId: anchor.id,
+        releasedIds,
+      });
+    }
+  }
+
   const persistClientUpdate = async (payload: Record<string, string | null>) =>
     supabase
       .from("clients")
@@ -407,15 +388,31 @@ export const associateWisproClient = async (
     updatePayload,
   );
 
-  if (updateError && isUniqueViolation(updateError)) {
-    console.warn(`${LOG_PREFIX} client_update_unique_retry_wispro_only`, {
+  if (updateError && isUniqueViolation(updateError) && waIdentity) {
+    console.warn(`${LOG_PREFIX} client_update_unique_retry_after_release`, {
+      linkId,
+      anchorClientId: anchor.id,
+      wisproId: customer.id,
+      ...describeDbError(updateError),
+    });
+    await releaseWhatsappIdentityFromOthers(supabase, anchor.id, waIdentity, {
+      clearPhone: true,
+    });
+    ({ data: updated, error: updateError } =
+      await persistClientUpdate(updatePayload));
+  }
+
+  if (updateError && isUniqueViolation(updateError) && updatePayload.whatsapp_id) {
+    const withoutPhone = { ...updatePayload };
+    delete withoutPhone.phone;
+    console.warn(`${LOG_PREFIX} client_update_unique_retry_without_phone`, {
       linkId,
       anchorClientId: anchor.id,
       wisproId: customer.id,
       ...describeDbError(updateError),
     });
     ({ data: updated, error: updateError } =
-      await persistClientUpdate(wisproPayload));
+      await persistClientUpdate(withoutPhone));
   }
 
   if (updateError) {
@@ -429,7 +426,13 @@ export const associateWisproClient = async (
     throw new Error(updateError.message || "No se pudo actualizar el cliente");
   }
 
-  const client = ensureClient(updated, "No se pudo actualizar el cliente");
+  let client = ensureClient(updated, "No se pudo actualizar el cliente");
+
+  if (waIdentity) {
+    client = await claimWhatsappIdentity(supabase, client, waIdentity, {
+      waName: displayWaName,
+    });
+  }
 
   console.log(`${LOG_PREFIX} client_update_ok`, {
     linkId,

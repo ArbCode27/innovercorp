@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse, after } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getInitials, toJsonSafeText } from "@/app/crm/_lib/formatters";
+import {
+  claimWhatsappIdentity,
+  findExistingClientForWhatsapp,
+} from "@/app/crm/_lib/client-identity";
 import { normalizeStorageMimeType } from "../_lib/media-mime";
 import { replyToConversationWithAi } from "@/app/api/crm/ai/_lib/reply-to-conversation";
 import { refreshClientBillingFromWispro } from "@/app/api/crm/_lib/wispro-billing-refresh";
@@ -249,144 +253,19 @@ const findOrCreateClient = async (
   const profileWaName = toJsonSafeText(waName)?.trim() || null;
   const displayName = resolveClientDisplayName(waName);
 
-  const { data: byWhatsappId, error: byWhatsappIdError } = await supabase
-    .from("clients")
-    .select("*")
-    .eq("whatsapp_id", from)
-    .limit(1)
-    .maybeSingle();
-
-  if (byWhatsappIdError) throw byWhatsappIdError;
-  if (byWhatsappId) {
-    console.log(`${WEBHOOK_LOG_PREFIX} client_found_by_whatsapp_id`, {
-      clientId: byWhatsappId.id,
-      from: maskPhone(from),
+  const existing = await findExistingClientForWhatsapp(supabase, from);
+  if (existing) {
+    const claimed = await claimWhatsappIdentity(supabase, existing.client, from, {
+      waName: profileWaName,
     });
-    return byWhatsappId;
-  }
-
-  const { data: byPhone, error: byPhoneError } = await supabase
-    .from("clients")
-    .select("*")
-    .eq("phone", from)
-    .limit(1)
-    .maybeSingle();
-
-  if (byPhoneError) throw byPhoneError;
-  if (byPhone) {
-    const { data: updatedClient, error: updateClientError } = await supabase
-      .from("clients")
-      .update({
-        whatsapp_id: byPhone.whatsapp_id || from,
-        wa_name: byPhone.wa_name || profileWaName,
-      })
-      .eq("id", byPhone.id)
-      .select("*")
-      .single();
-
-    if (updateClientError) throw updateClientError;
-    console.log(`${WEBHOOK_LOG_PREFIX} client_found_by_phone_and_updated`, {
-      clientId: updatedClient.id,
+    console.log(`${WEBHOOK_LOG_PREFIX} client_recovered`, {
+      clientId: claimed.id,
+      source: existing.source,
       from: maskPhone(from),
+      hasWispro: Boolean(claimed.wispro_id),
+      claimedWhatsappId: Boolean(claimed.whatsapp_id),
     });
-    return updatedClient;
-  }
-
-  // Prefer the active conversation's linked client (may have wispro_id but missing whatsapp_id).
-  const { data: activeByPhone, error: activeByPhoneError } = await supabase
-    .from("conversations")
-    .select("id, client_id")
-    .eq("customer_phone", from)
-    .in("status", ["abierto", "proceso"])
-    .order("updated_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (activeByPhoneError) {
-    console.warn(`${WEBHOOK_LOG_PREFIX} active_conversation_phone_lookup_failed`, {
-      from: maskPhone(from),
-      error: activeByPhoneError.message,
-    });
-  } else if (activeByPhone?.client_id) {
-    const { data: linkedClient, error: linkedClientError } = await supabase
-      .from("clients")
-      .select("*")
-      .eq("id", activeByPhone.client_id)
-      .maybeSingle();
-
-    if (linkedClientError) throw linkedClientError;
-
-    if (linkedClient) {
-      const { data: patchedClient, error: patchError } = await supabase
-        .from("clients")
-        .update({
-          whatsapp_id: linkedClient.whatsapp_id || from,
-          phone: linkedClient.phone || from,
-          wa_name: linkedClient.wa_name || profileWaName,
-        })
-        .eq("id", linkedClient.id)
-        .select("*")
-        .single();
-
-      if (patchError) throw patchError;
-
-      console.log(`${WEBHOOK_LOG_PREFIX} client_recovered_from_active_conversation`, {
-        clientId: patchedClient.id,
-        conversationId: activeByPhone.id,
-        from: maskPhone(from),
-        hasWispro: Boolean(patchedClient.wispro_id),
-      });
-      return patchedClient;
-    }
-  }
-
-  // Last resort: any conversation for this phone (keeps Wispro on returning numbers).
-  const { data: anyByPhone, error: anyByPhoneError } = await supabase
-    .from("conversations")
-    .select("id, client_id")
-    .eq("customer_phone", from)
-    .not("client_id", "is", null)
-    .order("updated_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (anyByPhoneError) {
-    console.warn(`${WEBHOOK_LOG_PREFIX} conversation_phone_lookup_failed`, {
-      from: maskPhone(from),
-      error: anyByPhoneError.message,
-    });
-  } else if (anyByPhone?.client_id) {
-    const { data: historicalClient, error: historicalClientError } =
-      await supabase
-        .from("clients")
-        .select("*")
-        .eq("id", anyByPhone.client_id)
-        .maybeSingle();
-
-    if (historicalClientError) throw historicalClientError;
-
-    if (historicalClient) {
-      const { data: patchedClient, error: patchError } = await supabase
-        .from("clients")
-        .update({
-          whatsapp_id: historicalClient.whatsapp_id || from,
-          phone: historicalClient.phone || from,
-          wa_name: historicalClient.wa_name || profileWaName,
-        })
-        .eq("id", historicalClient.id)
-        .select("*")
-        .single();
-
-      if (patchError) throw patchError;
-
-      console.log(`${WEBHOOK_LOG_PREFIX} client_recovered_from_conversation_phone`, {
-        clientId: patchedClient.id,
-        conversationId: anyByPhone.id,
-        from: maskPhone(from),
-        hasWispro: Boolean(patchedClient.wispro_id),
-      });
-      return patchedClient;
-    }
+    return claimed;
   }
 
   const buildClientRow = (name: string, storedWaName: string | null) => ({
@@ -419,23 +298,8 @@ const findOrCreateClient = async (
   }
 
   const findExistingClientAfterRace = async () => {
-    const { data: byId, error: byIdError } = await supabase
-      .from("clients")
-      .select("*")
-      .eq("whatsapp_id", from)
-      .limit(1)
-      .maybeSingle();
-    if (byIdError) throw byIdError;
-    if (byId) return byId;
-
-    const { data: byPhoneAgain, error: byPhoneAgainError } = await supabase
-      .from("clients")
-      .select("*")
-      .eq("phone", from)
-      .limit(1)
-      .maybeSingle();
-    if (byPhoneAgainError) throw byPhoneAgainError;
-    return byPhoneAgain;
+    const raced = await findExistingClientForWhatsapp(supabase, from);
+    return raced?.client ?? null;
   };
 
   // Race: another webhook created the same phone/whatsapp_id first.
@@ -446,7 +310,9 @@ const findOrCreateClient = async (
         clientId: racedClient.id,
         from: maskPhone(from),
       });
-      return racedClient;
+      return claimWhatsappIdentity(supabase, racedClient, from, {
+        waName: profileWaName,
+      });
     }
   }
 
@@ -477,7 +343,11 @@ const findOrCreateClient = async (
 
   if (isUniqueViolation(degradedError)) {
     const racedClient = await findExistingClientAfterRace();
-    if (racedClient) return racedClient;
+    if (racedClient) {
+      return claimWhatsappIdentity(supabase, racedClient, from, {
+        waName: profileWaName,
+      });
+    }
   }
 
   throw degradedError || createClientError;

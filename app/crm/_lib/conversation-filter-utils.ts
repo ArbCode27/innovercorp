@@ -20,7 +20,7 @@ export const matchesConversationSearch = (
   if (!query) return true;
 
   const client = conversation.client_id
-    ? clientsById.get(conversation.client_id)
+    ? clientsById.get(Number(conversation.client_id))
     : undefined;
   const name = client?.name || "Número desconocido";
 

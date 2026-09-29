@@ -136,7 +136,9 @@ export const useCrmData = (agent: Agent | null) => {
     (incoming: Client, options?: { previous?: Client | null }) => {
       const previous =
         options?.previous ??
-        clientsRef.current.find((client) => client.id === incoming.id) ??
+        clientsRef.current.find(
+          (client) => Number(client.id) === Number(incoming.id),
+        ) ??
         null;
 
       clientsRef.current = upsertClientInList(clientsRef.current, incoming);
@@ -173,16 +175,21 @@ export const useCrmData = (agent: Agent | null) => {
 
   const ensureClientInMemory = useCallback(
     async (clientId: number) => {
-      if (!clientId) return;
-      if (clientsRef.current.some((client) => client.id === clientId)) return;
+      const normalizedId = Number(clientId);
+      if (!normalizedId) return;
+      if (
+        clientsRef.current.some((client) => Number(client.id) === normalizedId)
+      ) {
+        return;
+      }
 
       try {
-        const client = await crmService.getClientById(clientId);
+        const client = await crmService.getClientById(normalizedId);
         if (!client) return;
         applyClientRealtimeRow(client);
       } catch (error) {
         console.warn("[CRM_REALTIME] ensure_client_failed", {
-          clientId,
+          clientId: normalizedId,
           error: error instanceof Error ? error.message : String(error),
         });
       }
@@ -257,6 +264,8 @@ export const useCrmData = (agent: Agent | null) => {
             ...current,
             conversations: [newConv, ...current.conversations],
           }));
+          const clientId = Number(newConv.client_id || 0);
+          if (clientId) void ensureClientInMemory(clientId);
         },
       )
       .on(
@@ -376,7 +385,7 @@ export const useCrmData = (agent: Agent | null) => {
         if (!client.wispro_id) continue;
         const snapshot = parseWisproCustomerFromEnvoicing(client.envoicing);
         if (snapshot) {
-          snapshots[client.id] = snapshot;
+          snapshots[Number(client.id)] = snapshot;
         }
       }
       setWisproSnapshotsByClientId(snapshots);
@@ -401,22 +410,23 @@ export const useCrmData = (agent: Agent | null) => {
     [data.conversations, selectedConversationId],
   );
 
-  const clientsById = useMemo(
-    () =>
-      new Map<number, Client>(
-        data.clients.map((client) => [client.id, client]),
-      ),
-    [data.clients],
-  );
+  const clientsById = useMemo(() => {
+    const map = new Map<number, Client>();
+    for (const client of data.clients) {
+      map.set(Number(client.id), client);
+    }
+    return map;
+  }, [data.clients]);
 
   const selectedClient = useMemo(() => {
-    if (!selectedConversation?.client_id) return null;
-    return clientsById.get(selectedConversation.client_id) ?? null;
+    const clientId = Number(selectedConversation?.client_id || 0);
+    if (!clientId) return null;
+    return clientsById.get(clientId) ?? null;
   }, [clientsById, selectedConversation?.client_id]);
 
   const selectedWisproSnapshot = useMemo(() => {
     if (!selectedClient) return null;
-    return wisproSnapshotsByClientId[selectedClient.id] ?? null;
+    return wisproSnapshotsByClientId[Number(selectedClient.id)] ?? null;
   }, [selectedClient, wisproSnapshotsByClientId]);
 
   const myAssignedConversations = useMemo(() => {
@@ -526,12 +536,19 @@ export const useCrmData = (agent: Agent | null) => {
     setIsMessagesLoading(true);
 
     try {
+      const clientId = Number(conversation?.client_id || 0);
+      const tasks: Promise<unknown>[] = [
+        crmService.loadMessages(conversationId),
+      ];
       if (conversation?.unread) {
-        await crmService.clearUnread(conversationId);
+        tasks.push(crmService.clearUnread(conversationId));
+      }
+      if (clientId) {
+        tasks.push(ensureClientInMemory(clientId));
       }
 
-      const loadedMessages = await crmService.loadMessages(conversationId);
-      setMessages(loadedMessages);
+      const [loadedMessages] = await Promise.all(tasks);
+      setMessages(loadedMessages as Message[]);
     } catch (error) {
       toast.error(
         error instanceof Error
@@ -1187,7 +1204,7 @@ export const useCrmData = (agent: Agent | null) => {
 
       setWisproSnapshotsByClientId((current) => ({
         ...current,
-        [saved.id]: customer,
+        [Number(saved.id)]: customer,
       }));
 
       toast.success(
@@ -1220,7 +1237,7 @@ export const useCrmData = (agent: Agent | null) => {
 
     setWisproSnapshotsByClientId((current) => {
       const next = { ...current };
-      delete next[saved.id];
+      delete next[Number(saved.id)];
       return next;
     });
 
