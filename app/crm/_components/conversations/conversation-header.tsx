@@ -11,12 +11,12 @@ import {
 } from "lucide-react";
 import type { Agent, Client, Conversation } from "../../_lib/types";
 import { canAssignConversation } from "../../_lib/conversation-permissions";
-import { Badge } from "@/components/ui/badge";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
 import { AvatarInitials } from "../shared/avatar-initials";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "../shared/status-badge";
 import { CrmThemeToggle } from "../shell/crm-theme-toggle";
+import { AgentControlBadge } from "./agent-control-badge";
 import { ConversationActionsDrawer } from "./conversation-actions-drawer";
 
 interface ConversationHeaderProps {
@@ -111,16 +111,15 @@ export const ConversationHeader = ({
             <div className={`mt-1 text-xs ${CRM_SURFACES.textMuted}`}>
               <span>{phone}</span>
             </div>
-            <div className="mt-1 flex items-center gap-2">
+            <div className="mt-1 flex flex-wrap items-center gap-2">
               {shouldShowStatusBadge ? (
                 <StatusBadge status={conversation.status} />
               ) : null}
-              <StatusBadge status={conversation.human_mode ? "human" : "bot"} />
               {agentControlName ? (
-                <Badge variant="outline" className="max-w-[10rem]" title={agentControlName}>
-                  <span className="truncate">{agentControlName}</span>
-                </Badge>
-              ) : null}
+                <AgentControlBadge name={agentControlName} className="text-[11px]" />
+              ) : (
+                <StatusBadge status={conversation.human_mode ? "human" : "bot"} />
+              )}
             </div>
           </div>
           <ConversationActionsDrawer

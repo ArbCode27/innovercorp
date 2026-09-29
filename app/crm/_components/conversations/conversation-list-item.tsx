@@ -15,6 +15,7 @@ import { AvatarInitials } from "../shared/avatar-initials";
 import { LabelChip } from "../shared/label-chip";
 import { StatusBadge } from "../shared/status-badge";
 import { UnreadCountBadge } from "../shared/unread-count-badge";
+import { AgentControlBadge } from "./agent-control-badge";
 
 interface ConversationListItemProps {
   conversation: Conversation;
@@ -42,6 +43,7 @@ export const ConversationListItem = ({
   const hasUnread = hasUnreadMessages(conversation);
   const activityTimestamp = getConversationActivityTimestamp(conversation);
   const agentControlName = conversation.agent_control?.trim() || null;
+  const showHumanBadge = isHuman && !agentControlName;
   const shouldShowStatusBadge = conversation.status !== "abierto";
 
   return (
@@ -52,6 +54,7 @@ export const ConversationListItem = ({
         displayName,
         hasUnread ? `${unreadCount} mensajes sin leer` : null,
         hasOpenTicket ? "ticket activo" : null,
+        agentControlName ? `asesor ${agentControlName}` : isHuman ? "modo humano" : "bot",
       ]
         .filter(Boolean)
         .join(", ")}
@@ -95,15 +98,18 @@ export const ConversationListItem = ({
               <UnreadCountBadge count={unreadCount} />
             </div>
           </div>
-          <div className="mt-1 flex items-center gap-1.5">
-            <Badge variant={isHuman ? "destructive" : "secondary"} className="gap-1 text-[10px]">
-              {isHuman ? (
+          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+            {showHumanBadge ? (
+              <Badge variant="destructive" className="gap-1 text-[10px]">
                 <Headphones className="size-3" aria-hidden="true" />
-              ) : (
+                Humano
+              </Badge>
+            ) : !isHuman ? (
+              <Badge variant="secondary" className="gap-1 text-[10px]">
                 <Bot className="size-3" aria-hidden="true" />
-              )}
-              {isHuman ? "Humano" : "Bot"}
-            </Badge>
+                Bot
+              </Badge>
+            ) : null}
             {isResolved ? (
               <Badge variant="success" className="gap-1 text-[10px]">
                 <CheckCircle2 className="size-3" aria-hidden="true" />
@@ -118,11 +124,7 @@ export const ConversationListItem = ({
                 Ticket
               </Badge>
             ) : null}
-            {agentControlName ? (
-              <Badge variant="outline" className="max-w-[9rem] text-[10px]" title={agentControlName}>
-                <span className="truncate">{agentControlName}</span>
-              </Badge>
-            ) : null}
+            {agentControlName ? <AgentControlBadge name={agentControlName} /> : null}
           </div>
           <p
             className={cn(
