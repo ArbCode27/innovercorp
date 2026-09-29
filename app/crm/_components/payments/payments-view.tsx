@@ -306,6 +306,14 @@ export const PaymentsView = ({
           payload.payment.latest_invoice_date ??
           paymentBeforeAction.latest_invoice_date ??
           null,
+        expected_amount:
+          payload.payment.expected_amount ??
+          paymentBeforeAction.expected_amount ??
+          null,
+        plan_amount:
+          payload.payment.plan_amount ??
+          paymentBeforeAction.plan_amount ??
+          null,
       };
 
       startTransition(() => {

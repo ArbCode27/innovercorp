@@ -5,6 +5,10 @@ import type {
   WisproSearchResult,
 } from "@/app/crm/_lib/types";
 import { pickSinglePendingInvoice } from "@/app/api/crm/_lib/wispro-invoice-match";
+import {
+  parseWisproPlanName,
+  parseWisproPlanPrice,
+} from "@/app/api/crm/_lib/wispro-plan-price";
 
 const LOG_PREFIX = "[WISPRO_API]";
 const DEFAULT_BASE_URL = "https://www.cloud.wispro.co/api/v1";
@@ -717,28 +721,46 @@ export const buildInvoicingSummaryFromCurrentAccount = (
   };
 };
 
+export type WisproPlanInfo = {
+  id: string;
+  name: string | null;
+  price: number | null;
+};
+
+const planByIdCache = new Map<string, WisproPlanInfo>();
+
+const readPlanRow = (payload: unknown): Record<string, unknown> | null =>
+  extractDataObject(payload) ||
+  (() => {
+    const records = extractDataRecords(payload);
+    return records[0] && typeof records[0] === "object"
+      ? (records[0] as Record<string, unknown>)
+      : null;
+  })();
+
 /**
- * Resolve commercial plan name via GET /plans/{id}.
- * Soft-fails to null on upstream errors.
+ * Resolve commercial plan name + monthly price via GET /plans/{id}.
+ * Cached by id for the process lifetime. Soft-fails to null on upstream errors.
  */
-export const getPlanNameById = async (
+export const getPlanById = async (
   planId: string,
-): Promise<string | null> => {
+): Promise<WisproPlanInfo | null> => {
   const id = planId.trim();
   if (!id) return null;
 
+  const cached = planByIdCache.get(id);
+  if (cached) return cached;
+
   try {
     const payload = await wisproGet(`/plans/${encodeURIComponent(id)}`, {});
-    const row =
-      extractDataObject(payload) ||
-      (() => {
-        const records = extractDataRecords(payload);
-        return records[0] && typeof records[0] === "object"
-          ? (records[0] as Record<string, unknown>)
-          : null;
-      })();
-    const name = row?.name ? String(row.name).trim() : "";
-    return name || null;
+    const row = readPlanRow(payload);
+    const info: WisproPlanInfo = {
+      id,
+      name: parseWisproPlanName(row),
+      price: parseWisproPlanPrice(row),
+    };
+    planByIdCache.set(id, info);
+    return info;
   } catch (error) {
     console.warn(`${LOG_PREFIX} plan_lookup_failed`, {
       planId: id,
@@ -746,6 +768,14 @@ export const getPlanNameById = async (
     });
     return null;
   }
+};
+
+/** Resolve commercial plan name via GET /plans/{id}. Soft-fails to null. */
+export const getPlanNameById = async (
+  planId: string,
+): Promise<string | null> => {
+  const plan = await getPlanById(planId);
+  return plan?.name ?? null;
 };
 
 /**
@@ -910,6 +940,54 @@ export const listContractsByCedula = async (
   return [];
 };
 
+const listContractsForPaymentClient = async (input: {
+  wisproClientId: string | null;
+  digits: string;
+}): Promise<WisproContract[]> => {
+  if (input.wisproClientId) {
+    try {
+      const contracts = await listContractsByClientId(input.wisproClientId);
+      if (contracts.length) return contracts;
+    } catch (error) {
+      console.warn(`${LOG_PREFIX} contracts_by_client_failed`, {
+        wisproClientId: input.wisproClientId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  if (!input.digits) return [];
+
+  try {
+    return await listContractsByCedula(input.digits);
+  } catch (error) {
+    console.warn(`${LOG_PREFIX} contracts_by_cedula_failed`, {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return [];
+  }
+};
+
+/** Commercial plan price for the preferred contract. Soft-fails to null. */
+export const resolvePlanPriceForClient = async (input: {
+  wisproClientId?: string | null;
+  cedula?: string | null;
+}): Promise<number | null> => {
+  const digits = normalizeDocumentDigits(input.cedula || "");
+  const wisproClientId = input.wisproClientId?.trim() || null;
+  if (!wisproClientId && !digits) return null;
+
+  const contracts = await listContractsForPaymentClient({
+    wisproClientId,
+    digits,
+  });
+  const planId = resolvePreferredContract(contracts)?.plan_id?.trim();
+  if (!planId) return null;
+
+  const plan = await getPlanById(planId);
+  return plan?.price ?? null;
+};
+
 /**
  * List pending (unpaid) invoices for a Wispro client.
  * Official filter: client_national_identification_number_eq + state_eq=pending.
@@ -1000,7 +1078,14 @@ export const resolveLatestPendingInvoiceDate = (
 export type PendingInvoiceSnapshot = {
   date: string | null;
   expectedAmount: number | null;
+  planAmount: number | null;
 };
+
+const emptyPendingSnapshot = (): PendingInvoiceSnapshot => ({
+  date: null,
+  expectedAmount: null,
+  planAmount: null,
+});
 
 export const resolvePendingInvoiceSnapshot = (
   invoices: WisproInvoice[],
@@ -1031,12 +1116,13 @@ export const resolvePendingInvoiceSnapshot = (
       pickedRow ? [pickedRow] : invoices,
     ),
     expectedAmount,
+    planAmount: null,
   };
 };
 
 /**
- * Cache pending-invoice date + expected amount by cédula for CRM payment lists.
- * Soft-fails per client so one upstream error never blanks the table.
+ * Cache pending-invoice date, expected amount, and commercial plan price
+ * by cédula for CRM payment lists. Soft-fails per client.
  */
 export const resolvePendingInvoiceSnapshotsForClients = async (
   clients: Array<{
@@ -1045,29 +1131,68 @@ export const resolvePendingInvoiceSnapshotsForClients = async (
   }>,
 ): Promise<Map<string, PendingInvoiceSnapshot>> => {
   const cache = new Map<string, PendingInvoiceSnapshot>();
-  const jobs = new Map<string, string>();
+  const jobs = new Map<
+    string,
+    { digits: string; wisproClientId: string | null }
+  >();
 
   for (const client of clients) {
     const digits = normalizeDocumentDigits(client.cedula || "");
-    if (!digits || jobs.has(digits)) continue;
-    jobs.set(digits, digits);
+    if (!digits) continue;
+    const existing = jobs.get(digits);
+    if (existing) {
+      if (!existing.wisproClientId && client.wisproClientId?.trim()) {
+        existing.wisproClientId = client.wisproClientId.trim();
+      }
+      continue;
+    }
+    jobs.set(digits, {
+      digits,
+      wisproClientId: client.wisproClientId?.trim() || null,
+    });
   }
 
+  const planIdByKey = new Map<string, string>();
+
   await Promise.all(
-    [...jobs.entries()].map(async ([digits]) => {
-      const key = `c:${digits}`;
-      try {
-        const invoices = await listPendingInvoicesForClient({ cedula: digits });
-        cache.set(key, resolvePendingInvoiceSnapshot(invoices));
-      } catch (error) {
-        console.warn(`${LOG_PREFIX} pending_invoice_snapshot_failed`, {
-          key,
-          error: error instanceof Error ? error.message : String(error),
-        });
-        cache.set(key, { date: null, expectedAmount: null });
-      }
+    [...jobs.values()].map(async (job) => {
+      const key = `c:${job.digits}`;
+      const [snapshot, contracts] = await Promise.all([
+        listPendingInvoicesForClient({ cedula: job.digits })
+          .then((invoices) => resolvePendingInvoiceSnapshot(invoices))
+          .catch((error) => {
+            console.warn(`${LOG_PREFIX} pending_invoice_snapshot_failed`, {
+              key,
+              error: error instanceof Error ? error.message : String(error),
+            });
+            return emptyPendingSnapshot();
+          }),
+        listContractsForPaymentClient(job),
+      ]);
+
+      cache.set(key, snapshot);
+      const planId = resolvePreferredContract(contracts)?.plan_id?.trim();
+      if (planId) planIdByKey.set(key, planId);
     }),
   );
+
+  const uniquePlanIds = [...new Set(planIdByKey.values())];
+  const priceByPlanId = new Map<string, number | null>();
+  await Promise.all(
+    uniquePlanIds.map(async (planId) => {
+      const plan = await getPlanById(planId);
+      priceByPlanId.set(planId, plan?.price ?? null);
+    }),
+  );
+
+  for (const [key, planId] of planIdByKey) {
+    const snapshot = cache.get(key);
+    if (!snapshot) continue;
+    cache.set(key, {
+      ...snapshot,
+      planAmount: priceByPlanId.get(planId) ?? null,
+    });
+  }
 
   return cache;
 };

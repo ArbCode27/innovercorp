@@ -27,6 +27,12 @@ const toPositiveMoney = (value: number | null | undefined): number | null => {
   return roundMoney(amount);
 };
 
+/** Invoice balance first; commercial plan price when there is no pending invoice. */
+export const resolveComparisonExpected = (
+  invoiceAmount: number | null | undefined,
+  planAmount: number | null | undefined,
+): number | null => toPositiveMoney(invoiceAmount) ?? toPositiveMoney(planAmount);
+
 /**
  * Compare a receipt amount to the single pending invoice.
  * Shortfall ≤ $0.15 rounds up to the invoice. Overpay > $0.15 is credit.

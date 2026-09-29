@@ -16,8 +16,11 @@ import {
   listPendingInvoicesForClient,
   resolveLatestPendingInvoiceDate,
   resolvePendingInvoiceSnapshotsForClients,
+  resolvePlanPriceForClient,
+  type PendingInvoiceSnapshot,
 } from "@/app/api/crm/_lib/wispro-api";
 import { matchInvoicesToPaymentAmount } from "@/app/api/crm/_lib/wispro-invoice-match";
+import { resolveComparisonExpected } from "@/app/crm/_lib/payment-amount-compare";
 import { getCrmSettings } from "@/app/api/crm/_lib/crm-settings";
 import {
   applyPaymentReviewOwnership,
@@ -30,6 +33,7 @@ type PaymentWithLatestInvoice = Awaited<
 >["payments"][number] & {
   latest_invoice_date: string | null;
   expected_amount: number | null;
+  plan_amount: number | null;
 };
 
 const readIsoDate = (value: unknown): string | null => {
@@ -46,9 +50,13 @@ const readPositiveAmount = (value: unknown): number | null => {
 
 const readInvoiceSnapshotFromMetadata = (
   metadata: Record<string, unknown> | null | undefined,
-): { date: string | null; expectedAmount: number | null } => {
+): {
+  date: string | null;
+  expectedAmount: number | null;
+  planAmount: number | null;
+} => {
   if (!metadata || typeof metadata !== "object") {
-    return { date: null, expectedAmount: null };
+    return { date: null, expectedAmount: null, planAmount: null };
   }
 
   const expectedAmount =
@@ -58,6 +66,15 @@ const readInvoiceSnapshotFromMetadata = (
         typeof metadata.wispro_invoice_match === "object"
         ? (metadata.wispro_invoice_match as Record<string, unknown>)
             .expected_amount
+        : null,
+    );
+
+  const planAmount =
+    readPositiveAmount(metadata.plan_amount) ??
+    readPositiveAmount(
+      metadata.wispro_invoice_match &&
+        typeof metadata.wispro_invoice_match === "object"
+        ? (metadata.wispro_invoice_match as Record<string, unknown>).plan_amount
         : null,
     );
 
@@ -71,8 +88,8 @@ const readInvoiceSnapshotFromMetadata = (
     readIsoDate(metadata.latest_invoice_date) ||
     readIsoDate(matchRecord?.latest_invoice_date);
 
-  if (date || expectedAmount != null) {
-    return { date, expectedAmount };
+  if (date || expectedAmount != null || planAmount != null) {
+    return { date, expectedAmount, planAmount };
   }
 
   const invoices = Array.isArray(matchRecord?.invoices)
@@ -98,7 +115,7 @@ const readInvoiceSnapshotFromMetadata = (
     }
   }
 
-  return { date: best, expectedAmount: bestBalance };
+  return { date: best, expectedAmount: bestBalance, planAmount: null };
 };
 
 const enrichPaymentsWithLatestInvoiceDate = async (
@@ -106,7 +123,7 @@ const enrichPaymentsWithLatestInvoiceDate = async (
 ): Promise<PaymentWithLatestInvoice[]> => {
   const needsLiveLookup = payments.filter((payment) => {
     const fromMeta = readInvoiceSnapshotFromMetadata(payment.receipt_metadata);
-    if (fromMeta.date && fromMeta.expectedAmount != null) {
+    if (fromMeta.expectedAmount != null && fromMeta.planAmount != null) {
       return false;
     }
     const openForReview =
@@ -125,17 +142,20 @@ const enrichPaymentsWithLatestInvoiceDate = async (
             cedula: payment.cedula,
           })),
         )
-      : new Map<string, { date: string | null; expectedAmount: number | null }>();
+      : new Map<string, PendingInvoiceSnapshot>();
 
   return payments.map((payment) => {
     const fromMeta = readInvoiceSnapshotFromMetadata(payment.receipt_metadata);
     const key = latestInvoiceCacheKeyForPayment(payment);
     const live = key ? snapshotByKey.get(key) : undefined;
+    const invoiceExpected = fromMeta.expectedAmount ?? live?.expectedAmount ?? null;
+    const planAmount = fromMeta.planAmount ?? live?.planAmount ?? null;
 
     return {
       ...payment,
       latest_invoice_date: fromMeta.date || live?.date || null,
-      expected_amount: fromMeta.expectedAmount ?? live?.expectedAmount ?? null,
+      plan_amount: planAmount,
+      expected_amount: resolveComparisonExpected(invoiceExpected, planAmount),
     };
   });
 };
@@ -528,12 +548,38 @@ export async function PATCH(req: NextRequest) {
       };
       let invoiceIds: string[] = [];
       let postAmount = Number(currentPayment.amount);
+      const planAmount = await resolvePlanPriceForClient({
+        wisproClientId: currentPayment.wispro_client_id,
+        cedula: currentPayment.cedula,
+      }).catch((error) => {
+        console.warn("[CRM_PAYMENTS] plan_price_soft_failed", {
+          paymentId: currentPayment.id,
+          wisproClientId: currentPayment.wispro_client_id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return null;
+      });
 
       try {
-        const pendingInvoices = await listPendingInvoicesForClient({
-          wisproClientId: currentPayment.wispro_client_id,
-          cedula: currentPayment.cedula,
-        });
+        let pendingInvoices: Awaited<
+          ReturnType<typeof listPendingInvoicesForClient>
+        > = [];
+        try {
+          pendingInvoices = await listPendingInvoicesForClient({
+            wisproClientId: currentPayment.wispro_client_id,
+            cedula: currentPayment.cedula,
+          });
+        } catch (invoiceError) {
+          console.warn("[CRM_PAYMENTS] invoice_match_soft_failed", {
+            paymentId: currentPayment.id,
+            wisproClientId: currentPayment.wispro_client_id,
+            error:
+              invoiceError instanceof Error
+                ? invoiceError.message
+                : "No se pudieron consultar facturas pendientes",
+          });
+        }
+
         const latestInvoiceDate =
           resolveLatestPendingInvoiceDate(pendingInvoices);
         const match = matchInvoicesToPaymentAmount(
@@ -547,6 +593,7 @@ export async function PATCH(req: NextRequest) {
             state: invoice.state,
           })),
           Number(currentPayment.amount),
+          { fallbackExpected: planAmount },
         );
         invoiceIds = match.invoiceIds;
         postAmount = match.postAmount;
@@ -560,6 +607,7 @@ export async function PATCH(req: NextRequest) {
           matched_amount: match.matchedAmount,
           unmatched_amount: match.unmatchedAmount,
           expected_amount: match.expectedAmount,
+          plan_amount: planAmount,
           remaining: match.remaining,
           credit: match.credit,
           rounded: match.rounded,
@@ -578,6 +626,7 @@ export async function PATCH(req: NextRequest) {
           strategy: "none",
           invoice_ids: [],
           latest_invoice_date: null,
+          plan_amount: planAmount,
           error:
             invoiceError instanceof Error
               ? invoiceError.message
@@ -603,10 +652,18 @@ export async function PATCH(req: NextRequest) {
           expected_amount:
             typeof invoiceMatchMeta.expected_amount === "number"
               ? invoiceMatchMeta.expected_amount
-              : null,
+              : planAmount,
+          plan_amount: planAmount,
           wispro_invoice_match: invoiceMatchMeta,
         },
       };
+
+      const roundedToInvoice = Boolean(
+        invoiceMatchMeta.rounded && invoiceIds.length,
+      );
+      const roundedToPlan = Boolean(
+        invoiceMatchMeta.rounded && !invoiceIds.length,
+      );
 
       const wisproPayment = await createWisproInvoicingPayment({
         clientId: currentPayment.wispro_client_id,
@@ -619,7 +676,8 @@ export async function PATCH(req: NextRequest) {
           `Banco: ${currentPayment.bank}`,
           `Referencia: ${currentPayment.transaction_code}`,
           currentPayment.comment ? `Comentario: ${currentPayment.comment}` : null,
-          invoiceMatchMeta.rounded ? "Monto redondeado a la factura (±0.15 USD)" : null,
+          roundedToInvoice ? "Monto redondeado a la factura (±0.15 USD)" : null,
+          roundedToPlan ? "Monto redondeado al plan (±0.15 USD)" : null,
           typeof invoiceMatchMeta.credit === "number" && invoiceMatchMeta.credit > 0
             ? `Saldo a favor: ${invoiceMatchMeta.credit}`
             : null,

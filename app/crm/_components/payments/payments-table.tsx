@@ -16,6 +16,7 @@ import {
   formatPaymentDate,
   formatPaymentDateTime,
   formatPaymentField,
+  formatPlanAmountLabel,
   isPaymentReadyForApproval,
   PAYMENT_PENDING_LABEL,
   type CrmPayment,
@@ -72,13 +73,14 @@ export const PaymentsTable = ({
   return (
     <Card className="overflow-hidden py-0">
       <div className="overflow-x-auto">
-        <Table className="min-w-[1080px]">
+        <Table className="min-w-[1200px]">
           <TableHeader>
             <TableRow className={`${CRM_SURFACES.border} hover:bg-transparent`}>
               <TableHead className={CRM_SURFACES.textMuted}>Fecha</TableHead>
               <TableHead className={CRM_SURFACES.textMuted}>Cliente</TableHead>
               <TableHead className={CRM_SURFACES.textMuted}>Cédula</TableHead>
               <TableHead className={CRM_SURFACES.textMuted}>Monto</TableHead>
+              <TableHead className={CRM_SURFACES.textMuted}>Plan</TableHead>
               <TableHead className={CRM_SURFACES.textMuted}>Banco</TableHead>
               <TableHead className={CRM_SURFACES.textMuted}>Referencia</TableHead>
               <TableHead className={CRM_SURFACES.textMuted}>Factura</TableHead>
@@ -105,6 +107,7 @@ export const PaymentsTable = ({
                 payment.amount,
                 payment.expected_amount,
               );
+              const planLabel = formatPlanAmountLabel(payment.plan_amount);
 
               return (
                 <TableRow
@@ -147,6 +150,17 @@ export const PaymentsTable = ({
                         </div>
                       ) : null}
                     </div>
+                  </TableCell>
+                  <TableCell className={CRM_SURFACES.textSecondary}>
+                    <span
+                      className={
+                        planLabel === "—"
+                          ? CRM_SURFACES.textMuted
+                          : CRM_SURFACES.textPrimary
+                      }
+                      title="Costo comercial del plan contratado">
+                      {planLabel}
+                    </span>
                   </TableCell>
                   <TableCell className={CRM_SURFACES.textSecondary}>
                     <PaymentValue value={formatPaymentField(payment.bank)} />

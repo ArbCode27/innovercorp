@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   comparePaymentToExpected,
+  resolveComparisonExpected,
   resolvePaymentPostAmount,
 } from "./payment-amount-compare";
 
@@ -86,5 +87,20 @@ describe("comparePaymentToExpected", () => {
       credit: 0,
       kind: "exact",
     });
+  });
+});
+
+describe("resolveComparisonExpected", () => {
+  it("prefers the pending invoice over the plan price", () => {
+    expect(resolveComparisonExpected(15, 30)).toBe(15);
+  });
+
+  it("falls back to the plan price when there is no invoice", () => {
+    expect(resolveComparisonExpected(null, 30)).toBe(30);
+  });
+
+  it("returns null when neither amount is usable", () => {
+    expect(resolveComparisonExpected(null, null)).toBeNull();
+    expect(resolveComparisonExpected(0, -1)).toBeNull();
   });
 });

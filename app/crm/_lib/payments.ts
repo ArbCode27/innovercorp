@@ -1,4 +1,4 @@
-import { comparePaymentToExpected } from "./payment-amount-compare";
+import { comparePaymentToExpected, roundMoney } from "./payment-amount-compare";
 
 export const CRM_PAYMENT_STATUSES = [
   "RECIBIDO",
@@ -52,8 +52,10 @@ export type CrmPayment = {
   receipt_media_url: string | null;
   /** Most recent pending Wispro invoice date (YYYY-MM-DD), when available. */
   latest_invoice_date?: string | null;
-  /** Balance of the single pending Wispro invoice, when available. */
+  /** Balance of the single pending Wispro invoice, or plan price when none. */
   expected_amount?: number | null;
+  /** Commercial Wispro plan price for the preferred contract. */
+  plan_amount?: number | null;
   created_at: string;
   updated_at: string;
 };
@@ -89,6 +91,16 @@ export const formatPaymentAmount = (amount: number | null | undefined) => {
     currency: "USD",
     minimumFractionDigits: 2,
   }).format(Number(amount));
+};
+
+export const formatPlanAmountLabel = (
+  amount: number | null | undefined,
+): string => {
+  const value = Number(amount);
+  if (!Number.isFinite(value) || value <= 0) return "—";
+  const rounded = roundMoney(value);
+  const body = Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2);
+  return `Plan ${body}$`;
 };
 
 export type PaymentAmountDisplay = {

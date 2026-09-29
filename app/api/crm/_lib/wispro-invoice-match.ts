@@ -89,10 +89,12 @@ const strategyForKind = (
 
 /**
  * Pick the single pending invoice and compare it to the receipt amount.
+ * When there is no invoice, `fallbackExpected` (plan price) is used to round.
  */
 export const matchInvoicesToPaymentAmount = (
   invoices: WisproInvoiceBalance[],
   paymentAmount: number,
+  options?: { fallbackExpected?: number | null },
 ): InvoiceMatchResult => {
   const amount = roundMoney(paymentAmount);
   const { invoice, extraCount } = pickSinglePendingInvoice(invoices);
@@ -111,8 +113,29 @@ export const matchInvoicesToPaymentAmount = (
     invoices: [],
   });
 
-  if (!Number.isFinite(amount) || amount <= 0 || !invoice) {
+  if (!Number.isFinite(amount) || amount <= 0) {
     return empty();
+  }
+
+  if (!invoice) {
+    const fallback = roundMoney(Number(options?.fallbackExpected));
+    if (!Number.isFinite(fallback) || fallback <= 0) return empty();
+
+    const comparison = comparePaymentToExpected(amount, fallback);
+    const postAmount = resolvePaymentPostAmount(comparison) ?? amount;
+    return {
+      invoiceIds: [],
+      strategy: strategyForKind(comparison?.kind || "none"),
+      matchedAmount: 0,
+      unmatchedAmount: comparison?.credit ?? 0,
+      postAmount,
+      expectedAmount: fallback,
+      remaining: comparison?.remaining ?? 0,
+      credit: comparison?.credit ?? 0,
+      rounded: Boolean(comparison?.rounded),
+      extraInvoiceCount: extraCount,
+      invoices: [],
+    };
   }
 
   if (extraCount > 0) {

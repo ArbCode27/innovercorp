@@ -68,4 +68,26 @@ describe("matchInvoicesToPaymentAmount", () => {
     expect(match.credit).toBe(5);
     expect(match.unmatchedAmount).toBe(5);
   });
+
+  it("rounds to the plan price when there is no pending invoice", () => {
+    const match = matchInvoicesToPaymentAmount([], 29.86, {
+      fallbackExpected: 30,
+    });
+    expect(match.strategy).toBe("single_rounded");
+    expect(match.postAmount).toBe(30);
+    expect(match.rounded).toBe(true);
+    expect(match.invoiceIds).toEqual([]);
+    expect(match.expectedAmount).toBe(30);
+  });
+
+  it("prefers the invoice over the plan fallback", () => {
+    const match = matchInvoicesToPaymentAmount(
+      [invoice({ id: "inv-1", balance: 15 })],
+      15,
+      { fallbackExpected: 30 },
+    );
+    expect(match.strategy).toBe("exact_one");
+    expect(match.expectedAmount).toBe(15);
+    expect(match.invoiceIds).toEqual(["inv-1"]);
+  });
 });
