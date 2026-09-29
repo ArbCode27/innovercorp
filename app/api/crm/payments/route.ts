@@ -15,7 +15,7 @@ import {
   latestInvoiceCacheKeyForPayment,
   listPendingInvoicesForClient,
   resolveLatestPendingInvoiceDate,
-  resolveLatestPendingInvoiceDatesForClients,
+  resolvePendingInvoiceSnapshotsForClients,
 } from "@/app/api/crm/_lib/wispro-api";
 import { matchInvoicesToPaymentAmount } from "@/app/api/crm/_lib/wispro-invoice-match";
 import { getCrmSettings } from "@/app/api/crm/_lib/crm-settings";
@@ -29,52 +29,84 @@ type PaymentWithLatestInvoice = Awaited<
   ReturnType<typeof listCrmPayments>
 >["payments"][number] & {
   latest_invoice_date: string | null;
+  expected_amount: number | null;
 };
 
-const readLatestInvoiceDateFromMetadata = (
-  metadata: Record<string, unknown> | null | undefined,
-): string | null => {
-  if (!metadata || typeof metadata !== "object") return null;
+const readIsoDate = (value: unknown): string | null => {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return /^\d{4}-\d{2}-\d{2}/.test(trimmed) ? trimmed.slice(0, 10) : null;
+};
 
-  const direct = metadata.latest_invoice_date;
-  if (typeof direct === "string" && /^\d{4}-\d{2}-\d{2}/.test(direct.trim())) {
-    return direct.trim().slice(0, 10);
+const readPositiveAmount = (value: unknown): number | null => {
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+  return amount;
+};
+
+const readInvoiceSnapshotFromMetadata = (
+  metadata: Record<string, unknown> | null | undefined,
+): { date: string | null; expectedAmount: number | null } => {
+  if (!metadata || typeof metadata !== "object") {
+    return { date: null, expectedAmount: null };
   }
+
+  const expectedAmount =
+    readPositiveAmount(metadata.expected_amount) ??
+    readPositiveAmount(
+      metadata.wispro_invoice_match &&
+        typeof metadata.wispro_invoice_match === "object"
+        ? (metadata.wispro_invoice_match as Record<string, unknown>)
+            .expected_amount
+        : null,
+    );
 
   const match = metadata.wispro_invoice_match;
-  if (!match || typeof match !== "object") return null;
-  const matchRecord = match as Record<string, unknown>;
+  const matchRecord =
+    match && typeof match === "object"
+      ? (match as Record<string, unknown>)
+      : null;
 
-  if (
-    typeof matchRecord.latest_invoice_date === "string" &&
-    /^\d{4}-\d{2}-\d{2}/.test(matchRecord.latest_invoice_date.trim())
-  ) {
-    return matchRecord.latest_invoice_date.trim().slice(0, 10);
+  const date =
+    readIsoDate(metadata.latest_invoice_date) ||
+    readIsoDate(matchRecord?.latest_invoice_date);
+
+  if (date || expectedAmount != null) {
+    return { date, expectedAmount };
   }
 
-  const invoices = Array.isArray(matchRecord.invoices)
+  const invoices = Array.isArray(matchRecord?.invoices)
     ? matchRecord.invoices
     : [];
   let best: string | null = null;
   let bestMs = Number.NEGATIVE_INFINITY;
+  let bestBalance: number | null = null;
   for (const item of invoices) {
     if (!item || typeof item !== "object") continue;
     const row = item as Record<string, unknown>;
     const raw = String(row.issued_at || row.issuedAt || "").trim();
-    if (!raw) continue;
-    const ms = Date.parse(raw);
-    if (!Number.isFinite(ms) || ms < bestMs) continue;
-    bestMs = ms;
-    best = raw.slice(0, 10);
+    const balance = readPositiveAmount(row.balance);
+    if (raw) {
+      const ms = Date.parse(raw);
+      if (Number.isFinite(ms) && ms >= bestMs) {
+        bestMs = ms;
+        best = raw.slice(0, 10);
+        bestBalance = balance;
+      }
+    } else if (bestBalance == null && balance != null) {
+      bestBalance = balance;
+    }
   }
-  return best;
+
+  return { date: best, expectedAmount: bestBalance };
 };
 
 const enrichPaymentsWithLatestInvoiceDate = async (
   payments: Awaited<ReturnType<typeof listCrmPayments>>["payments"],
 ): Promise<PaymentWithLatestInvoice[]> => {
   const needsLiveLookup = payments.filter((payment) => {
-    if (readLatestInvoiceDateFromMetadata(payment.receipt_metadata)) {
+    const fromMeta = readInvoiceSnapshotFromMetadata(payment.receipt_metadata);
+    if (fromMeta.date && fromMeta.expectedAmount != null) {
       return false;
     }
     const openForReview =
@@ -85,26 +117,25 @@ const enrichPaymentsWithLatestInvoiceDate = async (
     return Boolean(latestInvoiceCacheKeyForPayment(payment));
   });
 
-  const dateByKey =
+  const snapshotByKey =
     needsLiveLookup.length > 0
-      ? await resolveLatestPendingInvoiceDatesForClients(
+      ? await resolvePendingInvoiceSnapshotsForClients(
           needsLiveLookup.map((payment) => ({
             wisproClientId: payment.wispro_client_id,
             cedula: payment.cedula,
           })),
         )
-      : new Map<string, string | null>();
+      : new Map<string, { date: string | null; expectedAmount: number | null }>();
 
   return payments.map((payment) => {
-    const fromMeta = readLatestInvoiceDateFromMetadata(payment.receipt_metadata);
-    if (fromMeta) {
-      return { ...payment, latest_invoice_date: fromMeta };
-    }
-
+    const fromMeta = readInvoiceSnapshotFromMetadata(payment.receipt_metadata);
     const key = latestInvoiceCacheKeyForPayment(payment);
+    const live = key ? snapshotByKey.get(key) : undefined;
+
     return {
       ...payment,
-      latest_invoice_date: key ? (dateByKey.get(key) ?? null) : null,
+      latest_invoice_date: fromMeta.date || live?.date || null,
+      expected_amount: fromMeta.expectedAmount ?? live?.expectedAmount ?? null,
     };
   });
 };
@@ -496,6 +527,7 @@ export async function PATCH(req: NextRequest) {
         invoice_ids: [],
       };
       let invoiceIds: string[] = [];
+      let postAmount = Number(currentPayment.amount);
 
       try {
         const pendingInvoices = await listPendingInvoicesForClient({
@@ -517,6 +549,7 @@ export async function PATCH(req: NextRequest) {
           Number(currentPayment.amount),
         );
         invoiceIds = match.invoiceIds;
+        postAmount = match.postAmount;
         const matchedById = new Map(
           pendingInvoices.map((invoice) => [invoice.id, invoice]),
         );
@@ -526,6 +559,12 @@ export async function PATCH(req: NextRequest) {
           invoice_ids: match.invoiceIds,
           matched_amount: match.matchedAmount,
           unmatched_amount: match.unmatchedAmount,
+          expected_amount: match.expectedAmount,
+          remaining: match.remaining,
+          credit: match.credit,
+          rounded: match.rounded,
+          post_amount: match.postAmount,
+          extra_invoice_count: match.extraInvoiceCount,
           open_invoices_count: pendingInvoices.length,
           latest_invoice_date: latestInvoiceDate,
           invoices: match.invoices.map((item) => ({
@@ -561,13 +600,17 @@ export async function PATCH(req: NextRequest) {
         receipt_metadata: {
           ...(currentPayment.receipt_metadata || {}),
           latest_invoice_date: latestInvoiceDate,
+          expected_amount:
+            typeof invoiceMatchMeta.expected_amount === "number"
+              ? invoiceMatchMeta.expected_amount
+              : null,
           wispro_invoice_match: invoiceMatchMeta,
         },
       };
 
       const wisproPayment = await createWisproInvoicingPayment({
         clientId: currentPayment.wispro_client_id,
-        amount: Number(currentPayment.amount),
+        amount: postAmount,
         paymentDate: currentPayment.payment_date,
         transactionCode: currentPayment.transaction_code,
         invoiceIds,
@@ -576,6 +619,10 @@ export async function PATCH(req: NextRequest) {
           `Banco: ${currentPayment.bank}`,
           `Referencia: ${currentPayment.transaction_code}`,
           currentPayment.comment ? `Comentario: ${currentPayment.comment}` : null,
+          invoiceMatchMeta.rounded ? "Monto redondeado a la factura (±0.15 USD)" : null,
+          typeof invoiceMatchMeta.credit === "number" && invoiceMatchMeta.credit > 0
+            ? `Saldo a favor: ${invoiceMatchMeta.credit}`
+            : null,
           invoiceIds.length
             ? `Facturas: ${invoiceIds.join(", ")}`
             : "Sin facturas vinculadas (crédito a cuenta)",

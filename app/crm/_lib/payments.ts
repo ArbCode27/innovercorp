@@ -1,3 +1,5 @@
+import { comparePaymentToExpected } from "./payment-amount-compare";
+
 export const CRM_PAYMENT_STATUSES = [
   "RECIBIDO",
   "EN_PROCESO",
@@ -50,6 +52,8 @@ export type CrmPayment = {
   receipt_media_url: string | null;
   /** Most recent pending Wispro invoice date (YYYY-MM-DD), when available. */
   latest_invoice_date?: string | null;
+  /** Balance of the single pending Wispro invoice, when available. */
+  expected_amount?: number | null;
   created_at: string;
   updated_at: string;
 };
@@ -85,6 +89,39 @@ export const formatPaymentAmount = (amount: number | null | undefined) => {
     currency: "USD",
     minimumFractionDigits: 2,
   }).format(Number(amount));
+};
+
+export type PaymentAmountDisplay = {
+  primary: string;
+  secondary: string | null;
+  tone: "remaining" | "credit" | null;
+};
+
+export const formatPaymentAmountDisplay = (
+  paid: number | null | undefined,
+  expected: number | null | undefined,
+): PaymentAmountDisplay => {
+  const comparison = comparePaymentToExpected(paid, expected);
+  if (!comparison) {
+    return { primary: PAYMENT_PENDING_LABEL, secondary: null, tone: null };
+  }
+
+  const primary = formatPaymentAmount(comparison.displayPaid);
+  if (comparison.remaining > 0) {
+    return {
+      primary,
+      secondary: `restante ${formatPaymentAmount(comparison.remaining)}`,
+      tone: "remaining",
+    };
+  }
+  if (comparison.credit > 0) {
+    return {
+      primary,
+      secondary: `saldo a favor ${formatPaymentAmount(comparison.credit)}`,
+      tone: "credit",
+    };
+  }
+  return { primary, secondary: null, tone: null };
 };
 
 export const isPaymentReadyForApproval = (payment: {

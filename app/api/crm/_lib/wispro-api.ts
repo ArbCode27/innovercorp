@@ -4,6 +4,7 @@ import type {
   WisproInvoicingSummary,
   WisproSearchResult,
 } from "@/app/crm/_lib/types";
+import { pickSinglePendingInvoice } from "@/app/api/crm/_lib/wispro-invoice-match";
 
 const LOG_PREFIX = "[WISPRO_API]";
 const DEFAULT_BASE_URL = "https://www.cloud.wispro.co/api/v1";
@@ -996,17 +997,54 @@ export const resolveLatestPendingInvoiceDate = (
   return bestIso;
 };
 
+export type PendingInvoiceSnapshot = {
+  date: string | null;
+  expectedAmount: number | null;
+};
+
+export const resolvePendingInvoiceSnapshot = (
+  invoices: WisproInvoice[],
+): PendingInvoiceSnapshot => {
+  const { invoice } = pickSinglePendingInvoice(
+    invoices.map((row) => ({
+      id: row.id,
+      balance: row.balance,
+      amount: row.amount,
+      issuedAt: row.issued_at,
+      firstDueDate: row.first_due_date,
+      invoiceNumber: row.invoice_number,
+      state: row.state,
+    })),
+  );
+
+  const expectedAmount =
+    invoice && Number.isFinite(invoice.balance) && invoice.balance > 0
+      ? roundMoney(invoice.balance)
+      : null;
+
+  const pickedRow = invoice
+    ? invoices.find((row) => row.id === invoice.id)
+    : null;
+
+  return {
+    date: resolveLatestPendingInvoiceDate(
+      pickedRow ? [pickedRow] : invoices,
+    ),
+    expectedAmount,
+  };
+};
+
 /**
- * Cache pending-invoice dates by cédula for CRM payment lists.
+ * Cache pending-invoice date + expected amount by cédula for CRM payment lists.
  * Soft-fails per client so one upstream error never blanks the table.
  */
-export const resolveLatestPendingInvoiceDatesForClients = async (
+export const resolvePendingInvoiceSnapshotsForClients = async (
   clients: Array<{
     wisproClientId?: string | null;
     cedula?: string | null;
   }>,
-): Promise<Map<string, string | null>> => {
-  const cache = new Map<string, string | null>();
+): Promise<Map<string, PendingInvoiceSnapshot>> => {
+  const cache = new Map<string, PendingInvoiceSnapshot>();
   const jobs = new Map<string, string>();
 
   for (const client of clients) {
@@ -1020,18 +1058,36 @@ export const resolveLatestPendingInvoiceDatesForClients = async (
       const key = `c:${digits}`;
       try {
         const invoices = await listPendingInvoicesForClient({ cedula: digits });
-        cache.set(key, resolveLatestPendingInvoiceDate(invoices));
+        cache.set(key, resolvePendingInvoiceSnapshot(invoices));
       } catch (error) {
-        console.warn(`${LOG_PREFIX} latest_invoice_date_failed`, {
+        console.warn(`${LOG_PREFIX} pending_invoice_snapshot_failed`, {
           key,
           error: error instanceof Error ? error.message : String(error),
         });
-        cache.set(key, null);
+        cache.set(key, { date: null, expectedAmount: null });
       }
     }),
   );
 
   return cache;
+};
+
+/**
+ * Cache pending-invoice dates by cédula for CRM payment lists.
+ * Soft-fails per client so one upstream error never blanks the table.
+ */
+export const resolveLatestPendingInvoiceDatesForClients = async (
+  clients: Array<{
+    wisproClientId?: string | null;
+    cedula?: string | null;
+  }>,
+): Promise<Map<string, string | null>> => {
+  const snapshots = await resolvePendingInvoiceSnapshotsForClients(clients);
+  const dates = new Map<string, string | null>();
+  for (const [key, snapshot] of snapshots) {
+    dates.set(key, snapshot.date);
+  }
+  return dates;
 };
 
 /** Invoice lookups are keyed by cédula (Wispro invoice filter). */

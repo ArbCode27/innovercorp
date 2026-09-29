@@ -12,7 +12,7 @@ import {
 import { CRM_SURFACES } from "../../_lib/crm-theme";
 import {
   canRejectPayment,
-  formatPaymentAmount,
+  formatPaymentAmountDisplay,
   formatPaymentDate,
   formatPaymentDateTime,
   formatPaymentField,
@@ -101,6 +101,10 @@ export const PaymentsTable = ({
               const conversationId = Number(payment.conversation_id);
               const hasCrmChat =
                 Number.isFinite(conversationId) && conversationId > 0;
+              const amountDisplay = formatPaymentAmountDisplay(
+                payment.amount,
+                payment.expected_amount,
+              );
 
               return (
                 <TableRow
@@ -129,9 +133,20 @@ export const PaymentsTable = ({
                     className={`font-mono ${CRM_SURFACES.textSecondary}`}>
                     <PaymentValue value={formatPaymentField(payment.cedula)} />
                   </TableCell>
-                  <TableCell
-                    className={`font-medium ${CRM_SURFACES.textPrimary}`}>
-                    <PaymentValue value={formatPaymentAmount(payment.amount)} />
+                  <TableCell className={`font-medium ${CRM_SURFACES.textPrimary}`}>
+                    <div>
+                      <PaymentValue value={amountDisplay.primary} />
+                      {amountDisplay.secondary ? (
+                        <div
+                          className={`text-[11px] font-normal ${
+                            amountDisplay.tone === "credit"
+                              ? "text-emerald-700 dark:text-emerald-300"
+                              : "text-amber-700 dark:text-amber-300"
+                          }`}>
+                          {amountDisplay.secondary}
+                        </div>
+                      ) : null}
+                    </div>
                   </TableCell>
                   <TableCell className={CRM_SURFACES.textSecondary}>
                     <PaymentValue value={formatPaymentField(payment.bank)} />

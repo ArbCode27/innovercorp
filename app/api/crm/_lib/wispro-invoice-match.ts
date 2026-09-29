@@ -1,7 +1,13 @@
 /**
- * Deterministic invoice ↔ payment amount matching for Wispro approval.
- * Keep this pure (no I/O) so it can be unit-tested without API calls.
+ * Single pending invoice ↔ payment amount matching for Wispro approval.
+ * Innover never stacks invoices: one open invoice per client.
  */
+
+import {
+  comparePaymentToExpected,
+  resolvePaymentPostAmount,
+  roundMoney,
+} from "@/app/crm/_lib/payment-amount-compare";
 
 export type WisproInvoiceBalance = {
   id: string;
@@ -15,8 +21,9 @@ export type WisproInvoiceBalance = {
 
 export type InvoiceMatchStrategy =
   | "exact_one"
-  | "fifo_exact_sum"
-  | "fifo_cover"
+  | "single_rounded"
+  | "single_partial"
+  | "single_overpay"
   | "none";
 
 export type InvoiceMatchResult = {
@@ -24,6 +31,12 @@ export type InvoiceMatchResult = {
   strategy: InvoiceMatchStrategy;
   matchedAmount: number;
   unmatchedAmount: number;
+  postAmount: number;
+  expectedAmount: number | null;
+  remaining: number;
+  credit: number;
+  rounded: boolean;
+  extraInvoiceCount: number;
   invoices: Array<{
     id: string;
     balance: number;
@@ -31,123 +44,106 @@ export type InvoiceMatchResult = {
   }>;
 };
 
-const MONEY_EPS = 0.015;
-
-const roundMoney = (value: number) =>
-  Math.round((value + Number.EPSILON) * 100) / 100;
-
-const nearlyEqual = (left: number, right: number) =>
-  Math.abs(left - right) <= MONEY_EPS;
+const OPEN_BALANCE_EPS = 0.01;
 
 const invoiceRecencyKey = (invoice: WisproInvoiceBalance) =>
   Date.parse(invoice.firstDueDate || invoice.issuedAt || "") || 0;
 
-/** Open invoices sorted oldest-first (FIFO by due/issue date). */
-export const sortInvoicesFifo = (
+/** Newest open invoice wins if Wispro unexpectedly returns more than one. */
+export const pickSinglePendingInvoice = (
   invoices: WisproInvoiceBalance[],
-): WisproInvoiceBalance[] =>
-  [...invoices].sort((left, right) => {
-    const leftKey = invoiceRecencyKey(left);
+): { invoice: WisproInvoiceBalance | null; extraCount: number } => {
+  const open = invoices.filter(
+    (invoice) =>
+      invoice.id &&
+      Number.isFinite(invoice.balance) &&
+      invoice.balance > OPEN_BALANCE_EPS,
+  );
+
+  if (!open.length) {
+    return { invoice: null, extraCount: 0 };
+  }
+
+  const sorted = [...open].sort((left, right) => {
     const rightKey = invoiceRecencyKey(right);
-    if (leftKey !== rightKey) return leftKey - rightKey;
-    return left.id.localeCompare(right.id);
+    const leftKey = invoiceRecencyKey(left);
+    if (rightKey !== leftKey) return rightKey - leftKey;
+    return right.id.localeCompare(left.id);
   });
 
+  return {
+    invoice: sorted[0] ?? null,
+    extraCount: Math.max(0, sorted.length - 1),
+  };
+};
+
+const strategyForKind = (
+  kind: NonNullable<ReturnType<typeof comparePaymentToExpected>>["kind"],
+): InvoiceMatchStrategy => {
+  if (kind === "rounded") return "single_rounded";
+  if (kind === "partial") return "single_partial";
+  if (kind === "credit") return "single_overpay";
+  if (kind === "exact") return "exact_one";
+  return "none";
+};
+
 /**
- * Pick invoice UUIDs to send as `invoice_ids` on POST /invoicing/payments.
- * Prefer exact single match, then exact FIFO sum, then FIFO cover of the payment.
+ * Pick the single pending invoice and compare it to the receipt amount.
  */
 export const matchInvoicesToPaymentAmount = (
   invoices: WisproInvoiceBalance[],
   paymentAmount: number,
 ): InvoiceMatchResult => {
   const amount = roundMoney(paymentAmount);
-  const open = sortInvoicesFifo(
-    invoices.filter(
-      (invoice) =>
-        invoice.id &&
-        Number.isFinite(invoice.balance) &&
-        invoice.balance > MONEY_EPS,
-    ),
-  );
+  const { invoice, extraCount } = pickSinglePendingInvoice(invoices);
 
   const empty = (): InvoiceMatchResult => ({
     invoiceIds: [],
     strategy: "none",
     matchedAmount: 0,
-    unmatchedAmount: amount,
+    unmatchedAmount: Number.isFinite(amount) ? amount : 0,
+    postAmount: Number.isFinite(amount) ? amount : 0,
+    expectedAmount: null,
+    remaining: 0,
+    credit: 0,
+    rounded: false,
+    extraInvoiceCount: extraCount,
     invoices: [],
   });
 
-  if (!Number.isFinite(amount) || amount <= 0 || !open.length) {
+  if (!Number.isFinite(amount) || amount <= 0 || !invoice) {
     return empty();
   }
 
-  const exactOne = open.find((invoice) => nearlyEqual(invoice.balance, amount));
-  if (exactOne) {
-    return {
-      invoiceIds: [exactOne.id],
-      strategy: "exact_one",
-      matchedAmount: roundMoney(exactOne.balance),
-      unmatchedAmount: 0,
-      invoices: [
-        {
-          id: exactOne.id,
-          balance: exactOne.balance,
-          invoiceNumber: exactOne.invoiceNumber,
-        },
-      ],
-    };
+  if (extraCount > 0) {
+    console.warn("[WISPRO_INVOICE_MATCH] extra_pending_invoices_ignored", {
+      keptInvoiceId: invoice.id,
+      extraCount,
+    });
   }
 
-  const selected: WisproInvoiceBalance[] = [];
-  let running = 0;
+  const comparison = comparePaymentToExpected(amount, invoice.balance);
+  const postAmount = resolvePaymentPostAmount(comparison) ?? amount;
 
-  for (const invoice of open) {
-    selected.push(invoice);
-    running = roundMoney(running + invoice.balance);
-    if (nearlyEqual(running, amount)) {
-      return {
-        invoiceIds: selected.map((item) => item.id),
-        strategy: "fifo_exact_sum",
-        matchedAmount: running,
-        unmatchedAmount: 0,
-        invoices: selected.map((item) => ({
-          id: item.id,
-          balance: item.balance,
-          invoiceNumber: item.invoiceNumber,
-        })),
-      };
-    }
-    if (running > amount + MONEY_EPS) {
-      // Last invoice overshoots: still attach all selected so Wispro allocates.
-      return {
-        invoiceIds: selected.map((item) => item.id),
-        strategy: "fifo_cover",
-        matchedAmount: amount,
-        unmatchedAmount: 0,
-        invoices: selected.map((item) => ({
-          id: item.id,
-          balance: item.balance,
-          invoiceNumber: item.invoiceNumber,
-        })),
-      };
-    }
-  }
-
-  if (selected.length && running + MONEY_EPS < amount) {
-    return {
-      invoiceIds: selected.map((item) => item.id),
-      strategy: "fifo_cover",
-      matchedAmount: running,
-      unmatchedAmount: roundMoney(amount - running),
-      invoices: selected.map((item) => ({
-        id: item.id,
-        balance: item.balance,
-        invoiceNumber: item.invoiceNumber,
-      })),
-    };
-  }
-
-  return empty();
+  return {
+    invoiceIds: [invoice.id],
+    strategy: strategyForKind(comparison?.kind || "none"),
+    matchedAmount: roundMoney(
+      Math.min(postAmount, roundMoney(invoice.balance)),
+    ),
+    unmatchedAmount: comparison?.credit ?? 0,
+    postAmount,
+    expectedAmount: roundMoney(invoice.balance),
+    remaining: comparison?.remaining ?? 0,
+    credit: comparison?.credit ?? 0,
+    rounded: Boolean(comparison?.rounded),
+    extraInvoiceCount: extraCount,
+    invoices: [
+      {
+        id: invoice.id,
+        balance: invoice.balance,
+        invoiceNumber: invoice.invoiceNumber,
+      },
+    ],
+  };
 };
