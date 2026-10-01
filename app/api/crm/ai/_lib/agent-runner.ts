@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { DEFAULT_AI_SYSTEM_PROMPT } from "@/app/crm/_lib/ai-default-prompt";
 import { parseClientEnvoicing, resolveLinkedClientIdentity } from "@/app/crm/_lib/client-profile-utils";
 import {
-  DEFAULT_AI_FALLBACK_MODEL,
+  DEFAULT_GROQ_FALLBACK_MODEL,
   DEFAULT_AI_MODEL,
   isRetiredAiModel,
   normalizeAiModelId,
@@ -83,7 +83,7 @@ const MAX_TOOL_STEPS = 6;
 
 const resolveAiFallbackModel = (primaryModel: string) => {
   const requested = normalizeAiModelId(
-    process.env.GROQ_FALLBACK_MODEL || DEFAULT_AI_FALLBACK_MODEL,
+    process.env.GROQ_FALLBACK_MODEL || DEFAULT_GROQ_FALLBACK_MODEL,
   );
   const primary = normalizeAiModelId(primaryModel);
 

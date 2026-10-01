@@ -2,7 +2,7 @@
 export const DEFAULT_GROQ_MODEL = "openai/gpt-oss-20b";
 
 /** Alternate chat model when the primary times out or saturates. */
-export const DEFAULT_GROQ_FALLBACK_MODEL = "llama-3.3-70b-versatile";
+export const DEFAULT_GROQ_FALLBACK_MODEL = "llama-3.1-8b-instant";
 
 /**
  * Vision model used only to describe images (receipts, IDs) as text before
