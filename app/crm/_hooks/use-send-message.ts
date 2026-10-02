@@ -77,6 +77,12 @@ export function useSendMessage() {
       const data = await res.json();
 
       if (!res.ok) {
+        console.warn("[WHATSAPP_CLIENT] send_failed", {
+          endpoint: "/api/whatsapp/send",
+          httpStatus: res.status,
+          conversationId: input.conversation_id,
+          error: typeof data.error === "string" ? data.error : "Error al enviar mensaje",
+        });
         throw new Error(data.error || "Error al enviar mensaje");
       }
 
@@ -117,6 +123,15 @@ export function useSendMessage() {
       const data = await res.json();
 
       if (!res.ok) {
+        console.warn("[WHATSAPP_CLIENT] send_audio_failed", {
+          endpoint: "/api/whatsapp/send-audio",
+          httpStatus: res.status,
+          conversationId: input.conversation_id,
+          error:
+            typeof data.error === "string"
+              ? data.error
+              : "Error al enviar nota de voz",
+        });
         throw new Error(data.error || "Error al enviar nota de voz");
       }
 
@@ -164,6 +179,13 @@ export function useSendMessage() {
       const data = await res.json();
 
       if (!res.ok) {
+        console.warn("[WHATSAPP_CLIENT] send_image_failed", {
+          endpoint: "/api/whatsapp/send-image",
+          httpStatus: res.status,
+          conversationId: input.conversation_id,
+          error:
+            typeof data.error === "string" ? data.error : "Error al enviar imagen",
+        });
         throw new Error(data.error || "Error al enviar imagen");
       }
 
@@ -230,6 +252,16 @@ export function useSendMessage() {
       const data = await res.json();
 
       if (!res.ok) {
+        console.warn("[WHATSAPP_CLIENT] resend_failed", {
+          endpoint: "/api/whatsapp/resend",
+          httpStatus: res.status,
+          conversationId: input.conversation_id,
+          messageId: input.message_id,
+          error:
+            typeof data.error === "string"
+              ? data.error
+              : "No se pudo reenviar el mensaje",
+        });
         throw new Error(data.error || "No se pudo reenviar el mensaje");
       }
 

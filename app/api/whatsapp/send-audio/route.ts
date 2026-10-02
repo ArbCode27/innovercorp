@@ -3,6 +3,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { normalizeStorageMimeType } from "../_lib/media-mime";
+import {
+  maskWhatsAppPhone,
+  parseWhatsAppGraphError,
+} from "@/app/api/whatsapp/_lib/whatsapp-outbound-log";
 
 const GRAPH_API_VERSION = "v19.0";
 const MAX_AUDIO_BYTES = 16 * 1024 * 1024;
@@ -270,7 +274,10 @@ export async function POST(req: NextRequest) {
     const uploadData = await uploadResponse.json();
 
     if (!uploadResponse.ok || uploadData.error || !uploadData.id) {
-      console.error("Error Meta media upload:", uploadData.error || uploadData);
+      console.error("[WHATSAPP_SEND_AUDIO] meta_upload_failed", {
+        httpStatus: uploadResponse.status,
+        error: parseWhatsAppGraphError(uploadData),
+      });
       return NextResponse.json(
         { error: uploadData.error?.message || "No se pudo subir el audio a WhatsApp" },
         { status: 500 },
@@ -301,7 +308,11 @@ export async function POST(req: NextRequest) {
 
     const sendData = await sendResponse.json();
     if (!sendResponse.ok || sendData.error) {
-      console.error("Error Meta send audio:", sendData.error || sendData);
+      console.error("[WHATSAPP_SEND_AUDIO] meta_send_failed", {
+        httpStatus: sendResponse.status,
+        to: maskWhatsAppPhone(normalizedTo),
+        error: parseWhatsAppGraphError(sendData),
+      });
       return NextResponse.json(
         { error: sendData.error?.message || "Error al enviar audio por WhatsApp" },
         { status: 500 },

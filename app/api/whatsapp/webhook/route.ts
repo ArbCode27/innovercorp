@@ -6,6 +6,10 @@ import {
   findExistingClientForWhatsapp,
 } from "@/app/crm/_lib/client-identity";
 import { normalizeStorageMimeType } from "../_lib/media-mime";
+import {
+  maskWhatsAppPhone,
+  parseWhatsAppStatusErrors,
+} from "../_lib/whatsapp-outbound-log";
 import { replyToConversationWithAi } from "@/app/api/crm/ai/_lib/reply-to-conversation";
 import { refreshClientBillingFromWispro } from "@/app/api/crm/_lib/wispro-billing-refresh";
 
@@ -1083,6 +1087,8 @@ export async function POST(req: NextRequest) {
 
       const waMessageId = String(status.id || "").trim();
       const nextStatus = String(status.status || "").trim();
+      const deliveryErrors = parseWhatsAppStatusErrors(status);
+      const primaryError = deliveryErrors[0] ?? null;
       requestSummary.messageId = waMessageId || null;
       requestSummary.status = nextStatus || null;
       requestSummary.messageType = "status_update";
@@ -1090,32 +1096,83 @@ export async function POST(req: NextRequest) {
       console.log(`${WEBHOOK_LOG_PREFIX} status_update_received`, {
         waMessageId,
         nextStatus,
-        recipientId: status.recipient_id || null,
+        recipientId: maskWhatsAppPhone(status.recipient_id),
+        errorCode: primaryError?.code ?? null,
+        errorTitle: primaryError?.title ?? primaryError?.message ?? null,
       });
 
       if (
         waMessageId &&
         ["sent", "delivered", "read", "failed"].includes(nextStatus)
       ) {
-        const { error: statusUpdateError } = await supabase
+        const { data: existingMessage } = await supabase
           .from("messages")
-          .update({ status: nextStatus })
-          .eq("wa_message_id", waMessageId);
+          .select("id, conversation_id, metadata")
+          .eq("wa_message_id", waMessageId)
+          .maybeSingle<{
+            id: number;
+            conversation_id: number | null;
+            metadata: Record<string, unknown> | null;
+          }>();
 
-        if (statusUpdateError) {
-          console.error(
-            `${WEBHOOK_LOG_PREFIX} status_update_failed`,
-            statusUpdateError,
-          );
-          requestSummary.saved = false;
-          requestSummary.reason = "status_update_failed";
-        } else {
-          console.log(`${WEBHOOK_LOG_PREFIX} status_update_saved`, {
+        if (nextStatus === "failed") {
+          console.error(`${WEBHOOK_LOG_PREFIX} delivery_failed`, {
+            waMessageId,
+            messageId: existingMessage?.id ?? null,
+            conversationId: existingMessage?.conversation_id ?? null,
+            recipientId: maskWhatsAppPhone(status.recipient_id),
+            errors: deliveryErrors,
+          });
+        }
+
+        if (!existingMessage) {
+          console.warn(`${WEBHOOK_LOG_PREFIX} status_update_unmatched`, {
             waMessageId,
             nextStatus,
+            recipientId: maskWhatsAppPhone(status.recipient_id),
           });
-          requestSummary.saved = true;
-          requestSummary.reason = "status_update_saved";
+          requestSummary.saved = false;
+          requestSummary.reason = "status_update_unmatched";
+        } else {
+          const nextMetadata =
+            nextStatus === "failed"
+              ? {
+                  ...(existingMessage.metadata || {}),
+                  whatsapp_delivery_error: primaryError,
+                  whatsapp_delivery_errors: deliveryErrors,
+                  whatsapp_delivery_failed_at: new Date().toISOString(),
+                }
+              : null;
+
+          const { error: statusUpdateError } = await supabase
+            .from("messages")
+            .update(
+              nextMetadata
+                ? { status: nextStatus, metadata: nextMetadata }
+                : { status: nextStatus },
+            )
+            .eq("id", existingMessage.id);
+
+          if (statusUpdateError) {
+            console.error(`${WEBHOOK_LOG_PREFIX} status_update_failed`, {
+              waMessageId,
+              nextStatus,
+              messageId: existingMessage.id,
+              error: statusUpdateError.message,
+            });
+            requestSummary.saved = false;
+            requestSummary.reason = "status_update_failed";
+          } else {
+            console.log(`${WEBHOOK_LOG_PREFIX} status_update_saved`, {
+              waMessageId,
+              nextStatus,
+              messageId: existingMessage.id,
+              conversationId: existingMessage.conversation_id ?? null,
+              errorCode: primaryError?.code ?? null,
+            });
+            requestSummary.saved = true;
+            requestSummary.reason = "status_update_saved";
+          }
         }
       }
 

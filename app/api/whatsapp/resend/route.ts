@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
+import {
+  maskWhatsAppPhone,
+  parseWhatsAppGraphError,
+} from "@/app/api/whatsapp/_lib/whatsapp-outbound-log";
 
 const GRAPH_API_VERSION = "v19.0";
 const LOG_PREFIX = "[WHATSAPP_RESEND]";
@@ -65,17 +69,39 @@ const readResendCount = (metadata: Record<string, unknown> | null) => {
   return 0;
 };
 
+const reject = (
+  status: number,
+  error: string,
+  reason: string,
+  extra?: Record<string, unknown>,
+) => {
+  console.warn(`${LOG_PREFIX} rejected`, {
+    reason,
+    status,
+    error,
+    ...extra,
+  });
+  return NextResponse.json({ error }, { status });
+};
+
 export async function POST(req: NextRequest) {
   try {
     const payload = resendSchema.safeParse(await req.json());
     if (!payload.success) {
-      return NextResponse.json(
-        { error: payload.error.issues[0]?.message || "Datos inválidos" },
-        { status: 400 },
+      return reject(
+        400,
+        payload.error.issues[0]?.message || "Datos inválidos",
+        "invalid_payload",
       );
     }
 
     const { message_id, conversation_id, agent_id } = payload.data;
+
+    console.log(`${LOG_PREFIX} started`, {
+      messageId: message_id,
+      conversationId: conversation_id,
+      agentId: agent_id,
+    });
 
     const supabase = createClient(
       getServerEnv("NEXT_PUBLIC_SUPABASE_URL"),
@@ -97,13 +123,19 @@ export async function POST(req: NextRequest) {
     }
 
     if (!agent) {
-      return NextResponse.json({ error: "El agente no existe" }, { status: 404 });
+      return reject(404, "El agente no existe", "agent_not_found", {
+        agentId: agent_id,
+        conversationId: conversation_id,
+        messageId: message_id,
+      });
     }
 
     if (agent.status === "inactive") {
-      return NextResponse.json(
-        { error: "El agente está inactivo y no puede reenviar mensajes" },
-        { status: 403 },
+      return reject(
+        403,
+        "El agente está inactivo y no puede reenviar mensajes",
+        "agent_inactive",
+        { agentId: agent_id, conversationId: conversation_id, messageId: message_id },
       );
     }
 
@@ -122,23 +154,28 @@ export async function POST(req: NextRequest) {
     }
 
     if (!conversation) {
-      return NextResponse.json(
-        { error: "La conversación no existe" },
-        { status: 404 },
-      );
+      return reject(404, "La conversación no existe", "conversation_not_found", {
+        conversationId: conversation_id,
+        messageId: message_id,
+        agentId: agent_id,
+      });
     }
 
     if (conversation.status === "resuelto") {
-      return NextResponse.json(
-        { error: "La conversación ya está resuelta" },
-        { status: 409 },
+      return reject(
+        409,
+        "La conversación ya está resuelta",
+        "conversation_resolved",
+        { conversationId: conversation_id, messageId: message_id, agentId: agent_id },
       );
     }
 
     if (!Boolean(conversation.human_mode)) {
-      return NextResponse.json(
-        { error: "Debes tomar control de la conversación para reenviar mensajes" },
-        { status: 403 },
+      return reject(
+        403,
+        "Debes tomar control de la conversación para reenviar mensajes",
+        "not_human_mode",
+        { conversationId: conversation_id, messageId: message_id, agentId: agent_id },
       );
     }
 
@@ -159,50 +196,78 @@ export async function POST(req: NextRequest) {
     }
 
     if (!message) {
-      return NextResponse.json({ error: "El mensaje no existe" }, { status: 404 });
+      return reject(404, "El mensaje no existe", "message_not_found", {
+        conversationId: conversation_id,
+        messageId: message_id,
+        agentId: agent_id,
+      });
     }
 
     if (message.conversation_id !== conversation_id) {
-      return NextResponse.json(
-        { error: "El mensaje no pertenece a la conversación indicada" },
-        { status: 400 },
+      return reject(
+        400,
+        "El mensaje no pertenece a la conversación indicada",
+        "message_conversation_mismatch",
+        { conversationId: conversation_id, messageId: message_id, agentId: agent_id },
       );
     }
 
     if (message.type !== "out") {
-      return NextResponse.json(
-        { error: "Solo se pueden reenviar mensajes salientes" },
-        { status: 400 },
+      return reject(
+        400,
+        "Solo se pueden reenviar mensajes salientes",
+        "not_outbound",
+        { conversationId: conversation_id, messageId: message_id, type: message.type },
       );
     }
 
     if (message.status !== "failed") {
-      return NextResponse.json(
-        { error: "Solo se pueden reenviar mensajes fallidos" },
-        { status: 400 },
+      return reject(
+        400,
+        "Solo se pueden reenviar mensajes fallidos",
+        "not_failed",
+        {
+          conversationId: conversation_id,
+          messageId: message_id,
+          status: message.status,
+        },
       );
     }
 
     if (message.media_type) {
-      return NextResponse.json(
-        { error: "Por ahora solo se pueden reenviar mensajes de texto" },
-        { status: 400 },
+      return reject(
+        400,
+        "Por ahora solo se pueden reenviar mensajes de texto",
+        "media_not_supported",
+        {
+          conversationId: conversation_id,
+          messageId: message_id,
+          mediaType: message.media_type,
+        },
       );
     }
 
     const content = String(message.content || "").trim();
     if (!content) {
-      return NextResponse.json(
-        { error: "El mensaje no tiene contenido para reenviar" },
-        { status: 400 },
+      return reject(
+        400,
+        "El mensaje no tiene contenido para reenviar",
+        "empty_content",
+        { conversationId: conversation_id, messageId: message_id },
       );
     }
 
     const resentCount = readResendCount(message.metadata);
     if (resentCount >= MAX_RESEND_COUNT) {
-      return NextResponse.json(
-        { error: `Se alcanzó el límite de ${MAX_RESEND_COUNT} reenvíos` },
-        { status: 429 },
+      return reject(
+        429,
+        `Se alcanzó el límite de ${MAX_RESEND_COUNT} reenvíos`,
+        "limit",
+        {
+          conversationId: conversation_id,
+          messageId: message_id,
+          resentCount,
+        },
       );
     }
 
@@ -236,21 +301,28 @@ export async function POST(req: NextRequest) {
 
     const uniqueKnownPhones = [...new Set(knownPhones.filter(Boolean))];
     const to = uniqueKnownPhones[0] || null;
+    const maskedTo = maskWhatsAppPhone(to);
 
     if (!to) {
-      return NextResponse.json(
-        {
-          error:
-            "No hay un número de WhatsApp disponible para reenviar este mensaje",
-        },
-        { status: 400 },
+      return reject(
+        400,
+        "No hay un número de WhatsApp disponible para reenviar este mensaje",
+        "no_phone",
+        { conversationId: conversation_id, messageId: message_id, agentId: agent_id },
       );
     }
 
     if (to.length < 8 || to.length > 15) {
-      return NextResponse.json(
-        { error: "El número de WhatsApp no tiene un formato válido" },
-        { status: 400 },
+      return reject(
+        400,
+        "El número de WhatsApp no tiene un formato válido",
+        "invalid_phone",
+        {
+          conversationId: conversation_id,
+          messageId: message_id,
+          to: maskedTo,
+          digits: to.length,
+        },
       );
     }
 
@@ -275,16 +347,36 @@ export async function POST(req: NextRequest) {
     );
 
     const waData = await waResponse.json();
+    const graphError = parseWhatsAppGraphError(waData);
     if (!waResponse.ok || waData.error) {
-      console.error(`${LOG_PREFIX} meta_send_failed`, waData.error || waData);
+      console.error(`${LOG_PREFIX} meta_send_failed`, {
+        messageId: message.id,
+        conversationId: conversation_id,
+        agentId: agent_id,
+        to: maskedTo,
+        httpStatus: waResponse.status,
+        error: graphError,
+      });
       return NextResponse.json(
-        { error: waData.error?.message || "Error al reenviar a WhatsApp" },
+        {
+          error:
+            graphError?.message ||
+            waData.error?.message ||
+            "Error al reenviar a WhatsApp",
+        },
         { status: 500 },
       );
     }
 
     const wa_message_id = waData.messages?.[0]?.id || null;
     if (!wa_message_id) {
+      console.error(`${LOG_PREFIX} missing_wa_message_id`, {
+        messageId: message.id,
+        conversationId: conversation_id,
+        agentId: agent_id,
+        to: maskedTo,
+        httpStatus: waResponse.status,
+      });
       return NextResponse.json(
         { error: "WhatsApp no devolvió un ID de mensaje" },
         { status: 502 },
@@ -345,6 +437,8 @@ export async function POST(req: NextRequest) {
       conversationId: conversation_id,
       waMessageId: wa_message_id,
       agentId: agent_id,
+      to: maskedTo,
+      resentCount: resentCount + 1,
     });
 
     return NextResponse.json({

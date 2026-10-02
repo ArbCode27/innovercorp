@@ -570,6 +570,11 @@ export const useCrmData = (agent: Agent | null) => {
 
     const to = resolveRecipientPhone(selectedClient, selectedConversation);
     if (!to) {
+      console.warn("[WHATSAPP_CLIENT] send_skipped", {
+        reason: "missing_recipient",
+        conversationId: selectedConversation.id,
+        clientId: selectedClient?.id ?? null,
+      });
       throw new Error(
         "No hay un número de WhatsApp disponible para responder esta conversación",
       );
@@ -770,6 +775,11 @@ export const useCrmData = (agent: Agent | null) => {
     }
 
     if (!selectedConversation.human_mode) {
+      console.warn("[WHATSAPP_CLIENT] resend_skipped", {
+        reason: "not_human_mode",
+        conversationId: selectedConversation.id,
+        messageId,
+      });
       throw new Error("Toma control de la conversación antes de reenviar mensajes");
     }
 

@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
+import {
+  maskWhatsAppPhone,
+  parseWhatsAppGraphError,
+} from "@/app/api/whatsapp/_lib/whatsapp-outbound-log";
 
 const GRAPH_API_VERSION = "v19.0";
+const LOG_PREFIX = "[WHATSAPP_SEND]";
 
 const sendMessageSchema = z.object({
   to: z.string().trim().min(1, "El destinatario es requerido"),
@@ -27,25 +32,62 @@ const getServerEnv = (key: string) => {
   return value;
 };
 
+const reject = (
+  status: number,
+  error: string,
+  reason: string,
+  extra?: Record<string, unknown>,
+) => {
+  console.warn(`${LOG_PREFIX} rejected`, {
+    reason,
+    status,
+    error,
+    ...extra,
+  });
+  return NextResponse.json({ error }, { status });
+};
+
 export async function POST(req: NextRequest) {
+  let conversationId: number | null = null;
+  let agentId: number | null = null;
+  let maskedTo: string | null = null;
+
   try {
     const payload = sendMessageSchema.safeParse(await req.json());
 
     if (!payload.success) {
-      return NextResponse.json(
-        { error: payload.error.issues[0]?.message || "Datos inválidos" },
-        { status: 400 },
+      return reject(
+        400,
+        payload.error.issues[0]?.message || "Datos inválidos",
+        "invalid_payload",
       );
     }
 
     const { to, message, conversation_id, agent_id } = payload.data;
+    conversationId = conversation_id;
+    agentId = agent_id ?? null;
     const normalizedTo = normalizeWhatsAppPhone(to);
+    maskedTo = maskWhatsAppPhone(normalizedTo);
     let sentBy: string | null = null;
 
+    console.log(`${LOG_PREFIX} started`, {
+      conversationId,
+      agentId,
+      to: maskedTo,
+      messageChars: message.length,
+    });
+
     if (normalizedTo.length < 8 || normalizedTo.length > 15) {
-      return NextResponse.json(
-        { error: "El número de WhatsApp no tiene un formato válido" },
-        { status: 400 },
+      return reject(
+        400,
+        "El número de WhatsApp no tiene un formato válido",
+        "invalid_phone",
+        {
+          conversationId,
+          agentId,
+          to: maskedTo,
+          digits: normalizedTo.length,
+        },
       );
     }
 
@@ -61,7 +103,10 @@ export async function POST(req: NextRequest) {
       .maybeSingle();
 
     if (conversationError) {
-      console.error("Error Supabase conversation:", conversationError);
+      console.error(`${LOG_PREFIX} conversation_lookup_failed`, {
+        conversationId,
+        error: conversationError.message,
+      });
       return NextResponse.json(
         { error: "No se pudo validar la conversación" },
         { status: 500 },
@@ -69,10 +114,10 @@ export async function POST(req: NextRequest) {
     }
 
     if (!conversation) {
-      return NextResponse.json(
-        { error: "La conversación no existe" },
-        { status: 404 },
-      );
+      return reject(404, "La conversación no existe", "conversation_not_found", {
+        conversationId,
+        agentId,
+      });
     }
 
     if (agent_id) {
@@ -83,7 +128,11 @@ export async function POST(req: NextRequest) {
         .maybeSingle();
 
       if (agentError) {
-        console.error("Error Supabase agent:", agentError);
+        console.error(`${LOG_PREFIX} agent_lookup_failed`, {
+          conversationId,
+          agentId,
+          error: agentError.message,
+        });
         return NextResponse.json(
           { error: "No se pudo validar el agente" },
           { status: 500 },
@@ -91,16 +140,18 @@ export async function POST(req: NextRequest) {
       }
 
       if (!agent) {
-        return NextResponse.json(
-          { error: "El agente no existe" },
-          { status: 404 },
-        );
+        return reject(404, "El agente no existe", "agent_not_found", {
+          conversationId,
+          agentId,
+        });
       }
 
       if (agent.status === "inactive") {
-        return NextResponse.json(
-          { error: "El agente está inactivo y no puede enviar mensajes" },
-          { status: 403 },
+        return reject(
+          403,
+          "El agente está inactivo y no puede enviar mensajes",
+          "agent_inactive",
+          { conversationId, agentId },
         );
       }
 
@@ -120,7 +171,11 @@ export async function POST(req: NextRequest) {
         .maybeSingle();
 
       if (clientError) {
-        console.error("Error Supabase client:", clientError);
+        console.error(`${LOG_PREFIX} client_lookup_failed`, {
+          conversationId,
+          clientId: conversation.client_id,
+          error: clientError.message,
+        });
         return NextResponse.json(
           { error: "No se pudo validar el cliente de la conversación" },
           { status: 500 },
@@ -140,13 +195,19 @@ export async function POST(req: NextRequest) {
       uniqueKnownPhones.length > 0 &&
       !uniqueKnownPhones.includes(normalizedTo)
     ) {
-      return NextResponse.json(
-        { error: "El destinatario no coincide con el contacto de la conversación" },
-        { status: 400 },
+      return reject(
+        400,
+        "El destinatario no coincide con el contacto de la conversación",
+        "recipient_mismatch",
+        {
+          conversationId,
+          agentId,
+          to: maskedTo,
+          knownCount: uniqueKnownPhones.length,
+        },
       );
     }
 
-    // 1. Enviar mensaje a WhatsApp Cloud API
     const waResponse = await fetch(
       `https://graph.facebook.com/${GRAPH_API_VERSION}/${getServerEnv(
         "WHATSAPP_PHONE_NUMBER_ID",
@@ -168,19 +229,29 @@ export async function POST(req: NextRequest) {
     );
 
     const waData = await waResponse.json();
+    const graphError = parseWhatsAppGraphError(waData);
 
-    // 2. Verificar si Meta lo aceptó
     if (!waResponse.ok || waData.error) {
-      console.error("Error Meta:", waData.error);
+      console.error(`${LOG_PREFIX} meta_send_failed`, {
+        conversationId,
+        agentId,
+        to: maskedTo,
+        httpStatus: waResponse.status,
+        error: graphError,
+      });
       return NextResponse.json(
-        { error: waData.error?.message || "Error al enviar a WhatsApp" },
+        {
+          error:
+            graphError?.message ||
+            waData.error?.message ||
+            "Error al enviar a WhatsApp",
+        },
         { status: 500 },
       );
     }
 
-    const wa_message_id = waData.messages?.[0]?.id || null; // wamid.XXXX
+    const wa_message_id = waData.messages?.[0]?.id || null;
 
-    // 3. Guardar mensaje en Supabase
     const { data: savedMessage, error: dbError } = await supabase
       .from("messages")
       .insert({
@@ -197,14 +268,19 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (dbError) {
-      console.error("Error Supabase:", dbError);
+      console.error(`${LOG_PREFIX} persist_failed`, {
+        conversationId,
+        agentId,
+        to: maskedTo,
+        waMessageId: wa_message_id,
+        error: dbError.message,
+      });
       return NextResponse.json(
         { error: "Mensaje enviado pero no registrado en BD" },
         { status: 500 },
       );
     }
 
-    // 4. Actualizar preview y timestamps de la conversación
     const now = new Date().toISOString();
     const { error: conversationUpdateError } = await supabase
       .from("conversations")
@@ -216,12 +292,24 @@ export async function POST(req: NextRequest) {
       .eq("id", conversation_id);
 
     if (conversationUpdateError) {
-      console.error("Error Supabase conversation update:", conversationUpdateError);
+      console.error(`${LOG_PREFIX} conversation_update_failed`, {
+        conversationId,
+        error: conversationUpdateError.message,
+      });
       return NextResponse.json(
         { error: "Mensaje enviado pero no se actualizó la conversación" },
         { status: 500 },
       );
     }
+
+    console.log(`${LOG_PREFIX} sent`, {
+      conversationId,
+      agentId,
+      to: maskedTo,
+      waMessageId: wa_message_id,
+      messageId: savedMessage?.id ?? null,
+      httpStatus: waResponse.status,
+    });
 
     return NextResponse.json({
       success: true,
@@ -229,7 +317,28 @@ export async function POST(req: NextRequest) {
       message: savedMessage,
     });
   } catch (error) {
-    console.error("Error inesperado:", error);
+    if (
+      error instanceof Error &&
+      error.message.startsWith("Missing environment")
+    ) {
+      console.error(`${LOG_PREFIX} missing_env`, {
+        conversationId,
+        agentId,
+        to: maskedTo,
+        error: error.message,
+      });
+      return NextResponse.json(
+        { error: "WhatsApp no configurado en el servidor" },
+        { status: 503 },
+      );
+    }
+
+    console.error(`${LOG_PREFIX} unexpected_error`, {
+      conversationId,
+      agentId,
+      to: maskedTo,
+      error: error instanceof Error ? error.message : String(error),
+    });
     return NextResponse.json(
       { error: "Error interno del servidor" },
       { status: 500 },
