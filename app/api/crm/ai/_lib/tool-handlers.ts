@@ -23,6 +23,7 @@ import {
 import {
   DolarVzlaError,
   enrichDebtWithBcv,
+  formatBcvRate,
   getBcvRate,
 } from "@/app/api/crm/_lib/dolarvzla-rate";
 import {
@@ -87,6 +88,7 @@ export type AgentRunContext = {
   linkedWisproId: string | null;
   linkedCedula: string | null;
   linkedClientName: string | null;
+  linkedDebtUsd: number | null;
   escalated: boolean;
   escalateReason: string | null;
   escalateMessage: string | null;
@@ -166,13 +168,14 @@ const summarizeMatch = async (result: WisproSearchResult) => {
     debt_bs: fx.debt_bs,
     debt_bs_formatted: fx.debt_bs_formatted,
     bcv_rate: fx.ok ? fx.bcv_rate : null,
+    bcv_rate_display: fx.ok ? fx.bcv_rate_display : null,
     bcv_usd: fx.ok ? fx.bcv_usd : null,
     bcv_eur: fx.ok ? fx.bcv_eur : null,
     bcv_as_of: fx.ok ? fx.bcv_as_of : null,
     bcv_source: fx.ok ? fx.bcv_source : null,
     bcv_error: fx.ok ? null : fx.bcv_error,
     currency_hint: fx.ok
-      ? "Usa debt_bs_formatted y debt_usd_formatted. No recalcules ni inventes tasa."
+      ? "Copia debt_bs_formatted, debt_usd_formatted y bcv_rate_display. No multipliques."
       : fx.hint,
   };
 };
@@ -375,9 +378,35 @@ const looksLikeSupportReason = (reason: string) => {
   );
 };
 
-const handleGetBcvRate = async (): Promise<ToolHandlerResult> => {
+const resolveQuoteDebtUsd = (ctx: AgentRunContext): number | null => {
+  const linked = ctx.linkedWisproId
+    ? ctx.lastLookupByWisproId.get(ctx.linkedWisproId)
+    : null;
+  const single =
+    ctx.lastLookupByWisproId.size === 1
+      ? [...ctx.lastLookupByWisproId.values()][0]
+      : null;
+  const fromLookup = Number((linked ?? single)?.invoicing.debt);
+  if (Number.isFinite(fromLookup) && fromLookup > 0) return fromLookup;
+  if (ctx.linkedDebtUsd != null && Number.isFinite(ctx.linkedDebtUsd)) {
+    return ctx.linkedDebtUsd;
+  }
+  return null;
+};
+
+const handleGetBcvRate = async (
+  ctx: AgentRunContext,
+): Promise<ToolHandlerResult> => {
   try {
     const rate = await getBcvRate();
+    const debtUsd = resolveQuoteDebtUsd(ctx);
+    const quote = debtUsd != null ? await enrichDebtWithBcv(debtUsd) : null;
+    const rateDisplay = formatBcvRate(rate.rate);
+    const sayExactly =
+      quote?.ok && quote.debt_usd_formatted && quote.debt_bs_formatted
+        ? `Tasa BCV del día: ${rateDisplay}. Saldo ${quote.debt_usd_formatted} = ${quote.debt_bs_formatted}.`
+        : `Tasa BCV del día: ${rateDisplay}.`;
+
     return {
       name: GET_BCV_RATE_TOOL,
       ok: true,
@@ -390,8 +419,12 @@ const handleGetBcvRate = async (): Promise<ToolHandlerResult> => {
         bcv_source: rate.source,
         bcv_cached: rate.cached,
         bcv_change_percentage_usd: rate.changePercentageUsd,
-        bcv_rate_display: `${rate.usd.toFixed(4).replace(".", ",")} Bs/$`,
-        hint: "Usa bcv_rate (current.usd = tasa BCV del día). No inventes otra tasa.",
+        bcv_rate_display: rateDisplay,
+        debt_usd: quote?.ok ? quote.debt_usd : null,
+        debt_usd_formatted: quote?.ok ? quote.debt_usd_formatted : null,
+        debt_bs_formatted: quote?.ok ? quote.debt_bs_formatted : null,
+        say_exactly: sayExactly,
+        hint: "Copia say_exactly o debt_bs_formatted. No multipliques ni reformatees la tasa.",
       },
     };
   } catch (error) {
@@ -1864,7 +1897,7 @@ export const executeAgentTool = async (
       result = await handleLookup(ctx, rawArgs);
       break;
     case GET_BCV_RATE_TOOL:
-      result = await handleGetBcvRate();
+      result = await handleGetBcvRate(ctx);
       break;
     case LINK_WISPRO_TOOL:
       result = await handleLink(ctx, rawArgs);

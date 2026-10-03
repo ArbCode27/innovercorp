@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { DEFAULT_AI_SYSTEM_PROMPT } from "@/app/crm/_lib/ai-default-prompt";
 import { parseClientEnvoicing, resolveLinkedClientIdentity } from "@/app/crm/_lib/client-profile-utils";
+import { enrichDebtWithBcv } from "@/app/api/crm/_lib/dolarvzla-rate";
 import {
   DEFAULT_GROQ_FALLBACK_MODEL,
   DEFAULT_AI_MODEL,
@@ -125,7 +126,7 @@ export type AgentDecision = {
   clientId: number | null;
 };
 
-const buildIdentityBlock = (input: {
+const buildIdentityBlock = async (input: {
   conversationId: number;
   customerPhone: string | null;
   client: AgentClientSnapshot | null;
@@ -145,7 +146,18 @@ const buildIdentityBlock = (input: {
   const linked = Boolean(input.client?.wispro_id);
   const billing = parseClientEnvoicing(input.client?.envoicing);
   const debtUsd =
-    billing && Number.isFinite(billing.debt) ? billing.debt.toFixed(2) : "N/D";
+    billing && Number.isFinite(billing.debt) ? billing.debt : null;
+  let debtUsdLabel = "N/D";
+  let debtBsLabel = "N/D";
+  let bcvRateLabel = "N/D";
+  if (debtUsd != null) {
+    const fx = await enrichDebtWithBcv(debtUsd);
+    debtUsdLabel = fx.debt_usd_formatted;
+    if (fx.ok && fx.debt_bs_formatted && fx.bcv_rate_display) {
+      debtBsLabel = fx.debt_bs_formatted;
+      bcvRateLabel = fx.bcv_rate_display;
+    }
+  }
   const serviceSuspended =
     typeof billing?.serviceSuspended === "boolean"
       ? billing.serviceSuspended
@@ -201,7 +213,10 @@ const buildIdentityBlock = (input: {
     `- perfil_ppp: ${pppProfile}`,
     `- zona: ${input.client?.zone || "N/D"}`,
     `- estado_cuenta_crm: ${input.client?.account || "N/D"}`,
-    `- deuda_usd_crm: ${debtUsd}`,
+    `- deuda_usd_crm: ${debtUsdLabel}`,
+    `- deuda_bs_crm: ${debtBsLabel}`,
+    `- tasa_bcv_crm: ${bcvRateLabel}`,
+    `- deuda_quote_rule: copia deuda_usd_crm y deuda_bs_crm tal cual. Prohibido convertir USD a Bs.`,
     `- service_suspended: ${serviceSuspended}`,
     `- wispro_id: ${input.client?.wispro_id || "N/D"}`,
     `- vinculado_wispro: ${linked ? "sí" : "no"}`,
@@ -246,6 +261,10 @@ const createAgentContext = (input: {
     linkedWisproId: identity.wisproId,
     linkedCedula: identity.cedula,
     linkedClientName: identity.name || input.client?.name || input.client?.wa_name || null,
+    linkedDebtUsd: (() => {
+      const billing = parseClientEnvoicing(input.client?.envoicing);
+      return billing && Number.isFinite(billing.debt) ? billing.debt : null;
+    })(),
     escalated: false,
     escalateReason: null,
     escalateMessage: null,
@@ -848,7 +867,7 @@ export const runAiAgent = async (input: {
     "",
     officeHours.promptBlock,
     "",
-    buildIdentityBlock({
+    await buildIdentityBlock({
       conversationId: input.conversationId,
       customerPhone: input.customerPhone,
       client: input.client,

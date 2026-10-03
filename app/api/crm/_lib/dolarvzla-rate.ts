@@ -70,6 +70,14 @@ export const formatUsd = (value: number) => {
   return `$${withThousands},${decPart}`;
 };
 
+/** Formats BCV rate with VE style so 871.37 never becomes "87.136,99". */
+export const formatBcvRate = (rate: number) => {
+  const fixed = roundMoney(rate, 2).toFixed(2);
+  const [intPart, decPart] = fixed.split(".");
+  const withThousands = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  return `${withThousands},${decPart} Bs/$`;
+};
+
 export const convertUsdToBs = (usd: number, rate: number) =>
   roundMoney(usd * rate, 2);
 
@@ -189,6 +197,7 @@ export const enrichDebtWithBcv = async (debtUsd: number) => {
       debt_usd_formatted: formatUsd(debtUsd),
       debt_bs_formatted: formatBolivares(debtBs),
       bcv_rate: rate.rate,
+      bcv_rate_display: formatBcvRate(rate.rate),
       bcv_usd: rate.usd,
       bcv_eur: rate.eur,
       bcv_as_of: rate.asOf,

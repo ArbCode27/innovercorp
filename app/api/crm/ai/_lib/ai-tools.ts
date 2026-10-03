@@ -177,7 +177,7 @@ export const AI_TOOL_DECLARATIONS = [
   {
     name: GET_BCV_RATE_TOOL,
     description:
-      "Consulta la tasa BCV/dólar del día (dolarvzla). Úsala solo si el cliente pregunta por la tasa y NO necesitas consultar saldo. Para saldo pendiente usa lookup_wispro_by_cedula (ya trae debt_bs).",
+      "Consulta la tasa BCV/dólar del día (dolarvzla). Devuelve bcv_rate_display y say_exactly ya formateados; cópialos sin recalcular. Si hay saldo del chat, también trae debt_bs_formatted.",
     parameters: {
       type: "object",
       properties: {},
@@ -398,10 +398,10 @@ export const AI_TOOLS_CONTRACT_PROMPT = `Herramientas disponibles (obligatorio r
 10) get_technician_assigned_tickets — SOLO supervisores (rol=supervisor_wispro). Pasa el nombre TAL CUAL lo dijo el gerente (no lo corrijas). Si el gerente pide los tickets en general o de todo el equipo (ej: todos, equipo, general, tickets de hoy, resueltos de hoy), pasa technician_name='todos'. El sistema resuelve contra el catálogo (resolved/ambiguous/not_found). No inventes nombres. Si pide tickets resueltos, usa scope='done' (por defecto scope='pending'). Si pide hoy, usa temporal='today'. mode=list envía el listado; mode=summary para conteos. Si delivered=true, no escribas nada más. Si pide SUS propios tickets ('mis tickets', 'mi ruta', 'lo mío'), usa list_my_pending_tickets.
 
 Tasa BCV / bolívares (CRÍTICO):
-- NUNCA inventes ni recalcules la tasa.
-- Para saldo: usa debt_bs_formatted / debt_usd_formatted del lookup.
+- NUNCA inventes ni recalcules ni reformatees la tasa.
+- Copia deuda_bs_crm / debt_bs_formatted / say_exactly tal cual salen de la tool o de la identidad.
 - Si bcv_error aparece, informa solo USD y di que no se pudo obtener la tasa del día.
-- Formato bolívares: miles con punto y decimales con coma (ej. Bs. 20.381,75).
+- Formato bolívares: miles con punto y decimales con coma (ej. Bs. 26.141,07). Una tasa de 871,37 Bs/$ NO es 87.136,99.
 
 Flujo obligatorio de pagos:
 1) Si llega imagen de comprobante SIN cédula/RIF: analiza y PIDE el documento (solo números). No hagas handoff.
