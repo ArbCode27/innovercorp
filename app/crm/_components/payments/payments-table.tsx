@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import {
   Table,
@@ -9,27 +10,40 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
 import {
   canRejectPayment,
+  formatPaymentAmount,
   formatPaymentAmountDisplay,
   formatPaymentDate,
   formatPaymentDateTime,
   formatPaymentField,
   formatPlanAmountLabel,
   isPaymentReadyForApproval,
+  isPaymentReadyForManualApproval,
   PAYMENT_PENDING_LABEL,
   type CrmPayment,
 } from "../../_lib/payments";
 import { StatusBadge } from "../shared/status-badge";
 import { EmptyState } from "../shared/empty-state";
-import { CheckCircle2, MessageCircle, Wallet, XCircle } from "lucide-react";
+import { CheckCircle2, ClipboardCheck, MessageCircle, Wallet, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface PaymentsTableProps {
   payments: CrmPayment[];
   updatingId: string | null;
   onApprove: (paymentId: string) => void;
+  onApproveManual?: (paymentId: string) => void;
   onReject: (paymentId: string) => void;
   onOpenChat?: (conversationId: number) => void;
 }
@@ -55,9 +69,24 @@ export const PaymentsTable = ({
   payments,
   updatingId,
   onApprove,
+  onApproveManual,
   onReject,
   onOpenChat,
 }: PaymentsTableProps) => {
+  const [paymentForManualApproval, setPaymentForManualApproval] =
+    useState<CrmPayment | null>(null);
+
+  const handleOpenManualApproval = (payment: CrmPayment) => {
+    setPaymentForManualApproval(payment);
+  };
+
+  const handleConfirmManualApproval = () => {
+    if (!paymentForManualApproval || !onApproveManual) return;
+    const paymentId = paymentForManualApproval.id;
+    setPaymentForManualApproval(null);
+    onApproveManual(paymentId);
+  };
+
   if (!payments.length) {
     return (
       <Card className="overflow-hidden py-0">
@@ -94,9 +123,13 @@ export const PaymentsTable = ({
               const clientName = formatPaymentField(payment.client_name);
               const canReject = canRejectPayment(payment);
               const canApprove = isPaymentReadyForApproval(payment);
+              const canApproveManual = isPaymentReadyForManualApproval(payment);
               const approveHint = canApprove
                 ? `Aprobar pago de ${clientName}`
                 : "Faltan datos para aprobar este comprobante";
+              const manualApproveHint = canApproveManual
+                ? `Aprobar pago de ${clientName} manualmente (sin registrar en Wispro)`
+                : "Se requiere un monto válido para aprobar";
               const latestInvoiceDate = payment.latest_invoice_date?.trim()
                 ? formatPaymentDate(payment.latest_invoice_date)
                 : "—";
@@ -225,6 +258,23 @@ export const PaymentsTable = ({
                             />
                             Aprobar
                           </Button>
+                          {onApproveManual ? (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              disabled={isUpdating || !canApproveManual}
+                              title={manualApproveHint}
+                              onClick={() => handleOpenManualApproval(payment)}
+                              className="border-emerald-600/30 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 dark:border-emerald-500/30 dark:text-emerald-400 dark:hover:bg-emerald-950/40"
+                              aria-label={manualApproveHint}>
+                              <ClipboardCheck
+                                className="size-4 text-emerald-600 dark:text-emerald-400"
+                                aria-hidden="true"
+                              />
+                              Manual
+                            </Button>
+                          ) : null}
                           <Button
                             type="button"
                             size="sm"
@@ -249,6 +299,79 @@ export const PaymentsTable = ({
           </TableBody>
         </Table>
       </div>
+
+      <AlertDialog
+        open={paymentForManualApproval !== null}
+        onOpenChange={(open) => {
+          if (!open && !updatingId) {
+            setPaymentForManualApproval(null);
+          }
+        }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className={CRM_SURFACES.textPrimary}>
+              ¿Aprobar pago manualmente?
+            </AlertDialogTitle>
+            <AlertDialogDescription className={CRM_SURFACES.textMuted} asChild>
+              <div className="space-y-3 text-sm">
+                <p>
+                  Este comprobante se marcará como{" "}
+                  <strong className="text-emerald-600 dark:text-emerald-400">
+                    APROBADO
+                  </strong>{" "}
+                  en el CRM y sumará a la métrica del total recibido por banco.
+                </p>
+                <div className="space-y-1 rounded-lg border bg-muted/40 p-3 text-xs">
+                  <div>
+                    <span className="font-semibold text-foreground">
+                      Cliente:{" "}
+                    </span>
+                    {formatPaymentField(paymentForManualApproval?.client_name)}
+                  </div>
+                  <div>
+                    <span className="font-semibold text-foreground">
+                      Monto:{" "}
+                    </span>
+                    {paymentForManualApproval
+                      ? formatPaymentAmount(paymentForManualApproval.amount)
+                      : "—"}
+                  </div>
+                  <div>
+                    <span className="font-semibold text-foreground">
+                      Banco:{" "}
+                    </span>
+                    {formatPaymentField(paymentForManualApproval?.bank)}
+                  </div>
+                  <div>
+                    <span className="font-semibold text-foreground">
+                      Referencia:{" "}
+                    </span>
+                    {formatPaymentField(
+                      paymentForManualApproval?.transaction_code,
+                    )}
+                  </div>
+                </div>
+                <p className="text-xs text-amber-600 dark:text-amber-400">
+                  ⚠️ <strong>Importante:</strong> No se realizará el registro en
+                  Wispro a través de la API, ya que confirmas que dicho registro
+                  se realizó de forma manual en Wispro.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={updatingId !== null}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={updatingId !== null}
+              className="bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-700"
+              onClick={handleConfirmManualApproval}>
+              Aprobar sin Wispro
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 };

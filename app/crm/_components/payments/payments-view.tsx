@@ -10,7 +10,8 @@ import type {
   CrmPaymentStatus,
   CrmPaymentStatusCounts,
 } from "../../_lib/payments";
-import { formatPaymentField } from "../../_lib/payments";
+import { formatPaymentField, normalizeReceptorBank } from "../../_lib/payments";
+import { roundMoney } from "../../_lib/payment-amount-compare";
 import type { Agent } from "../../_lib/types";
 import { Button } from "@/components/ui/button";
 import { LoadingState } from "../shared/loading-state";
@@ -54,7 +55,7 @@ const DEFAULT_DATE_RANGE = (): PaymentsDateRange => {
 export type PaymentReviewedPayload = {
   conversationId: number;
   agentId: number;
-  action: "approve" | "reject";
+  action: "approve" | "reject" | "approve_manual";
   assigned: boolean;
 };
 
@@ -200,6 +201,39 @@ export const PaymentsView = ({
         [previousStatus]: Math.max(0, (current[previousStatus] || 0) - 1),
         [nextStatus]: (current[nextStatus] || 0) + 1,
       }));
+
+      const rawBank = nextPayment.bank || previous?.bank;
+      const bankName = normalizeReceptorBank(rawBank);
+      const amount = Number(nextPayment.amount ?? previous?.amount ?? 0);
+      const validAmount = Number.isFinite(amount) && amount > 0 ? amount : 0;
+
+      if (bankName && validAmount > 0) {
+        setBankStats((current) =>
+          current.map((stat) => {
+            if (stat.bank !== bankName) return stat;
+            let approvedDelta = 0;
+            let inProcessDelta = 0;
+
+            if (previousStatus === "APROBADO") approvedDelta -= 1;
+            else if (previousStatus === "EN_PROCESO" || previousStatus === "RECIBIDO") inProcessDelta -= 1;
+
+            if (nextStatus === "APROBADO") approvedDelta += 1;
+            else if (nextStatus === "EN_PROCESO" || nextStatus === "RECIBIDO") inProcessDelta += 1;
+
+            return {
+              ...stat,
+              approvedCount: Math.max(0, stat.approvedCount + approvedDelta),
+              approvedAmount: roundMoney(
+                Math.max(0, stat.approvedAmount + approvedDelta * validAmount),
+              ),
+              inProcessCount: Math.max(0, stat.inProcessCount + inProcessDelta),
+              inProcessAmount: roundMoney(
+                Math.max(0, stat.inProcessAmount + inProcessDelta * validAmount),
+              ),
+            };
+          }),
+        );
+      }
     }
 
     const matchesStatusFilter = status === "all" || status === nextStatus;
@@ -235,7 +269,7 @@ export const PaymentsView = ({
 
   const handlePaymentAction = async (
     paymentId: string,
-    action: "approve" | "reject",
+    action: "approve" | "reject" | "approve_manual",
   ) => {
     if (!currentAgent?.id) {
       setError("Debes iniciar sesión como asesor para gestionar pagos");
@@ -252,11 +286,14 @@ export const PaymentsView = ({
     const snapshot = {
       payments,
       counts,
+      bankStats,
       total,
     };
 
-    const optimisticStatus: CrmPaymentStatus =
-      action === "approve" ? "APROBADO" : "RECHAZADO";
+    const isApproval = action === "approve" || action === "approve_manual";
+    const optimisticStatus: CrmPaymentStatus = isApproval
+      ? "APROBADO"
+      : "RECHAZADO";
     const optimisticPayment: CrmPayment = {
       ...paymentBeforeAction,
       status: optimisticStatus,
@@ -355,7 +392,11 @@ export const PaymentsView = ({
         }
       }
 
-      if (action === "approve") {
+      if (action === "approve_manual") {
+        toast.success(
+          `Pago de ${formatPaymentField(nextPayment.client_name)} aprobado manualmente (sin Wispro)`,
+        );
+      } else if (action === "approve") {
         toast.success(
           `Pago de ${formatPaymentField(nextPayment.client_name)} aprobado`,
         );
@@ -370,6 +411,7 @@ export const PaymentsView = ({
       startTransition(() => {
         setPayments(snapshot.payments);
         setCounts(snapshot.counts);
+        setBankStats(snapshot.bankStats);
         setTotal(snapshot.total);
       });
       const message =
@@ -385,6 +427,10 @@ export const PaymentsView = ({
 
   const handleApprove = (paymentId: string) => {
     void handlePaymentAction(paymentId, "approve");
+  };
+
+  const handleApproveManual = (paymentId: string) => {
+    void handlePaymentAction(paymentId, "approve_manual");
   };
 
   const handleReject = (paymentId: string) => {
@@ -468,6 +514,7 @@ export const PaymentsView = ({
               payments={payments}
               updatingId={updatingId}
               onApprove={handleApprove}
+              onApproveManual={handleApproveManual}
               onReject={handleReject}
               onOpenChat={onOpenClientChat}
             />

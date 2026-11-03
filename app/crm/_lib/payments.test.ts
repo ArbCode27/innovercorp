@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildPaymentBankStats,
   formatPlanAmountLabel,
+  isPaymentReadyForManualApproval,
   normalizeReceptorBank,
 } from "./payments";
 
@@ -132,5 +133,71 @@ describe("buildPaymentBankStats", () => {
       inProcessCount: 0,
       inProcessAmount: 0,
     });
+  });
+});
+
+describe("isPaymentReadyForManualApproval", () => {
+  it("allows manual approval when status is EN_PROCESO and amount is greater than 0", () => {
+    expect(
+      isPaymentReadyForManualApproval({
+        status: "EN_PROCESO",
+        amount: 25.5,
+      }),
+    ).toBe(true);
+  });
+
+  it("allows manual approval when status is ERROR and amount is greater than 0", () => {
+    expect(
+      isPaymentReadyForManualApproval({
+        status: "ERROR",
+        amount: 40,
+      }),
+    ).toBe(true);
+  });
+
+  it("disallows manual approval when status is RECIBIDO, APROBADO or RECHAZADO", () => {
+    expect(
+      isPaymentReadyForManualApproval({
+        status: "RECIBIDO",
+        amount: 30,
+      }),
+    ).toBe(false);
+
+    expect(
+      isPaymentReadyForManualApproval({
+        status: "APROBADO",
+        amount: 30,
+      }),
+    ).toBe(false);
+
+    expect(
+      isPaymentReadyForManualApproval({
+        status: "RECHAZADO",
+        amount: 30,
+      }),
+    ).toBe(false);
+  });
+
+  it("disallows manual approval when amount is 0, negative, or invalid", () => {
+    expect(
+      isPaymentReadyForManualApproval({
+        status: "EN_PROCESO",
+        amount: 0,
+      }),
+    ).toBe(false);
+
+    expect(
+      isPaymentReadyForManualApproval({
+        status: "EN_PROCESO",
+        amount: -10,
+      }),
+    ).toBe(false);
+
+    expect(
+      isPaymentReadyForManualApproval({
+        status: "EN_PROCESO",
+        amount: null,
+      }),
+    ).toBe(false);
   });
 });

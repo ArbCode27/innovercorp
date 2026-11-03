@@ -191,6 +191,17 @@ export const isCrmPaymentReadyForApproval = (payment: {
   );
 };
 
+export const isCrmPaymentReadyForManualApproval = (payment: {
+  status: string;
+  amount: number | null;
+}) => {
+  if (payment.status !== "EN_PROCESO" && payment.status !== "ERROR") {
+    return false;
+  }
+  const amount = Number(payment.amount);
+  return Number.isFinite(amount) && amount > 0;
+};
+
 export const getCrmPaymentByMessageId = async (
   supabase: SupabaseClient,
   messageId: number,
@@ -688,33 +699,62 @@ export const approveCrmPayment = async (
   supabase: SupabaseClient,
   input: {
     payment: CrmPayment;
-    wisproPayment: {
+    wisproPayment?: {
       id: string;
       state: string | null;
       payment_date: string;
       amount: number;
       transaction_code: string | null;
       raw: unknown;
-    };
+    } | null;
+    manualApproval?: boolean;
+    manualNote?: string;
   },
 ) => {
+  const wisproPaymentData = input.wisproPayment
+    ? {
+        id: input.wisproPayment.id,
+        state: input.wisproPayment.state,
+        amount: input.wisproPayment.amount,
+        payment_date: input.wisproPayment.payment_date,
+        transaction_code: input.wisproPayment.transaction_code,
+        response: input.wisproPayment.raw,
+        registered_at: new Date().toISOString(),
+      }
+    : input.manualApproval
+      ? {
+          id: "manual",
+          state: "manual",
+          amount: Number(input.payment.amount) || 0,
+          payment_date: input.payment.payment_date,
+          transaction_code: input.payment.transaction_code,
+          response: {
+            note:
+              input.manualNote ||
+              "Aprobado manualmente en CRM (registrado previamente de forma manual en Wispro)",
+          },
+          registered_at: new Date().toISOString(),
+        }
+      : null;
+
+  const nextMetadata: Record<string, unknown> = {
+    ...(input.payment.receipt_metadata || {}),
+  };
+
+  if (wisproPaymentData) {
+    nextMetadata.wispro_payment = wisproPaymentData;
+  }
+  if (input.manualApproval) {
+    nextMetadata.manual_approval = true;
+    nextMetadata.manual_approved_at = new Date().toISOString();
+  }
+
   const { data, error } = await supabase
     .from("crm_payments")
     .update({
       status: "APROBADO",
       error_message: null,
-      receipt_metadata: {
-        ...(input.payment.receipt_metadata || {}),
-        wispro_payment: {
-          id: input.wisproPayment.id,
-          state: input.wisproPayment.state,
-          amount: input.wisproPayment.amount,
-          payment_date: input.wisproPayment.payment_date,
-          transaction_code: input.wisproPayment.transaction_code,
-          response: input.wisproPayment.raw,
-          registered_at: new Date().toISOString(),
-        },
-      },
+      receipt_metadata: nextMetadata,
     })
     .eq("id", input.payment.id)
     .select("*")

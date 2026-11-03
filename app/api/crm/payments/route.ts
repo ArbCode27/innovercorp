@@ -386,7 +386,9 @@ const listQuerySchema = z.object({
 
 const patchSchema = z.object({
   id: z.string().uuid(),
-  action: z.enum(["approve", "reject"]),
+  action: z.enum(["approve", "reject", "approve_manual"]),
+  skip_wispro: z.boolean().optional(),
+  manual_note: z.string().trim().max(500).optional(),
   /** Required: advisor reviewing the payment (owns the client chat after review). */
   agent_id: z.coerce
     .number()
@@ -508,6 +510,72 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({
         ok: true,
         payment,
+        conversation_id: ownership.conversationId,
+        assigned: ownership.assigned,
+        assigned_agent_id: ownership.agentId,
+        assigned_agent_name: ownership.agentName,
+        assign_skip_reason: ownership.skipReason,
+      });
+    }
+
+    const isManualApproval =
+      parsed.data.action === "approve_manual" ||
+      Boolean(parsed.data.skip_wispro);
+
+    if (isManualApproval) {
+      if (currentPayment.status === "RECIBIDO") {
+        return NextResponse.json(
+          { error: "El comprobante aún no tiene todos los datos para aprobarlo" },
+          { status: 400 },
+        );
+      }
+
+      const amount = Number(currentPayment.amount);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        return NextResponse.json(
+          {
+            error:
+              "El comprobante debe tener un monto válido mayor a 0 para aprobarlo",
+          },
+          { status: 400 },
+        );
+      }
+
+      const payment = await approveCrmPayment(supabase, {
+        payment: currentPayment,
+        manualApproval: true,
+        manualNote: parsed.data.manual_note,
+      });
+
+      const ownership = await applyPaymentReviewOwnership(supabase, {
+        paymentId: currentPayment.id,
+        conversationId:
+          payment?.conversation_id ?? currentPayment.conversation_id,
+        clientId: payment?.client_id ?? currentPayment.client_id,
+        agentId: parsed.data.agent_id,
+        action: "approve",
+      });
+
+      try {
+        await notifyClientPaymentApproved(supabase, {
+          payment: payment || currentPayment,
+          conversationId:
+            ownership.conversationId ?? currentPayment.conversation_id,
+        });
+      } catch (notificationError) {
+        await patchPaymentReceiptMetadata(supabase, currentPayment.id, {
+          payment_loaded_notification_error:
+            notificationError instanceof Error
+              ? notificationError.message
+              : "No se pudo notificar por WhatsApp",
+          payment_loaded_notification_error_at: new Date().toISOString(),
+        });
+      }
+
+      return NextResponse.json({
+        ok: true,
+        payment,
+        manual: true,
         conversation_id: ownership.conversationId,
         assigned: ownership.assigned,
         assigned_agent_id: ownership.agentId,

@@ -50,6 +50,7 @@ export type CrmPayment = {
   external_api_status: number | null;
   error_message: string | null;
   receipt_media_url: string | null;
+  receipt_metadata?: Record<string, unknown> | null;
   /** Most recent pending Wispro invoice date (YYYY-MM-DD), when available. */
   latest_invoice_date?: string | null;
   /** Balance of the single pending Wispro invoice, or plan price when none. */
@@ -292,6 +293,17 @@ export const isPaymentReadyForApproval = (payment: {
       digitsOnly(payment.transaction_code) &&
       Number(payment.amount) > 0,
   );
+};
+
+export const isPaymentReadyForManualApproval = (payment: {
+  status: CrmPaymentStatus;
+  amount: number | null;
+}) => {
+  if (payment.status !== "EN_PROCESO" && payment.status !== "ERROR") {
+    return false;
+  }
+  const amount = Number(payment.amount);
+  return Number.isFinite(amount) && amount > 0;
 };
 
 export const canRejectPayment = (payment: { status: CrmPaymentStatus }) =>
