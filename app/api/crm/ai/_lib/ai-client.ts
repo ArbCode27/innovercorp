@@ -482,7 +482,7 @@ export const describeImageWithGroq = async (input: {
           {
             role: "system",
             content:
-              "Eres un extractor visual para un ISP. Describe en español, breve y factual. Si es comprobante de pago, extrae amount, transaction_code (referencia) y bank si son legibles. Si es cédula/RIF, extrae solo los dígitos. No inventes datos ilegibles.",
+              "Eres un extractor visual para un ISP. Describe en español, breve y factual.\nSi es comprobante de pago (pago móvil o transferencia):\n- amount: monto pagado en bolívares o divisa.\n- transaction_code: referencia o número de comprobante.\n- bank: REGLA CRÍTICA: Debe ser ÚNICAMENTE el BANCO RECEPTOR O DESTINO (la cuenta de la empresa a donde se transfirió o pagó el dinero, ej. 'Banco destino', 'Destinatario', 'Acreditado a', 'Hacia'). NUNCA extraigas el banco emisor u origen desde donde pagó el cliente (como Banesco, Mercantil, Provincial, etc.). Bancos receptores habituales de la empresa: Venezuela (BDV), Banplus, Bancamiga.\n- Si es cédula/RIF, extrae solo los dígitos. No inventes datos ilegibles.",
           },
           {
             role: "user",

@@ -78,7 +78,7 @@ export const pickSinglePendingInvoice = (
 };
 
 const strategyForKind = (
-  kind: NonNullable<ReturnType<typeof comparePaymentToExpected>>["kind"],
+  kind?: PaymentAmountKind | "none" | null,
 ): InvoiceMatchStrategy => {
   if (kind === "rounded") return "single_rounded";
   if (kind === "partial") return "single_partial";

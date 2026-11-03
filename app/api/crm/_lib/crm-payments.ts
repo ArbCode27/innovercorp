@@ -1,4 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  CRM_KNOWN_PAYMENT_BANKS,
+  buildPaymentBankStats,
+  normalizeReceptorBank,
+  type CrmPaymentBankStat,
+} from "@/app/crm/_lib/payments";
 
 export const CRM_PAYMENT_STATUSES = [
   "RECIBIDO",
@@ -292,7 +298,8 @@ export const applyCrmPaymentExtraction = async (
   try {
     const amount = parseAmount(input.amount);
     const cedula = digitsOnly(input.cedula);
-    const bank = trimOrNull(input.bank);
+    const rawBank = trimOrNull(input.bank);
+    const bank = normalizeReceptorBank(rawBank) ?? rawBank;
     const transactionCode = digitsOnly(input.transactionCode);
     const clientName = trimOrNull(input.clientName);
 
@@ -432,7 +439,8 @@ const insertCrmPayment = async (
 ): Promise<{ ok: boolean; payment: CrmPayment | null; duplicate: boolean }> => {
   const amount = parseAmount(input.amount);
   const cedula = digitsOnly(input.cedula);
-  const bank = trimOrNull(input.bank);
+  const rawBank = trimOrNull(input.bank);
+  const bank = normalizeReceptorBank(rawBank) ?? rawBank;
   const transactionCode = digitsOnly(input.transactionCode);
   const clientName = trimOrNull(input.clientName);
   const complete = Boolean(amount && cedula && bank && transactionCode && clientName);
@@ -559,6 +567,13 @@ export const listCrmPayments = async (
     .order("bank", { ascending: true })
     .limit(200);
 
+  // Bank statistics aggregate across the filtered date range and search query
+  const bankStatsQuery = applyListFilters(
+    supabase.from("crm_payments").select("bank, amount, status").limit(2000),
+    { ...filters, bank: undefined },
+    { includeStatus: false },
+  );
+
   const countQueries = CRM_PAYMENT_STATUSES.map((status) =>
     applyListFilters(
       supabase.from("crm_payments").select("id", { count: "exact", head: true }),
@@ -567,11 +582,12 @@ export const listCrmPayments = async (
     ),
   );
 
-  const [listResult, banksResult, ...countResults] = await Promise.all([
+  const [listResult, banksResult, bankStatsResult, ...countResults] = await Promise.all([
     listQuery
       .order("created_at", { ascending: false })
       .range(offset, offset + limit - 1),
     banksQuery,
+    bankStatsQuery,
     ...countQueries,
   ]);
 
@@ -585,12 +601,26 @@ export const listCrmPayments = async (
     counts[status] = result?.error ? 0 : (result?.count ?? 0);
   });
 
+  const rawBankStatsRows = (bankStatsResult?.data || []) as Array<{
+    bank: string | null;
+    amount: number | null;
+    status: CrmPaymentStatus;
+  }>;
+
+  const bankStats: CrmPaymentBankStat[] = buildPaymentBankStats(rawBankStatsRows);
+
   const banks = Array.from(
-    new Set(
-      (banksResult.data || [])
-        .map((row) => String((row as { bank?: string }).bank || "").trim())
+    new Set([
+      ...CRM_KNOWN_PAYMENT_BANKS,
+      ...bankStats.map((s) => s.bank),
+      ...(banksResult.data || [])
+        .map(
+          (row) =>
+            normalizeReceptorBank((row as { bank?: string }).bank) ||
+            String((row as { bank?: string }).bank || "").trim(),
+        )
         .filter(Boolean),
-    ),
+    ]),
   );
 
   return {
@@ -598,6 +628,7 @@ export const listCrmPayments = async (
     total: listResult.count ?? (listResult.data || []).length,
     counts,
     banks,
+    bankStats,
     limit,
     offset,
   };

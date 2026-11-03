@@ -15,6 +15,7 @@ import {
   applyCrmPaymentExtraction,
   intakeCrmReceipt,
 } from "@/app/api/crm/_lib/crm-payments";
+import { normalizeReceptorBank } from "@/app/crm/_lib/payments";
 import { ensureConversationLabel } from "@/app/api/crm/_lib/conversation-labels";
 import {
   withClosedOfficeNotice,
@@ -112,9 +113,9 @@ const forClient = (ctx: AgentRunContext, message: string) =>
   withClosedOfficeNotice(message, ctx.officeHours);
 
 type PendingReceipt = {
-  amount: string;
-  transaction_code: string;
-  bank: string;
+  amount: string | null;
+  transaction_code: string | null;
+  bank: string | null;
   comment?: string | null;
 };
 
@@ -252,10 +253,12 @@ const readPendingReceipt = (
   const pending = metadata.pending_receipt;
   if (!pending || typeof pending !== "object") return null;
   const record = pending as Record<string, unknown>;
-  const amount = String(record.amount || "").trim();
-  const transactionCode = String(record.transaction_code || "").trim();
-  const bank = String(record.bank || "").trim();
-  if (!amount || !transactionCode || !bank) return null;
+  const amount = record.amount ? String(record.amount).trim() : null;
+  const transactionCode = record.transaction_code
+    ? String(record.transaction_code).trim()
+    : null;
+  const bank = record.bank ? String(record.bank).trim() : null;
+  if (!amount && !transactionCode && !bank) return null;
   return {
     amount,
     transaction_code: transactionCode,
@@ -819,7 +822,8 @@ const handleSubmitPaymentReceipt = async (
   const amount = parsed.data.amount ?? pending?.amount ?? null;
   const transactionCode =
     parsed.data.transaction_code ?? pending?.transaction_code ?? null;
-  const bank = (parsed.data.bank || pending?.bank || "").trim() || null;
+  const rawBank = (parsed.data.bank || pending?.bank || "").trim() || null;
+  const bank = normalizeReceptorBank(rawBank) || rawBank;
   const comment = parsed.data.comment ?? pending?.comment ?? null;
 
   if (existingMetadata.payment_submitted === true) {

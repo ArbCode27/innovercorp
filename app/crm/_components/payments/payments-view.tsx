@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
 import type {
   CrmPayment,
+  CrmPaymentBankStat,
   CrmPaymentStatus,
   CrmPaymentStatusCounts,
 } from "../../_lib/payments";
@@ -13,6 +14,7 @@ import { formatPaymentField } from "../../_lib/payments";
 import type { Agent } from "../../_lib/types";
 import { Button } from "@/components/ui/button";
 import { LoadingState } from "../shared/loading-state";
+import { PaymentsBankCards } from "./payments-bank-cards";
 import {
   PaymentsFilters,
   PaymentsPagination,
@@ -75,6 +77,7 @@ export const PaymentsView = ({
   const [page, setPage] = useState(1);
   const [payments, setPayments] = useState<CrmPayment[]>([]);
   const [banks, setBanks] = useState<string[]>([]);
+  const [bankStats, setBankStats] = useState<CrmPaymentBankStat[]>([]);
   const [counts, setCounts] = useState<CrmPaymentStatusCounts>(EMPTY_COUNTS);
   const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -115,6 +118,7 @@ export const PaymentsView = ({
           total?: number;
           counts?: CrmPaymentStatusCounts;
           banks?: string[];
+          bankStats?: CrmPaymentBankStat[];
         };
 
         if (!response.ok || !payload.ok) {
@@ -131,6 +135,7 @@ export const PaymentsView = ({
         setTotal(nextTotal);
         setCounts(payload.counts || EMPTY_COUNTS);
         setBanks(payload.banks || []);
+        setBankStats(payload.bankStats || []);
         setError(null);
       } catch (loadError) {
         setError(
@@ -171,6 +176,11 @@ export const PaymentsView = ({
 
   const handleBankChange = (value: string) => {
     setBank(value);
+    setPage(1);
+  };
+
+  const handleBankCardClick = (clickedBank: string) => {
+    setBank((current) => (current === clickedBank ? "all" : clickedBank));
     setPage(1);
   };
 
@@ -409,6 +419,11 @@ export const PaymentsView = ({
 
       <div className="space-y-5">
         <PaymentsStats total={total} counts={counts} />
+        <PaymentsBankCards
+          bankStats={bankStats}
+          selectedBank={bank}
+          onSelectBank={handleBankCardClick}
+        />
         <PaymentsFilters
           searchTerm={searchTerm}
           dateRange={dateRange}

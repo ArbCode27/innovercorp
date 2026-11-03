@@ -62,14 +62,151 @@ export type CrmPayment = {
 
 export type CrmPaymentStatusCounts = Record<CrmPaymentStatus, number>;
 
+export type CrmPaymentBankStat = {
+  bank: string;
+  totalPayments: number;
+  totalAmount: number;
+  approvedCount: number;
+  approvedAmount: number;
+  inProcessCount: number;
+  inProcessAmount: number;
+};
+
 export type CrmPaymentsListResponse = {
   ok: true;
   payments: CrmPayment[];
   total: number;
   counts: CrmPaymentStatusCounts;
   banks: string[];
+  bankStats?: CrmPaymentBankStat[];
   limit: number;
   offset: number;
+};
+
+/**
+ * Normalizes payment bank names to Innover's registered collection accounts (receptors).
+ * When receipts mention both a sending and receiving bank (e.g. "Banesco a Bancamiga"),
+ * extracts only the receiving account.
+ */
+export const normalizeReceptorBank = (
+  raw: string | null | undefined,
+): string | null => {
+  if (!raw) return null;
+  const text = raw.trim();
+  if (!text) return null;
+
+  const lower = text.toLowerCase();
+
+  // If there's an explicit destination pattern (e.g. "hacia Bancamiga", "destino: BDV", "a Banplus")
+  const destinationMatch = lower.match(
+    /(?:destino|receptor|hacia|beneficiario|acreditad[oa]\s+en|\ba\b|->)\s*:?\s*(?:el\s+)?(?:banco\s+)?([a-záéíóúñ0-9\s]+)/i,
+  );
+  const targetSegment = destinationMatch ? destinationMatch[1] : lower;
+
+  if (targetSegment.includes("bancamiga")) return "Bancamiga";
+  if (targetSegment.includes("banplus")) return "Banplus";
+  if (targetSegment.includes("venezuela") || targetSegment.includes("bdv")) {
+    return "Venezuela";
+  }
+
+  // Check known registered receptor banks anywhere in text (prioritizing company receiving banks):
+  if (lower.includes("bancamiga")) return "Bancamiga";
+  if (lower.includes("banplus")) return "Banplus";
+  if (lower.includes("venezuela") || lower.includes("bdv")) {
+    return "Venezuela";
+  }
+
+  // If no known bank matched but an explicit destination phrase exists, extract and format it:
+  if (destinationMatch && destinationMatch[1]) {
+    const cleaned = destinationMatch[1]
+      .replace(/^(el\s+|de\s+|del\s+)+/i, "")
+      .trim()
+      .split(/[,;\n.]/)[0]
+      .trim();
+    if (cleaned.length >= 2) {
+      return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+    }
+  }
+
+  return text;
+};
+
+/**
+ * Aggregates payment statistics per bank/account.
+ * Always seeds known collection banks (Venezuela, Banplus, Bancamiga).
+ */
+export const buildPaymentBankStats = (
+  rows: Array<{
+    bank: string | null;
+    amount: number | null;
+    status: CrmPaymentStatus;
+  }>,
+): CrmPaymentBankStat[] => {
+  const map = new Map<string, CrmPaymentBankStat>();
+
+  for (const knownBank of CRM_KNOWN_PAYMENT_BANKS) {
+    map.set(knownBank, {
+      bank: knownBank,
+      totalPayments: 0,
+      totalAmount: 0,
+      approvedCount: 0,
+      approvedAmount: 0,
+      inProcessCount: 0,
+      inProcessAmount: 0,
+    });
+  }
+
+  for (const row of rows) {
+    const normalized = normalizeReceptorBank(row.bank);
+    if (!normalized) continue;
+
+    let stat = map.get(normalized);
+    if (!stat) {
+      stat = {
+        bank: normalized,
+        totalPayments: 0,
+        totalAmount: 0,
+        approvedCount: 0,
+        approvedAmount: 0,
+        inProcessCount: 0,
+        inProcessAmount: 0,
+      };
+      map.set(normalized, stat);
+    }
+
+    const amount = Number(row.amount);
+    const validAmount = Number.isFinite(amount) && amount > 0 ? amount : 0;
+
+    stat.totalPayments += 1;
+    stat.totalAmount = roundMoney(stat.totalAmount + validAmount);
+
+    if (row.status === "APROBADO") {
+      stat.approvedCount += 1;
+      stat.approvedAmount = roundMoney(stat.approvedAmount + validAmount);
+    } else if (row.status === "EN_PROCESO" || row.status === "RECIBIDO") {
+      stat.inProcessCount += 1;
+      stat.inProcessAmount = roundMoney(stat.inProcessAmount + validAmount);
+    }
+  }
+
+  const knownSet = new Set<string>(CRM_KNOWN_PAYMENT_BANKS);
+  return Array.from(map.values()).sort((a, b) => {
+    const aKnown = knownSet.has(a.bank);
+    const bKnown = knownSet.has(b.bank);
+    if (aKnown && bKnown) {
+      return (
+        CRM_KNOWN_PAYMENT_BANKS.indexOf(
+          a.bank as (typeof CRM_KNOWN_PAYMENT_BANKS)[number],
+        ) -
+        CRM_KNOWN_PAYMENT_BANKS.indexOf(
+          b.bank as (typeof CRM_KNOWN_PAYMENT_BANKS)[number],
+        )
+      );
+    }
+    if (aKnown) return -1;
+    if (bKnown) return 1;
+    return a.bank.localeCompare(b.bank);
+  });
 };
 
 const digitsOnly = (value: string | null | undefined) =>
