@@ -552,7 +552,7 @@ export const listCrmPayments = async (
   supabase: SupabaseClient,
   filters: ListCrmPaymentsFilters,
 ) => {
-  const limit = Math.min(Math.max(filters.limit ?? 50, 1), 200);
+  const limit = Math.min(Math.max(filters.limit ?? 50, 1), 2000);
   const offset = Math.max(filters.offset ?? 0, 0);
 
   const listQuery = applyListFilters(

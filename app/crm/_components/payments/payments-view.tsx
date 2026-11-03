@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, useTransition } from "react";
-import { RefreshCw } from "lucide-react";
+import { FileSpreadsheet, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
 import type {
@@ -15,6 +15,7 @@ import type { Agent } from "../../_lib/types";
 import { Button } from "@/components/ui/button";
 import { LoadingState } from "../shared/loading-state";
 import { PaymentsBankCards } from "./payments-bank-cards";
+import { PaymentsExportDialog } from "./payments-export-dialog";
 import {
   PaymentsFilters,
   PaymentsPagination,
@@ -84,6 +85,7 @@ export const PaymentsView = ({
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
   const [, startTransition] = useTransition();
 
   useEffect(() => {
@@ -402,19 +404,34 @@ export const PaymentsView = ({
             extracción
           </p>
         </div>
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={() => void loadPayments("refresh")}
-          disabled={isRefreshing || isLoading}
-          className="w-full cursor-pointer sm:w-auto"
-          aria-label="Actualizar listado de pagos">
-          <RefreshCw
-            className={`mr-2 size-4 ${isRefreshing ? "animate-spin" : ""}`}
-            aria-hidden="true"
-          />
-          Actualizar
-        </Button>
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setIsExportDialogOpen(true)}
+            className="w-full cursor-pointer gap-2 border-emerald-500/30 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 dark:border-emerald-500/40 dark:text-emerald-400 dark:hover:bg-emerald-950/40 sm:w-auto"
+            aria-label="Abrir modal para exportar pagos a Excel">
+            <FileSpreadsheet
+              className="size-4 text-emerald-600 dark:text-emerald-400"
+              aria-hidden="true"
+            />
+            Exportar a Excel
+          </Button>
+
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => void loadPayments("refresh")}
+            disabled={isRefreshing || isLoading}
+            className="w-full cursor-pointer sm:w-auto"
+            aria-label="Actualizar listado de pagos">
+            <RefreshCw
+              className={`mr-2 size-4 ${isRefreshing ? "animate-spin" : ""}`}
+              aria-hidden="true"
+            />
+            Actualizar
+          </Button>
+        </div>
       </div>
 
       <div className="space-y-5">
@@ -464,6 +481,16 @@ export const PaymentsView = ({
           </>
         )}
       </div>
+
+      <PaymentsExportDialog
+        open={isExportDialogOpen}
+        onOpenChange={setIsExportDialogOpen}
+        availableBanks={banks}
+        currentBankFilter={bank}
+        currentDateRange={dateRange}
+        currentStatus={status}
+        bankStats={bankStats}
+      />
     </div>
   );
 };
