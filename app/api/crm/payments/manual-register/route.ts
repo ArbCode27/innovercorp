@@ -15,8 +15,8 @@ import { buildPaymentSuccessMessage } from "@/app/crm/_lib/payment-success-messa
 const GRAPH_API_VERSION = "v19.0";
 
 const payloadSchema = z.object({
-  messageId: z.coerce.number().int().positive(),
-  conversationId: z.coerce.number().int().positive(),
+  messageId: z.coerce.number().int().positive().optional().nullable(),
+  conversationId: z.coerce.number().int().positive().optional().nullable(),
   agentId: z.coerce.number().int().positive(),
   amountUsd: z.coerce.number().positive(),
   amountBs: z.coerce.number().positive().optional().nullable(),
@@ -27,6 +27,12 @@ const payloadSchema = z.object({
   comment: z.string().optional().nullable(),
   registerInWispro: z.boolean().default(true),
   notifyClient: z.boolean().default(true),
+  // Direct client fields when registered without message/chat
+  clientId: z.coerce.number().int().positive().optional().nullable(),
+  wisproClientId: z.string().optional().nullable(),
+  clientName: z.string().optional().nullable(),
+  cedula: z.string().optional().nullable(),
+  phoneId: z.string().optional().nullable(),
 });
 
 const getServerEnv = (key: string) => {
@@ -97,6 +103,11 @@ export async function POST(req: NextRequest) {
       comment,
       registerInWispro,
       notifyClient,
+      clientId,
+      wisproClientId,
+      clientName,
+      cedula,
+      phoneId,
     } = parsed.data;
 
     const supabase = getServiceClient();
@@ -115,58 +126,118 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 2. Validate conversation & client
-    const { data: conversation } = await supabase
-      .from("conversations")
-      .select("id, client_id, customer_phone")
-      .eq("id", conversationId)
-      .maybeSingle();
+    // 2. Resolve client and conversation
+    let resolvedConversationId: number | null = conversationId ?? null;
+    let resolvedClientId: number | null = clientId ?? null;
+    let customerPhone: string | null = phoneId?.replace(/\D/g, "") || null;
+    let clientIdentity = {
+      linked: Boolean(wisproClientId),
+      wisproId: wisproClientId || null,
+      cedula: cedula?.replace(/\D/g, "") || null,
+      name: clientName?.trim() || null,
+    };
 
-    if (!conversation) {
-      return NextResponse.json(
-        { error: "La conversación no existe" },
-        { status: 404 },
-      );
+    if (resolvedConversationId) {
+      const { data: conversation } = await supabase
+        .from("conversations")
+        .select("id, client_id, customer_phone")
+        .eq("id", resolvedConversationId)
+        .maybeSingle();
+
+      if (conversation) {
+        if (!resolvedClientId && conversation.client_id) {
+          resolvedClientId = conversation.client_id;
+        }
+        if (!customerPhone && conversation.customer_phone) {
+          customerPhone = conversation.customer_phone.replace(/\D/g, "");
+        }
+      }
     }
 
-    let clientIdentity = {
-      linked: false,
-      wisproId: null as string | null,
-      cedula: null as string | null,
-      name: null as string | null,
-    };
-    let customerPhone = conversation.customer_phone?.replace(/\D/g, "") || null;
-
-    if (conversation.client_id) {
+    if (resolvedClientId) {
       const { data: client } = await supabase
         .from("clients")
         .select("id, name, phone, whatsapp_id, wispro_id, envoicing")
-        .eq("id", conversation.client_id)
+        .eq("id", resolvedClientId)
         .maybeSingle();
 
       if (client) {
-        clientIdentity = resolveLinkedClientIdentity(client);
+        const linked = resolveLinkedClientIdentity(client);
+        clientIdentity = {
+          linked: linked.linked || Boolean(clientIdentity.wisproId),
+          wisproId: linked.wisproId || clientIdentity.wisproId,
+          cedula: linked.cedula || clientIdentity.cedula,
+          name: linked.name || clientIdentity.name || client.name,
+        };
         if (!customerPhone) {
           customerPhone =
             client.whatsapp_id?.replace(/\D/g, "") ||
             client.phone?.replace(/\D/g, "") ||
             null;
         }
+
+        if (!resolvedConversationId) {
+          const { data: conv } = await supabase
+            .from("conversations")
+            .select("id")
+            .eq("client_id", client.id)
+            .order("updated_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (conv) resolvedConversationId = conv.id;
+        }
+      }
+    } else if (clientIdentity.wisproId) {
+      const { data: client } = await supabase
+        .from("clients")
+        .select("id, name, phone, whatsapp_id, wispro_id, envoicing")
+        .eq("wispro_id", clientIdentity.wisproId)
+        .limit(1)
+        .maybeSingle();
+
+      if (client) {
+        resolvedClientId = client.id;
+        const linked = resolveLinkedClientIdentity(client);
+        clientIdentity = {
+          linked: true,
+          wisproId: linked.wisproId || clientIdentity.wisproId,
+          cedula: linked.cedula || clientIdentity.cedula,
+          name: linked.name || clientIdentity.name || client.name,
+        };
+        if (!customerPhone) {
+          customerPhone =
+            client.whatsapp_id?.replace(/\D/g, "") ||
+            client.phone?.replace(/\D/g, "") ||
+            null;
+        }
+        if (!resolvedConversationId) {
+          const { data: conv } = await supabase
+            .from("conversations")
+            .select("id")
+            .eq("client_id", client.id)
+            .order("updated_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (conv) resolvedConversationId = conv.id;
+        }
       }
     }
 
-    // 3. Validate message
-    const { data: message } = await supabase
-      .from("messages")
-      .select("id, conversation_id, media_url, metadata")
-      .eq("id", messageId)
-      .maybeSingle();
+    // 3. Resolve message if messageId was provided
+    let messageMediaUrl: string | null = null;
+    let originalMessageMetadata: Record<string, unknown> = {};
 
-    if (!message) {
-      return NextResponse.json(
-        { error: "El mensaje del comprobante no existe" },
-        { status: 404 },
-      );
+    if (messageId) {
+      const { data: message } = await supabase
+        .from("messages")
+        .select("id, conversation_id, media_url, metadata")
+        .eq("id", messageId)
+        .maybeSingle();
+
+      if (message) {
+        messageMediaUrl = message.media_url;
+        originalMessageMetadata = (message.metadata || {}) as Record<string, unknown>;
+      }
     }
 
     const cleanTransactionCode = transactionCode.replace(/\D/g, "");
@@ -269,14 +340,27 @@ export async function POST(req: NextRequest) {
     }
 
     // 5. Upsert into crm_payments
-    const existingPaymentQuery = await supabase
-      .from("crm_payments")
-      .select("id, receipt_metadata")
-      .eq("message_id", messageId)
-      .maybeSingle();
+    let existingPayment = null;
+    if (messageId) {
+      const { data } = await supabase
+        .from("crm_payments")
+        .select("id, receipt_metadata")
+        .eq("message_id", messageId)
+        .maybeSingle();
+      existingPayment = data;
+    } else if (clientIdentity.cedula && normalizedBank && cleanTransactionCode) {
+      const { data } = await supabase
+        .from("crm_payments")
+        .select("id, receipt_metadata")
+        .eq("cedula", clientIdentity.cedula)
+        .eq("bank", normalizedBank)
+        .eq("transaction_code", cleanTransactionCode)
+        .maybeSingle();
+      existingPayment = data;
+    }
 
     const receiptMetadata = {
-      ...(existingPaymentQuery.data?.receipt_metadata || {}),
+      ...(existingPayment?.receipt_metadata || {}),
       manual_registered: true,
       registered_by_agent_id: agentId,
       registered_by_agent_name: agent.name,
@@ -289,15 +373,14 @@ export async function POST(req: NextRequest) {
       wispro_invoice_match: wisproInvoiceMatchMeta,
     };
 
-    let paymentId: string;
+    let savedPayment = null;
 
-    if (existingPaymentQuery.data?.id) {
-      paymentId = existingPaymentQuery.data.id;
-      const { error: updateError } = await supabase
+    if (existingPayment?.id) {
+      const { data, error: updateError } = await supabase
         .from("crm_payments")
         .update({
-          client_id: conversation.client_id,
-          conversation_id: conversationId,
+          client_id: resolvedClientId,
+          conversation_id: resolvedConversationId,
           submitted_by_agent_id: agentId,
           wispro_client_id: clientIdentity.wisproId,
           client_name: clientIdentity.name,
@@ -312,11 +395,13 @@ export async function POST(req: NextRequest) {
           status: paymentStatus,
           external_payment_id: externalPaymentId,
           external_api_status: externalApiStatus,
-          receipt_media_url: message.media_url,
+          receipt_media_url: messageMediaUrl,
           receipt_metadata: receiptMetadata,
           updated_at: new Date().toISOString(),
         })
-        .eq("id", paymentId);
+        .eq("id", existingPayment.id)
+        .select("*")
+        .maybeSingle();
 
       if (updateError) {
         console.error("[MANUAL_REGISTER] payment_update_failed", updateError);
@@ -325,13 +410,14 @@ export async function POST(req: NextRequest) {
           { status: 500 },
         );
       }
+      savedPayment = data;
     } else {
       const { data: newPayment, error: insertError } = await supabase
         .from("crm_payments")
         .insert({
-          client_id: conversation.client_id,
-          conversation_id: conversationId,
-          message_id: messageId,
+          client_id: resolvedClientId,
+          conversation_id: resolvedConversationId,
+          message_id: messageId ?? null,
           submitted_by_agent_id: agentId,
           wispro_client_id: clientIdentity.wisproId,
           client_name: clientIdentity.name,
@@ -347,10 +433,10 @@ export async function POST(req: NextRequest) {
           source: "advisor",
           external_payment_id: externalPaymentId,
           external_api_status: externalApiStatus,
-          receipt_media_url: message.media_url,
+          receipt_media_url: messageMediaUrl,
           receipt_metadata: receiptMetadata,
         })
-        .select("id")
+        .select("*")
         .maybeSingle();
 
       if (insertError || !newPayment) {
@@ -360,27 +446,31 @@ export async function POST(req: NextRequest) {
           { status: 500 },
         );
       }
-      paymentId = newPayment.id;
+      savedPayment = newPayment;
     }
 
-    // 6. Update message metadata to mark payment as registered
-    const updatedMessageMetadata = {
-      ...(message.metadata || {}),
-      payment_registered: true,
-      payment_registered_at: new Date().toISOString(),
-      payment_registered_by: agentId,
-      crm_payment_id: paymentId,
-      payment_amount: amountUsd,
-      payment_amount_bs: amountBs || null,
-      payment_bank: normalizedBank,
-      payment_transaction_code: cleanTransactionCode,
-      payment_in_wispro: registerInWispro,
-    };
+    const paymentId = savedPayment?.id;
 
-    await supabase
-      .from("messages")
-      .update({ metadata: updatedMessageMetadata })
-      .eq("id", messageId);
+    // 6. Update message metadata if messageId exists
+    if (messageId) {
+      const updatedMessageMetadata = {
+        ...originalMessageMetadata,
+        payment_registered: true,
+        payment_registered_at: new Date().toISOString(),
+        payment_registered_by: agentId,
+        crm_payment_id: paymentId,
+        payment_amount: amountUsd,
+        payment_amount_bs: amountBs || null,
+        payment_bank: normalizedBank,
+        payment_transaction_code: cleanTransactionCode,
+        payment_in_wispro: registerInWispro,
+      };
+
+      await supabase
+        .from("messages")
+        .update({ metadata: updatedMessageMetadata })
+        .eq("id", messageId);
+    }
 
     // 7. If notifyClient and registerInWispro, send WhatsApp confirmation
     if (notifyClient && registerInWispro && customerPhone) {
@@ -392,10 +482,10 @@ export async function POST(req: NextRequest) {
         });
 
         const waMsgId = await sendWhatsAppPaymentNotice(customerPhone, noticeText);
-        if (waMsgId) {
+        if (waMsgId && resolvedConversationId) {
           const now = new Date().toISOString();
           await supabase.from("messages").insert({
-            conversation_id: conversationId,
+            conversation_id: resolvedConversationId,
             wa_message_id: waMsgId,
             type: "out",
             content: noticeText,
@@ -417,6 +507,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       paymentId,
+      payment: savedPayment,
       status: paymentStatus,
       registeredInWispro: registerInWispro,
       wisproPayment: wisproPaymentResult,
