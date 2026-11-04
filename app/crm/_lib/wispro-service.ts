@@ -16,11 +16,11 @@ const parseApiError = (payload: WisproApiPayload, fallback: string) => {
 };
 
 export const wisproService = {
-  async searchByCedula(cedula: string): Promise<WisproSearchResult[]> {
+  async searchClients(query: string): Promise<WisproSearchResult[]> {
     const response = await fetch("/api/crm/wispro/search", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cedula }),
+      body: JSON.stringify({ query }),
     });
 
     const payload = (await response.json()) as WisproApiPayload;
@@ -30,6 +30,10 @@ export const wisproService = {
     }
 
     return payload.data || [];
+  },
+
+  async searchByCedula(cedula: string): Promise<WisproSearchResult[]> {
+    return this.searchClients(cedula);
   },
 
   async associateToConversation(input: {

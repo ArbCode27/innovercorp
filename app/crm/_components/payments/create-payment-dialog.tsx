@@ -9,7 +9,6 @@ import {
   DollarSign,
   Hash,
   Loader2,
-  Plus,
   RefreshCw,
   Search,
   User,
@@ -120,11 +119,12 @@ export const CreatePaymentDialog = ({
     };
   }, [open]);
 
+  // Client search by Name or Cédula/RIF
   const handleSearchClient = async (e?: React.FormEvent) => {
     e?.preventDefault();
-    const query = searchQuery.trim().replace(/\D/g, "");
-    if (!query) {
-      toast.error("Ingresa la cédula o RIF (solo números)");
+    const query = searchQuery.trim();
+    if (query.length < 2) {
+      toast.error("Ingresa al menos 2 caracteres para buscar por nombre o cédula");
       return;
     }
 
@@ -132,13 +132,13 @@ export const CreatePaymentDialog = ({
     setSearchResults([]);
 
     try {
-      const results = await wisproService.searchByCedula(query);
+      const results = await wisproService.searchClients(query);
       setSearchResults(results);
 
       if (results.length === 1) {
         handleSelectClient(results[0]);
       } else if (!results.length) {
-        toast.info("No se encontró ningún cliente con ese documento");
+        toast.info("No se encontró ningún cliente con ese nombre o documento");
       }
     } catch (err) {
       toast.error(
@@ -163,25 +163,31 @@ export const CreatePaymentDialog = ({
     }
   };
 
-  // Recalculate USD when Bs changes
+  // Bidirectional conversion: Bolívares -> Dólares
   const handleAmountBsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setAmountBs(val);
 
-    const numericBs = Number.parseFloat(val.replace(",", "."));
+    const clean = val.replace(/\s/g, "").replace(",", ".");
+    const numericBs = Number.parseFloat(clean);
     if (Number.isFinite(numericBs) && numericBs > 0 && bcvRate > 0) {
       setAmountUsd(String(roundMoney(numericBs / bcvRate, 2)));
+    } else if (!val.trim()) {
+      setAmountUsd("");
     }
   };
 
-  // Recalculate Bs when USD changes
+  // Bidirectional conversion: Dólares -> Bolívares
   const handleAmountUsdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setAmountUsd(val);
 
-    const numericUsd = Number.parseFloat(val.replace(",", "."));
+    const clean = val.replace(/\s/g, "").replace(",", ".");
+    const numericUsd = Number.parseFloat(clean);
     if (Number.isFinite(numericUsd) && numericUsd > 0 && bcvRate > 0) {
       setAmountBs(String(roundMoney(numericUsd * bcvRate, 2)));
+    } else if (!val.trim()) {
+      setAmountBs("");
     }
   };
 
@@ -281,7 +287,7 @@ export const CreatePaymentDialog = ({
               Registrar Pago Manual
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground">
-              Registra un pago de cliente con cálculo automático de divisas y aplicación directa en Wispro.
+              Busca el cliente por nombre o cédula, calcula la conversión de divisas y aplica el pago en Wispro.
             </DialogDescription>
           </DialogHeader>
 
@@ -289,24 +295,30 @@ export const CreatePaymentDialog = ({
             {/* Step 1: Client Search & Selection */}
             {!selectedClient ? (
               <div className="flex flex-col gap-2.5 rounded-xl border border-border/60 bg-muted/20 p-4">
-                <Label htmlFor="searchCedula" className="text-xs font-semibold flex items-center gap-1.5">
+                <Label htmlFor="searchClient" className="text-xs font-semibold flex items-center gap-1.5">
                   <User className="size-3.5 text-primary" aria-hidden="true" />
-                  Buscar Cliente por Cédula o RIF
+                  Buscar Cliente por Nombre o Cédula / RIF
                 </Label>
                 <div className="flex gap-2">
                   <Input
-                    id="searchCedula"
-                    placeholder="ej. 12345678 (solo números)"
+                    id="searchClient"
+                    placeholder="ej. Carlos Sanchez o 12345678"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="font-mono text-sm"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleSearchClient();
+                      }
+                    }}
+                    className="text-sm"
                     autoFocus
                   />
                   <Button
                     type="button"
                     onClick={() => handleSearchClient()}
                     disabled={isSearching}
-                    className="gap-1.5 shrink-0">
+                    className="gap-1.5 shrink-0 bg-primary text-primary-foreground">
                     {isSearching ? (
                       <Loader2 className="size-4 animate-spin" aria-hidden="true" />
                     ) : (
@@ -332,6 +344,7 @@ export const CreatePaymentDialog = ({
                           <div className="font-medium text-foreground">{result.customer.name}</div>
                           <div className="font-mono text-[11px] text-muted-foreground">
                             C.I: {result.customer.national_identification_number}
+                            {result.customer.phone_mobile ? ` • Telf: ${result.customer.phone_mobile}` : ""}
                           </div>
                         </div>
                         <Badge
@@ -384,7 +397,7 @@ export const CreatePaymentDialog = ({
               </div>
             )}
 
-            {/* Step 2: Amount with automatic conversion */}
+            {/* Step 2: Amounts with live bidirectional conversion */}
             <div className="grid grid-cols-2 gap-3">
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="amountBs" className="text-xs font-medium">
@@ -401,13 +414,12 @@ export const CreatePaymentDialog = ({
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="amountUsd" className="text-xs font-medium flex items-center gap-1">
-                  <DollarSign className="size-3.5 text-emerald-600" aria-hidden="true" />
+                <Label htmlFor="amountUsd" className="text-xs font-medium">
                   Monto en Dólares (USD)
                 </Label>
                 <Input
                   id="amountUsd"
-                  placeholder="ej. 25.00"
+                  placeholder="ej. 25.10"
                   value={amountUsd}
                   onChange={handleAmountUsdChange}
                   className="font-mono text-sm font-semibold"
@@ -416,19 +428,19 @@ export const CreatePaymentDialog = ({
               </div>
             </div>
 
-            {/* Live BCV Rate info */}
+            {/* Live BCV rate indicator */}
             {bcvRate > 0 ? (
-              <div className="flex items-center justify-between rounded-lg bg-muted/40 px-3 py-1.5 text-[11px] text-muted-foreground">
-                <span className="flex items-center gap-1.5">
+              <div className="flex items-center justify-between rounded-lg border border-border/50 bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
+                <span className="flex items-center gap-1.5 font-medium text-foreground">
                   <RefreshCw className="size-3 text-primary" aria-hidden="true" />
                   Tasa BCV del día: <strong className="text-foreground">{formatBcvRate(bcvRate)}</strong>
                   {bcvAsOf ? ` (${bcvAsOf})` : ""}
                 </span>
-                <span>Conversión en tiempo real</span>
+                <span className="text-[10px]">Conversión automática bidireccional</span>
               </div>
             ) : null}
 
-            {/* Bank Selector */}
+            {/* Step 3: Bank selector */}
             <div className="flex flex-col gap-1.5">
               <Label className="text-xs font-medium flex items-center justify-between">
                 <span className="flex items-center gap-1.5">
@@ -472,12 +484,12 @@ export const CreatePaymentDialog = ({
               />
             </div>
 
-            {/* Reference & Date */}
+            {/* Step 4: Reference & Date */}
             <div className="grid grid-cols-2 gap-3">
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="reference" className="text-xs font-medium flex items-center gap-1">
                   <Hash className="size-3.5 text-muted-foreground" aria-hidden="true" />
-                  Referencia / Nro. Comprobante
+                  Número de Referencia
                 </Label>
                 <Input
                   id="reference"
@@ -492,40 +504,42 @@ export const CreatePaymentDialog = ({
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="paymentDate" className="text-xs font-medium flex items-center gap-1">
                   <Calendar className="size-3.5 text-muted-foreground" aria-hidden="true" />
-                  Fecha del Pago
+                  Fecha de la Transacción
                 </Label>
                 <Input
                   id="paymentDate"
                   type="date"
                   value={paymentDate}
                   onChange={(e) => setPaymentDate(e.target.value)}
+                  className="text-sm"
                   required
                 />
               </div>
             </div>
 
-            {/* Comments / Observation */}
+            {/* Step 5: Comment / Note */}
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="comment" className="text-xs font-medium">
-                Nota / Observación (opcional)
+                Observación o Nota (opcional)
               </Label>
               <Input
                 id="comment"
-                placeholder="ej. Pago manual mensualidad oficina"
+                placeholder="ej. Pago de mensualidad reportado en oficina"
                 value={comment}
                 onChange={(e) => setComment(e.target.value)}
+                className="text-sm"
               />
             </div>
 
-            {/* Options Toggles */}
-            <div className="flex flex-col gap-2 rounded-xl border border-border/60 bg-muted/10 p-3">
+            {/* Step 6: Options Switches */}
+            <div className="flex flex-col gap-2.5 rounded-xl border border-border/60 bg-muted/10 p-3.5">
               <div className="flex items-center justify-between">
                 <div className="flex flex-col">
                   <span className="text-xs font-medium text-foreground">
                     Registrar en Wispro inmediatamente
                   </span>
                   <span className="text-[11px] text-muted-foreground">
-                    Aplica y concilia el pago contra las facturas abiertas del abonado en Wispro.
+                    Aplica automáticamente el pago a las facturas pendientes del abonado.
                   </span>
                 </div>
                 <Switch
@@ -536,13 +550,13 @@ export const CreatePaymentDialog = ({
               </div>
 
               {registerInWispro ? (
-                <div className="mt-1 flex items-center justify-between border-t border-border/40 pt-2">
+                <div className="mt-1 flex items-center justify-between border-t border-border/40 pt-2.5">
                   <div className="flex flex-col">
                     <span className="text-xs font-medium text-foreground">
                       Notificar al cliente por WhatsApp
                     </span>
                     <span className="text-[11px] text-muted-foreground">
-                      Envía confirmación automática de pago aprobado al número del cliente.
+                      Envía confirmación automática de pago aprobado al teléfono del cliente.
                     </span>
                   </div>
                   <Switch

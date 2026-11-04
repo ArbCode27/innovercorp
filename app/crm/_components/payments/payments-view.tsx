@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, useTransition } from "react";
-import { FileSpreadsheet, Plus, RefreshCw } from "lucide-react";
+import { FileSpreadsheet, HandCoins, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
 import type {
@@ -470,7 +470,7 @@ export const PaymentsView = ({
               onClick={() => setIsCreatePaymentOpen(true)}
               className="w-full cursor-pointer gap-2 bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-700 sm:w-auto"
               aria-label="Registrar pago manual">
-              <Plus className="size-4" aria-hidden="true" />
+              <HandCoins className="size-4" aria-hidden="true" />
               Registrar pago manual
             </Button>
           ) : null}
