@@ -13,6 +13,7 @@ interface ConversationMessagesProps {
   messages: Message[];
   isLoading: boolean;
   onProcessPaymentReceipt: (messageId: number) => Promise<void>;
+  onOpenPaymentDialog?: (message: Message) => void;
   onResendMessage: (messageId: number) => Promise<void>;
   canRegisterManualPayment?: boolean;
   manualPaymentBlockReason?: string | null;
@@ -22,6 +23,7 @@ export const ConversationMessages = ({
   messages,
   isLoading,
   onProcessPaymentReceipt,
+  onOpenPaymentDialog,
   onResendMessage,
   canRegisterManualPayment = true,
   manualPaymentBlockReason = null,
@@ -61,6 +63,7 @@ export const ConversationMessages = ({
               key={message.id}
               message={message}
               onProcessPaymentReceipt={onProcessPaymentReceipt}
+              onOpenPaymentDialog={onOpenPaymentDialog}
               onResendMessage={onResendMessage}
               canRegisterManualPayment={canRegisterManualPayment}
               manualPaymentBlockReason={manualPaymentBlockReason}

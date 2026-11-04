@@ -54,6 +54,15 @@ interface MyConversationsViewProps {
   ) => Promise<void>;
   onSendImage: (imageFile: File, caption?: string) => Promise<void>;
   onProcessPaymentReceipt: (messageId: number) => Promise<void>;
+  onManualPaymentSuccess?: (info: {
+    messageId: number;
+    paymentId: string;
+    amountUsd: number;
+    amountBs?: number;
+    bank: string;
+    transactionCode: string;
+    registeredInWispro: boolean;
+  }) => void;
   onResendMessage: (messageId: number) => Promise<void>;
   onAddNote: (content: string) => Promise<void>;
   onTakeControl: () => Promise<void>;
@@ -98,6 +107,7 @@ export const MyConversationsView = ({
   onSendVoiceNote,
   onSendImage,
   onProcessPaymentReceipt,
+  onManualPaymentSuccess,
   onResendMessage,
   onAddNote,
   onTakeControl,
@@ -196,6 +206,7 @@ export const MyConversationsView = ({
           onSendVoiceNote={onSendVoiceNote}
           onSendImage={onSendImage}
           onProcessPaymentReceipt={onProcessPaymentReceipt}
+          onManualPaymentSuccess={onManualPaymentSuccess}
           onResendMessage={onResendMessage}
           onBackToList={() => onSelectConversation(null)}
           onAddNote={onAddNote}

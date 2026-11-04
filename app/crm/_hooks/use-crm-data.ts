@@ -766,7 +766,37 @@ export const useCrmData = (agent: Agent | null) => {
         };
       }),
     );
+  };
 
+  const handleManualPaymentSuccess = (info: {
+    messageId: number;
+    paymentId: string;
+    amountUsd: number;
+    amountBs?: number;
+    bank: string;
+    transactionCode: string;
+    registeredInWispro: boolean;
+  }) => {
+    setMessages((current) =>
+      current.map((item) => {
+        if (item.id !== info.messageId) return item;
+        return {
+          ...item,
+          metadata: {
+            ...(item.metadata || {}),
+            payment_registered: true,
+            payment_registered_at: new Date().toISOString(),
+            payment_registered_by: agent?.id,
+            crm_payment_id: info.paymentId,
+            payment_amount: info.amountUsd,
+            payment_amount_bs: info.amountBs,
+            payment_bank: info.bank,
+            payment_transaction_code: info.transactionCode,
+            payment_in_wispro: info.registeredInWispro,
+          },
+        };
+      }),
+    );
   };
 
   const resendMessage = async (messageId: number) => {
@@ -1428,6 +1458,7 @@ export const useCrmData = (agent: Agent | null) => {
     sendVoiceNote,
     sendImageMessage,
     processPaymentReceipt,
+    handleManualPaymentSuccess,
     resendMessage,
     addNote,
     takeControl,

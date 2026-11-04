@@ -42,6 +42,7 @@ import { ConversationHeader } from "./conversation-header";
 import { ConversationMessages } from "./conversation-messages";
 import { ConversationWelcomePanel } from "./conversation-welcome-panel";
 import { MessageComposer } from "./message-composer";
+import { ManualPaymentDialog } from "./manual-payment-dialog";
 
 interface ConversationPanelProps {
   conversation: Conversation | null;
@@ -65,6 +66,15 @@ interface ConversationPanelProps {
   ) => Promise<void>;
   onSendImage: (imageFile: File, caption?: string) => Promise<void>;
   onProcessPaymentReceipt: (messageId: number) => Promise<void>;
+  onManualPaymentSuccess?: (info: {
+    messageId: number;
+    paymentId: string;
+    amountUsd: number;
+    amountBs?: number;
+    bank: string;
+    transactionCode: string;
+    registeredInWispro: boolean;
+  }) => void;
   onResendMessage: (messageId: number) => Promise<void>;
   onAddNote: (content: string) => Promise<void>;
   onTakeControl: () => Promise<void>;
@@ -98,6 +108,7 @@ export const ConversationPanel = ({
   onSendVoiceNote,
   onSendImage,
   onProcessPaymentReceipt,
+  onManualPaymentSuccess,
   onResendMessage,
   onAddNote,
   onTakeControl,
@@ -121,6 +132,7 @@ export const ConversationPanel = ({
   const [isResolveDialogOpen, setIsResolveDialogOpen] = useState(false);
   const [isDetailsSheetOpen, setIsDetailsSheetOpen] = useState(false);
   const [isCasoDialogOpen, setIsCasoDialogOpen] = useState(false);
+  const [paymentDialogMessage, setPaymentDialogMessage] = useState<Message | null>(null);
   const [note, setNote] = useState("");
 
   const clientDisplayName = client?.name || "Número desconocido";
@@ -252,6 +264,7 @@ export const ConversationPanel = ({
           messages={messages}
           isLoading={isMessagesLoading}
           onProcessPaymentReceipt={onProcessPaymentReceipt}
+          onOpenPaymentDialog={(msg) => setPaymentDialogMessage(msg)}
           onResendMessage={onResendMessage}
           canRegisterManualPayment={!manualPaymentBlockReason}
           manualPaymentBlockReason={manualPaymentBlockReason}
@@ -462,6 +475,21 @@ export const ConversationPanel = ({
           </form>
         </DialogContent>
       </Dialog>
+
+      <ManualPaymentDialog
+        open={Boolean(paymentDialogMessage)}
+        onOpenChange={(open) => {
+          if (!open) setPaymentDialogMessage(null);
+        }}
+        message={paymentDialogMessage}
+        conversationId={conversation.id}
+        client={client}
+        currentAgent={currentAgent}
+        onPaymentSuccess={(info) => {
+          onManualPaymentSuccess?.(info);
+          setPaymentDialogMessage(null);
+        }}
+      />
     </section>
   );
 };

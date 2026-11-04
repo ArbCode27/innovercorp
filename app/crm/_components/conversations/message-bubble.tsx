@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 interface MessageBubbleProps {
   message: Message;
   onProcessPaymentReceipt?: (messageId: number) => Promise<void>;
+  onOpenPaymentDialog?: (message: Message) => void;
   onResendMessage?: (messageId: number) => Promise<void>;
   canRegisterManualPayment?: boolean;
   manualPaymentBlockReason?: string | null;
@@ -37,9 +38,17 @@ const hasRequestedPaymentReceipt = (message: Message) => {
   return false;
 };
 
+const isPaymentRegistered = (message: Message) => {
+  const registered = message.metadata?.payment_registered;
+  if (typeof registered === "boolean") return registered;
+  if (typeof registered === "string") return registered.toLowerCase() === "true";
+  return Boolean(message.metadata?.crm_payment_id && message.metadata?.payment_amount);
+};
+
 export const MessageBubble = ({
   message,
   onProcessPaymentReceipt,
+  onOpenPaymentDialog,
   onResendMessage,
   canRegisterManualPayment = true,
   manualPaymentBlockReason = null,
@@ -60,8 +69,11 @@ export const MessageBubble = ({
   const isBot = isOutgoing && message.sender_type === "bot";
   const isImageMessage =
     message.media_type === "image" && Boolean(message.media_url?.trim());
+  const paymentRegistered = isPaymentRegistered(message);
   const canProcessPaymentReceipt =
-    Boolean(onProcessPaymentReceipt) && !isOutgoing && isImageMessage;
+    (Boolean(onOpenPaymentDialog) || Boolean(onProcessPaymentReceipt)) &&
+    !isOutgoing &&
+    isImageMessage;
   const paymentReceiptRequested = hasRequestedPaymentReceipt(message);
   const isLocationMessage = message.media_type === "location";
   const canResendMessage =
@@ -79,6 +91,11 @@ export const MessageBubble = ({
     status === "read" ? CheckCheck : status === "failed" ? AlertCircle : Check;
 
   const handleProcessPaymentReceipt = async () => {
+    if (onOpenPaymentDialog) {
+      onOpenPaymentDialog(message);
+      return;
+    }
+
     if (!onProcessPaymentReceipt) return;
     if (!canRegisterManualPayment) {
       toast.error(
@@ -174,34 +191,40 @@ export const MessageBubble = ({
           {isResendingMessage ? "Reenviando..." : "Reenviar"}
         </Button>
       ) : null}
-      {canProcessPaymentReceipt ? (
+      {paymentRegistered ? (
+        <div className="mt-1.5 flex items-center gap-1.5 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[11px] text-emerald-700 dark:text-emerald-300">
+          <Check className="size-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+          <span className="font-medium">Pago registrado:</span>
+          <span>
+            {message.metadata?.payment_amount_bs
+              ? `Bs. ${Number(message.metadata.payment_amount_bs).toLocaleString("es-VE", { minimumFractionDigits: 2 })}`
+              : message.metadata?.payment_amount
+                ? `$${message.metadata.payment_amount}`
+                : "Exitoso"}
+          </span>
+          {message.metadata?.payment_bank ? (
+            <span className="text-[10px] font-normal opacity-80">
+              • {String(message.metadata.payment_bank)}
+            </span>
+          ) : null}
+          {message.metadata?.payment_transaction_code ? (
+            <span className="font-mono text-[10px] opacity-80">
+              #{String(message.metadata.payment_transaction_code)}
+            </span>
+          ) : null}
+        </div>
+      ) : canProcessPaymentReceipt ? (
         <Button
           type="button"
           size="sm"
-          variant="secondary"
-          disabled={
-            isProcessingPaymentReceipt ||
-            paymentReceiptRequested ||
-            !canRegisterManualPayment
-          }
-          title={
-            paymentReceiptRequested
-              ? "Este comprobante ya fue enviado"
-              : manualPaymentBlockReason || "Registrar pago del comprobante"
-          }
+          variant="default"
+          disabled={isProcessingPaymentReceipt}
+          title={manualPaymentBlockReason || "Registrar pago del comprobante"}
           onClick={handleProcessPaymentReceipt}
-          className="mt-1 h-7 px-2.5 text-[11px]"
-          aria-label={
-            paymentReceiptRequested
-              ? "Comprobante ya enviado"
-              : manualPaymentBlockReason || "Registrar pago"
-          }>
-          <HandCoins className="size-3" aria-hidden="true" />
-          {paymentReceiptRequested
-            ? "Comprobante enviado"
-            : isProcessingPaymentReceipt
-              ? "Procesando..."
-              : "Registrar pago"}
+          className="mt-1 h-7 gap-1.5 bg-emerald-600 px-2.5 text-[11px] font-medium text-white shadow-xs hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-700"
+          aria-label={manualPaymentBlockReason || "Registrar pago"}>
+          <HandCoins className="size-3.5" aria-hidden="true" />
+          {isProcessingPaymentReceipt ? "Procesando..." : "Registrar pago"}
         </Button>
       ) : null}
     </div>
