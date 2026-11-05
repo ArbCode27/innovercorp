@@ -129,6 +129,7 @@ const extractExternalId = (body: unknown): string | null => {
 export type ListCrmPaymentsFilters = {
   from?: string | null;
   to?: string | null;
+  dateType?: "payment" | "approval" | "updated_at_fallback" | null;
   status?: CrmPaymentStatus | "all" | null;
   bank?: string | null;
   q?: string | null;
@@ -535,11 +536,27 @@ export const applyListFilters = <T>(
 
   // When searching, search across all clients regardless of the date filter
   if (!hasSearch) {
-    if (filters.from && isIsoDate(filters.from)) {
-      next = next.gte("payment_date", filters.from);
-    }
-    if (filters.to && isIsoDate(filters.to)) {
-      next = next.lte("payment_date", filters.to);
+    if (filters.dateType === "approval") {
+      if (filters.from && isIsoDate(filters.from)) {
+        next = next.gte("approved_at", `${filters.from}T00:00:00.000-04:00`);
+      }
+      if (filters.to && isIsoDate(filters.to)) {
+        next = next.lte("approved_at", `${filters.to}T23:59:59.999-04:00`);
+      }
+    } else if (filters.dateType === "updated_at_fallback") {
+      if (filters.from && isIsoDate(filters.from)) {
+        next = next.gte("updated_at", `${filters.from}T00:00:00.000-04:00`);
+      }
+      if (filters.to && isIsoDate(filters.to)) {
+        next = next.lte("updated_at", `${filters.to}T23:59:59.999-04:00`);
+      }
+    } else {
+      if (filters.from && isIsoDate(filters.from)) {
+        next = next.gte("payment_date", filters.from);
+      }
+      if (filters.to && isIsoDate(filters.to)) {
+        next = next.lte("payment_date", filters.to);
+      }
     }
   }
 
@@ -609,7 +626,7 @@ export const listCrmPayments = async (
     ),
   );
 
-  const [listResult, banksResult, bankStatsResult, ...countResults] = await Promise.all([
+  let [listResult, banksResult, bankStatsResult, ...countResults] = await Promise.all([
     listQuery
       .order("created_at", { ascending: false })
       .range(offset, offset + limit - 1),
@@ -617,6 +634,45 @@ export const listCrmPayments = async (
     bankStatsQuery,
     ...countQueries,
   ]);
+
+  if (
+    listResult.error &&
+    filters.dateType === "approval" &&
+    listResult.error.message.includes("approved_at")
+  ) {
+    console.warn(
+      "[CRM_PAYMENTS] approved_at column unavailable, using updated_at fallback",
+    );
+    const fallbackFilters: ListCrmPaymentsFilters = {
+      ...filters,
+      dateType: "updated_at_fallback",
+      status: filters.status || "APROBADO",
+    };
+    const fallbackListQuery = applyListFilters(
+      supabase.from("crm_payments").select("*", { count: "exact" }),
+      fallbackFilters,
+      { includeStatus: true },
+    );
+    const fallbackBankStatsQuery = applyListFilters(
+      supabase.from("crm_payments").select("bank, amount, status").limit(2000),
+      { ...fallbackFilters, bank: undefined },
+      { includeStatus: false },
+    );
+    const fallbackCountQueries = CRM_PAYMENT_STATUSES.map((status) =>
+      applyListFilters(
+        supabase.from("crm_payments").select("id", { count: "exact", head: true }),
+        { ...fallbackFilters, status },
+        { includeStatus: true },
+      ),
+    );
+    [listResult, bankStatsResult, ...countResults] = await Promise.all([
+      fallbackListQuery
+        .order("updated_at", { ascending: false })
+        .range(offset, offset + limit - 1),
+      fallbackBankStatsQuery,
+      ...fallbackCountQueries,
+    ]);
+  }
 
   if (listResult.error) {
     throw new Error(listResult.error.message);

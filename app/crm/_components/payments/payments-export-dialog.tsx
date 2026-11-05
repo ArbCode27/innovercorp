@@ -58,6 +58,7 @@ interface PaymentsExportDialogProps {
   availableBanks: string[];
   currentBankFilter: string;
   currentDateRange: { from?: string | null; to?: string | null };
+  currentDateType?: "payment" | "approval";
   currentStatus: CrmPaymentStatus | "all";
   bankStats: CrmPaymentBankStat[];
 }
@@ -124,6 +125,7 @@ export const PaymentsExportDialog = ({
   availableBanks,
   currentBankFilter,
   currentDateRange,
+  currentDateType = "payment",
   currentStatus,
   bankStats,
 }: PaymentsExportDialogProps) => {
@@ -141,6 +143,9 @@ export const PaymentsExportDialog = ({
     from: currentDateRange.from || undefined,
     to: currentDateRange.to || undefined,
   });
+  const [exportDateType, setExportDateType] = useState<"payment" | "approval">(
+    currentDateType,
+  );
   const [statusFilter, setStatusFilter] = useState<CrmPaymentStatus | "all">(
     currentStatus,
   );
@@ -159,10 +164,18 @@ export const PaymentsExportDialog = ({
         from: currentDateRange.from || undefined,
         to: currentDateRange.to || undefined,
       });
+      setExportDateType(currentDateType || "payment");
       setStatusFilter(currentStatus);
       setIsExporting(false);
     }
-  }, [open, currentBankFilter, currentDateRange, currentStatus, allBanksList]);
+  }, [
+    open,
+    currentBankFilter,
+    currentDateRange,
+    currentDateType,
+    currentStatus,
+    allBanksList,
+  ]);
 
   const handleToggleBank = (bank: string) => {
     setSelectedBanks((prev) =>
@@ -227,6 +240,7 @@ export const PaymentsExportDialog = ({
       const params = new URLSearchParams();
       if (dateRange.from) params.set("from", dateRange.from);
       if (dateRange.to) params.set("to", dateRange.to);
+      params.set("date_type", exportDateType);
       if (statusFilter !== "all") params.set("status", statusFilter);
       params.set("limit", "2000");
       params.set("offset", "0");
@@ -275,6 +289,7 @@ export const PaymentsExportDialog = ({
           payments: paymentsToExport,
           selectedBanks,
           dateRange,
+          dateType: exportDateType,
           statusFilter:
             statusFilter !== "all"
               ? CRM_PAYMENT_STATUS_LABELS[statusFilter] || statusFilter
@@ -286,6 +301,7 @@ export const PaymentsExportDialog = ({
           payments: paymentsToExport,
           selectedBanks,
           dateRange,
+          dateType: exportDateType,
           statusFilter:
             statusFilter !== "all"
               ? CRM_PAYMENT_STATUS_LABELS[statusFilter] || statusFilter
@@ -464,6 +480,44 @@ export const PaymentsExportDialog = ({
                   className="h-6 px-2 text-[11px]">
                   Este mes
                 </Button>
+              </div>
+            </div>
+
+            {/* Date Criterion Selector */}
+            <div className="flex items-center justify-between rounded-lg border border-border/50 bg-background/50 px-3 py-2 text-xs">
+              <span className="font-medium text-foreground">
+                Filtrar período por:
+              </span>
+              <div
+                role="radiogroup"
+                aria-label="Criterio de fecha para exportación"
+                className="inline-flex rounded-lg bg-muted p-0.5">
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={exportDateType === "payment"}
+                  onClick={() => setExportDateType("payment")}
+                  className={cn(
+                    "rounded-md px-2.5 py-1 text-xs font-medium cursor-pointer transition-all",
+                    exportDateType === "payment"
+                      ? "bg-background text-foreground shadow-xs font-semibold"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}>
+                  F. de Registro
+                </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={exportDateType === "approval"}
+                  onClick={() => setExportDateType("approval")}
+                  className={cn(
+                    "rounded-md px-2.5 py-1 text-xs font-medium cursor-pointer transition-all",
+                    exportDateType === "approval"
+                      ? "bg-emerald-600 text-white shadow-xs font-semibold dark:bg-emerald-600"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}>
+                  F. de Aprobación
+                </button>
               </div>
             </div>
 

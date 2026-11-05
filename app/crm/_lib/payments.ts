@@ -28,6 +28,8 @@ export const CRM_KNOWN_PAYMENT_BANKS = [
   "Bancamiga",
 ] as const;
 
+export type PaymentDateType = "payment" | "approval";
+
 export type CrmPayment = {
   id: string;
   client_id: number | null;

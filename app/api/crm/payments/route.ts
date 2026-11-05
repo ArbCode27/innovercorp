@@ -376,6 +376,7 @@ const optionalText = z.preprocess(
 const listQuerySchema = z.object({
   from: isoDateSchema,
   to: isoDateSchema,
+  date_type: z.enum(["payment", "approval"]).optional(),
   status: z.preprocess(
     emptyToUndefined,
     z.enum(CRM_PAYMENT_STATUSES).optional(),
@@ -416,7 +417,10 @@ export async function GET(req: NextRequest) {
 
     listFilters = parsed.data;
     const supabase = getServiceClient();
-    const result = await listCrmPayments(supabase, listFilters);
+    const result = await listCrmPayments(supabase, {
+      ...listFilters,
+      dateType: listFilters.date_type ?? "payment",
+    });
     const payments = await enrichPaymentsWithLatestInvoiceDate(result.payments);
     const durationMs = Date.now() - startedAt;
 
@@ -427,6 +431,7 @@ export async function GET(req: NextRequest) {
       offset: result.offset,
       from: listFilters.from ?? null,
       to: listFilters.to ?? null,
+      dateType: listFilters.date_type ?? "payment",
       status: listFilters.status ?? null,
       bank: listFilters.bank ?? null,
       q: listFilters.q ? "[redacted]" : null,

@@ -114,4 +114,52 @@ describe("applyListFilters", () => {
       { method: "eq", args: ["bank", "Venezuela"] },
     ]);
   });
+
+  it("applies approved_at timestamp filter when dateType is 'approval'", () => {
+    const query = createMockQuery();
+    const filters: ListCrmPaymentsFilters = {
+      from: "2026-11-01",
+      to: "2026-11-05",
+      dateType: "approval",
+      q: null,
+    };
+
+    applyListFilters(query, filters, { includeStatus: false });
+
+    const gteCall = query.calls.find((c) => c.method === "gte");
+    const lteCall = query.calls.find((c) => c.method === "lte");
+
+    expect(gteCall).toEqual({
+      method: "gte",
+      args: ["approved_at", "2026-11-01T00:00:00.000-04:00"],
+    });
+    expect(lteCall).toEqual({
+      method: "lte",
+      args: ["approved_at", "2026-11-05T23:59:59.999-04:00"],
+    });
+  });
+
+  it("applies payment_date filter when dateType is 'payment'", () => {
+    const query = createMockQuery();
+    const filters: ListCrmPaymentsFilters = {
+      from: "2026-11-01",
+      to: "2026-11-05",
+      dateType: "payment",
+      q: null,
+    };
+
+    applyListFilters(query, filters, { includeStatus: false });
+
+    const gteCall = query.calls.find((c) => c.method === "gte");
+    const lteCall = query.calls.find((c) => c.method === "lte");
+
+    expect(gteCall).toEqual({
+      method: "gte",
+      args: ["payment_date", "2026-11-01"],
+    });
+    expect(lteCall).toEqual({
+      method: "lte",
+      args: ["payment_date", "2026-11-05"],
+    });
+  });
 });

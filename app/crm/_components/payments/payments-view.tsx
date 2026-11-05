@@ -21,6 +21,7 @@ import { CreatePaymentDialog } from "./create-payment-dialog";
 import {
   PaymentsFilters,
   PaymentsPagination,
+  type PaymentDateType,
   type PaymentsDateRange,
 } from "./payments-filters";
 import { PaymentsStats } from "./payments-stats";
@@ -75,6 +76,7 @@ export const PaymentsView = ({
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [dateRange, setDateRange] = useState<PaymentsDateRange>(DEFAULT_DATE_RANGE);
+  const [dateType, setDateType] = useState<PaymentDateType>("payment");
   const [status, setStatus] = useState<CrmPaymentStatus | "all">("EN_PROCESO");
   const [bank, setBank] = useState("all");
   const [page, setPage] = useState(1);
@@ -123,6 +125,7 @@ export const PaymentsView = ({
         } else {
           if (dateRange.from) params.set("from", dateRange.from);
           if (dateRange.to) params.set("to", dateRange.to);
+          params.set("date_type", dateType);
         }
         if (status !== "all") params.set("status", status);
         if (bank !== "all") params.set("bank", bank);
@@ -167,7 +170,7 @@ export const PaymentsView = ({
         setIsRefreshing(false);
       }
     },
-    [bank, dateRange.from, dateRange.to, debouncedSearch, page, status],
+    [bank, dateRange.from, dateRange.to, dateType, debouncedSearch, page, status],
   );
 
   useEffect(() => {
@@ -178,6 +181,7 @@ export const PaymentsView = ({
     setSearchTerm("");
     setDebouncedSearch("");
     setDateRange(DEFAULT_DATE_RANGE());
+    setDateType("payment");
     setStatus("EN_PROCESO");
     setBank("all");
     setPage(1);
@@ -186,6 +190,14 @@ export const PaymentsView = ({
   const handleDateRangeChange = (value: PaymentsDateRange) => {
     setDateRange(value);
     setPage(1);
+  };
+
+  const handleDateTypeChange = (value: PaymentDateType) => {
+    setDateType(value);
+    setPage(1);
+    if (value === "approval" && status === "EN_PROCESO") {
+      setStatus("APROBADO");
+    }
   };
 
   const handleStatusChange = (value: CrmPaymentStatus | "all") => {
@@ -523,11 +535,13 @@ export const PaymentsView = ({
         <PaymentsFilters
           searchTerm={searchTerm}
           dateRange={dateRange}
+          dateType={dateType}
           status={status}
           bank={bank}
           banks={banks}
           onSearchChange={setSearchTerm}
           onDateRangeChange={handleDateRangeChange}
+          onDateTypeChange={handleDateTypeChange}
           onStatusChange={handleStatusChange}
           onBankChange={handleBankChange}
           onClearFilters={handleClearFilters}
@@ -568,6 +582,7 @@ export const PaymentsView = ({
         availableBanks={banks}
         currentBankFilter={bank}
         currentDateRange={dateRange}
+        currentDateType={dateType}
         currentStatus={status}
         bankStats={bankStats}
       />

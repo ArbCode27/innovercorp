@@ -4,7 +4,17 @@ import { useMemo, useState } from "react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import type { DateRange } from "react-day-picker";
-import { CalendarIcon, ChevronLeft, ChevronRight, Search, X } from "lucide-react";
+import {
+  CalendarIcon,
+  CheckCircle2,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Receipt,
+  Search,
+  X,
+} from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Calendar } from "@/components/ui/calendar";
 import {
@@ -25,8 +35,12 @@ import {
   CRM_PAYMENT_STATUSES,
   CRM_PAYMENT_STATUS_LABELS,
   type CrmPaymentStatus,
+  type PaymentDateType,
 } from "../../_lib/payments";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+
+export type { PaymentDateType };
 
 export type PaymentsDateRange = {
   from: string | null;
@@ -36,17 +50,19 @@ export type PaymentsDateRange = {
 interface PaymentsFiltersProps {
   searchTerm: string;
   dateRange: PaymentsDateRange;
+  dateType: PaymentDateType;
   status: CrmPaymentStatus | "all";
   bank: string;
   banks: string[];
   onSearchChange: (value: string) => void;
   onDateRangeChange: (value: PaymentsDateRange) => void;
+  onDateTypeChange: (value: PaymentDateType) => void;
   onStatusChange: (value: CrmPaymentStatus | "all") => void;
   onBankChange: (value: string) => void;
   onClearFilters: () => void;
 }
 
-const selectClass = `w-full ${CRM_SURFACES.border}  ${CRM_SURFACES.textPrimary}`;
+const selectClass = `w-full h-10 ${CRM_SURFACES.border}  ${CRM_SURFACES.textPrimary}`;
 
 const parseIsoDateLocal = (value: string | null): Date | undefined => {
   if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined;
@@ -79,11 +95,13 @@ const formatRangeLabel = (range: PaymentsDateRange) => {
 export const PaymentsFilters = ({
   searchTerm,
   dateRange,
+  dateType,
   status,
   bank,
   banks,
   onSearchChange,
   onDateRangeChange,
+  onDateTypeChange,
   onStatusChange,
   onBankChange,
   onClearFilters,
@@ -105,6 +123,7 @@ export const PaymentsFilters = ({
     searchTerm ||
       dateRange.from ||
       dateRange.to ||
+      dateType !== "payment" ||
       status !== "EN_PROCESO" ||
       bank !== "all",
   );
@@ -134,6 +153,43 @@ export const PaymentsFilters = ({
     }
   };
 
+  const handleClearDates = () => {
+    onDateRangeChange({ from: null, to: null });
+    setCalendarOpen(false);
+  };
+
+  const handleDateTypeSelect = (nextType: PaymentDateType) => {
+    onDateTypeChange(nextType);
+  };
+
+  const handleSelectPreset = (
+    preset: "today" | "yesterday" | "last7" | "thisMonth",
+  ) => {
+    const today = new Date();
+    if (preset === "today") {
+      const iso = toIsoDateLocal(today);
+      onDateRangeChange({ from: iso, to: iso });
+    } else if (preset === "yesterday") {
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+      const iso = toIsoDateLocal(yesterday);
+      onDateRangeChange({ from: iso, to: iso });
+    } else if (preset === "last7") {
+      const start = new Date(today);
+      start.setDate(start.getDate() - 6);
+      onDateRangeChange({
+        from: toIsoDateLocal(start),
+        to: toIsoDateLocal(today),
+      });
+    } else if (preset === "thisMonth") {
+      const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+      onDateRangeChange({
+        from: toIsoDateLocal(firstDay),
+        to: toIsoDateLocal(today),
+      });
+    }
+  };
+
   return (
     <div className={`rounded-2xl p-4 ${CRM_SURFACES.elevated}`}>
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
@@ -151,7 +207,7 @@ export const PaymentsFilters = ({
               value={searchTerm}
               onChange={(event) => onSearchChange(event.target.value)}
               placeholder="Buscar cédula o nombre..."
-              className={`pl-9 ${searchTerm ? "pr-8" : ""} ${CRM_SURFACES.border}  ${CRM_SURFACES.textPrimary} ${CRM_SURFACES.placeholder}`}
+              className={`h-10 pl-9 ${searchTerm ? "pr-8" : ""} ${CRM_SURFACES.border}  ${CRM_SURFACES.textPrimary} ${CRM_SURFACES.placeholder}`}
             />
             {searchTerm ? (
               <button
@@ -170,28 +226,145 @@ export const PaymentsFilters = ({
             <Button
               type="button"
               variant="secondary"
-              className={`h-9 w-full cursor-pointer justify-start gap-2 px-3 font-normal ${CRM_SURFACES.border}  ${CRM_SURFACES.textPrimary}`}
-              aria-label="Filtrar por fecha o rango"
+              className={cn(
+                "h-10 w-full cursor-pointer justify-between gap-2 px-3 font-normal transition-all",
+                CRM_SURFACES.border,
+                CRM_SURFACES.textPrimary,
+                dateType === "approval"
+                  ? "border-emerald-500/40 bg-emerald-500/5 hover:bg-emerald-500/10 focus-visible:ring-emerald-500/30"
+                  : "hover:bg-accent/60",
+              )}
+              aria-label={`Filtrar por ${dateType === "approval" ? "fecha de aprobación" : "fecha de registro"}`}
               title={
                 searchTerm.trim()
                   ? "Búsqueda activa: se buscan clientes en cualquier fecha"
                   : undefined
               }>
-              <CalendarIcon
-                className="size-4 shrink-0 text-crm-accent-muted-foreground"
+              <div className="flex min-w-0 items-center gap-2">
+                {dateType === "approval" ? (
+                  <div className="flex size-6 shrink-0 items-center justify-center rounded-md bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                    <CheckCircle2 className="size-3.5" aria-hidden="true" />
+                  </div>
+                ) : (
+                  <div className="flex size-6 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                    <Receipt className="size-3.5" aria-hidden="true" />
+                  </div>
+                )}
+                <div className="flex min-w-0 flex-col text-left">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground leading-none">
+                    {dateType === "approval" ? "F. Aprobación" : "F. Registro"}
+                  </span>
+                  <span className="truncate text-xs font-medium text-foreground leading-tight mt-0.5">
+                    {searchTerm.trim()
+                      ? "Todas las fechas (búsqueda)"
+                      : formatRangeLabel(dateRange)}
+                  </span>
+                </div>
+              </div>
+              <ChevronDown
+                className="size-3.5 shrink-0 text-muted-foreground/70"
                 aria-hidden="true"
               />
-              <span className="truncate">
-                {searchTerm.trim()
-                  ? "Todas las fechas (búsqueda)"
-                  : formatRangeLabel(dateRange)}
-              </span>
             </Button>
           </PopoverTrigger>
           <PopoverContent
             align="start"
-            className="w-auto overflow-hidden rounded-2xl p-0 shadow-lg"
+            className="w-auto overflow-hidden rounded-2xl p-0 shadow-xl border-border/80"
             sideOffset={8}>
+            {/* SEGMENTED CONTROL: Select Date Type */}
+            <div className="border-b border-border/60 bg-muted/30 p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-xs font-semibold tracking-tight text-foreground">
+                  Criterio de fecha
+                </span>
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    "px-2 py-0.5 text-[10px] font-normal transition-colors",
+                    dateType === "approval"
+                      ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-medium"
+                      : "border-primary/30 bg-primary/10 text-primary font-medium",
+                  )}>
+                  {dateType === "approval"
+                    ? "Aprobados en el rango"
+                    : "Ingresados en el rango"}
+                </Badge>
+              </div>
+
+              <div
+                role="radiogroup"
+                aria-label="Seleccionar criterio de fecha"
+                className="grid grid-cols-2 gap-1 rounded-xl bg-muted/80 p-1">
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={dateType === "payment"}
+                  onClick={() => handleDateTypeSelect("payment")}
+                  className={cn(
+                    "flex items-center justify-center gap-1.5 rounded-lg py-1.5 px-2.5 text-xs font-medium transition-all cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary",
+                    dateType === "payment"
+                      ? "bg-background text-foreground shadow-xs font-semibold"
+                      : "text-muted-foreground hover:bg-background/40 hover:text-foreground",
+                  )}>
+                  <Receipt
+                    className="size-3.5 shrink-0 text-primary"
+                    aria-hidden="true"
+                  />
+                  <span>F. de Registro</span>
+                </button>
+
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={dateType === "approval"}
+                  onClick={() => handleDateTypeSelect("approval")}
+                  className={cn(
+                    "flex items-center justify-center gap-1.5 rounded-lg py-1.5 px-2.5 text-xs font-medium transition-all cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-emerald-500",
+                    dateType === "approval"
+                      ? "bg-emerald-600 text-white shadow-xs font-semibold dark:bg-emerald-600"
+                      : "text-muted-foreground hover:bg-background/40 hover:text-foreground",
+                  )}>
+                  <CheckCircle2
+                    className="size-3.5 shrink-0"
+                    aria-hidden="true"
+                  />
+                  <span>F. de Aprobación</span>
+                </button>
+              </div>
+            </div>
+
+            {/* PRESETS: Quick date range shortcuts */}
+            <div className="flex items-center justify-between border-b border-border/50 bg-background/50 px-3 py-1.5 text-[11px]">
+              <span className="text-muted-foreground">Accesos rápidos:</span>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => handleSelectPreset("today")}
+                  className="rounded-md px-2 py-0.5 font-medium text-muted-foreground hover:bg-muted hover:text-foreground cursor-pointer transition-colors">
+                  Hoy
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSelectPreset("yesterday")}
+                  className="rounded-md px-2 py-0.5 font-medium text-muted-foreground hover:bg-muted hover:text-foreground cursor-pointer transition-colors">
+                  Ayer
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSelectPreset("last7")}
+                  className="rounded-md px-2 py-0.5 font-medium text-muted-foreground hover:bg-muted hover:text-foreground cursor-pointer transition-colors">
+                  7 días
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSelectPreset("thisMonth")}
+                  className="rounded-md px-2 py-0.5 font-medium text-muted-foreground hover:bg-muted hover:text-foreground cursor-pointer transition-colors">
+                  Este mes
+                </button>
+              </div>
+            </div>
+
+            {/* CALENDAR */}
             <Calendar
               mode="range"
               numberOfMonths={1}
@@ -201,23 +374,36 @@ export const PaymentsFilters = ({
               locale={es}
               disabled={{ after: new Date() }}
             />
+
+            {/* FOOTER */}
             <div
-              className={`flex items-center justify-between gap-2 border-t px-3 py-2 ${CRM_SURFACES.border}`}>
-              <p className={`text-xs ${CRM_SURFACES.textMuted}`}>
-                Elige un día o un rango
+              className={cn(
+                "flex items-center justify-between gap-2 border-t px-3 py-2",
+                CRM_SURFACES.border,
+              )}>
+              <p className={cn("text-xs", CRM_SURFACES.textMuted)}>
+                {dateType === "approval"
+                  ? "Rango de aprobación"
+                  : "Rango del comprobante"}
               </p>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="cursor-pointer text-crm-accent-muted-foreground hover:bg-crm-accent-muted hover:text-crm-accent-muted-foreground"
-                disabled={!dateRange.from && !dateRange.to}
-                onClick={() => {
-                  onDateRangeChange({ from: null, to: null });
-                  setCalendarOpen(false);
-                }}>
-                Limpiar fechas
-              </Button>
+              <div className="flex items-center gap-1.5">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2.5 text-xs cursor-pointer text-muted-foreground hover:text-foreground"
+                  disabled={!dateRange.from && !dateRange.to}
+                  onClick={handleClearDates}>
+                  Limpiar
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-7 px-3 text-xs cursor-pointer"
+                  onClick={() => setCalendarOpen(false)}>
+                  Listo
+                </Button>
+              </div>
             </div>
           </PopoverContent>
         </Popover>

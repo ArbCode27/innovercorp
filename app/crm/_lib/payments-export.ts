@@ -12,6 +12,7 @@ export interface PaymentsExportOptions {
   payments: CrmPayment[];
   selectedBanks: string[];
   dateRange: { from?: string; to?: string };
+  dateType?: "payment" | "approval";
   generatedAt?: Date;
   statusFilter?: string;
 }
@@ -119,9 +120,13 @@ export const generatePaymentsExcelXml = (options: PaymentsExportOptions): string
     payments,
     selectedBanks,
     dateRange,
+    dateType = "payment",
     generatedAt = new Date(),
     statusFilter,
   } = options;
+
+  const dateTypeLabel =
+    dateType === "approval" ? "Fecha de aprobación" : "Fecha de registro";
 
   const bankGroups = groupPaymentsByBank(payments);
   const totalPayments = payments.length;
@@ -335,7 +340,7 @@ export const generatePaymentsExcelXml = (options: PaymentsExportOptions): string
    </Row>
    <Row ss:Height="18">
     <Cell ss:StyleID="MetaLabel"><Data ss:Type="String">Período:</Data></Cell>
-    <Cell ss:MergeAcross="4" ss:StyleID="MetaValue"><Data ss:Type="String">${escapeXml(rangeLabel)}</Data></Cell>
+    <Cell ss:MergeAcross="4" ss:StyleID="MetaValue"><Data ss:Type="String">${escapeXml(rangeLabel)} (${escapeXml(dateTypeLabel)})</Data></Cell>
     <Cell ss:StyleID="MetaLabel"><Data ss:Type="String">Fecha de emisión:</Data></Cell>
     <Cell ss:MergeAcross="4" ss:StyleID="MetaValue"><Data ss:Type="String">${escapeXml(formattedDate)}</Data></Cell>
    </Row>
@@ -485,11 +490,20 @@ export const generatePaymentsExcelXml = (options: PaymentsExportOptions): string
  * Fallback CSV export with UTF-8 BOM so Excel opens special characters correctly.
  */
 export const generatePaymentsCsv = (options: PaymentsExportOptions): string => {
-  const { payments, selectedBanks, dateRange, statusFilter } = options;
+  const {
+    payments,
+    selectedBanks,
+    dateRange,
+    dateType = "payment",
+    statusFilter,
+  } = options;
+
+  const dateTypeLabel =
+    dateType === "approval" ? "Fecha de aprobacion" : "Fecha de registro";
 
   const headerLines = [
     `# INNOVER CORP - REPORTE DE PAGOS RECIBIDOS`,
-    `# Rango de fechas: ${dateRange.from || "inicio"} al ${dateRange.to || "hoy"}`,
+    `# Rango de fechas: ${dateRange.from || "inicio"} al ${dateRange.to || "hoy"} (${dateTypeLabel})`,
     `# Bancos: ${selectedBanks.length ? selectedBanks.join(" | ") : "Todos"}`,
     statusFilter && statusFilter !== "all" ? `# Filtro de estado: ${statusFilter}` : "",
     "",
