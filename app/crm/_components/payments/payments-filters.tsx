@@ -151,8 +151,17 @@ export const PaymentsFilters = ({
               value={searchTerm}
               onChange={(event) => onSearchChange(event.target.value)}
               placeholder="Buscar cédula o nombre..."
-              className={`pl-9 ${CRM_SURFACES.border}  ${CRM_SURFACES.textPrimary} ${CRM_SURFACES.placeholder}`}
+              className={`pl-9 ${searchTerm ? "pr-8" : ""} ${CRM_SURFACES.border}  ${CRM_SURFACES.textPrimary} ${CRM_SURFACES.placeholder}`}
             />
+            {searchTerm ? (
+              <button
+                type="button"
+                onClick={() => onSearchChange("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-muted-foreground hover:text-foreground focus:outline-hidden cursor-pointer"
+                aria-label="Limpiar búsqueda">
+                <X className="size-4" aria-hidden="true" />
+              </button>
+            ) : null}
           </div>
         </div>
 
@@ -162,12 +171,21 @@ export const PaymentsFilters = ({
               type="button"
               variant="secondary"
               className={`h-9 w-full cursor-pointer justify-start gap-2 px-3 font-normal ${CRM_SURFACES.border}  ${CRM_SURFACES.textPrimary}`}
-              aria-label="Filtrar por fecha o rango">
+              aria-label="Filtrar por fecha o rango"
+              title={
+                searchTerm.trim()
+                  ? "Búsqueda activa: se buscan clientes en cualquier fecha"
+                  : undefined
+              }>
               <CalendarIcon
                 className="size-4 shrink-0 text-crm-accent-muted-foreground"
                 aria-hidden="true"
               />
-              <span className="truncate">{formatRangeLabel(dateRange)}</span>
+              <span className="truncate">
+                {searchTerm.trim()
+                  ? "Todas las fechas (búsqueda)"
+                  : formatRangeLabel(dateRange)}
+              </span>
             </Button>
           </PopoverTrigger>
           <PopoverContent

@@ -518,7 +518,7 @@ const insertCrmPayment = async (
   return { ok: false, payment: null, duplicate: false };
 };
 
-const applyListFilters = <T>(
+export const applyListFilters = <T>(
   query: T,
   filters: ListCrmPaymentsFilters,
   options: { includeStatus: boolean },
@@ -530,12 +530,19 @@ const applyListFilters = <T>(
     or: (filters: string) => typeof next;
   };
 
-  if (filters.from && isIsoDate(filters.from)) {
-    next = next.gte("payment_date", filters.from);
+  const search = filters.q ? sanitizeSearch(filters.q) : "";
+  const hasSearch = Boolean(search);
+
+  // When searching, search across all clients regardless of the date filter
+  if (!hasSearch) {
+    if (filters.from && isIsoDate(filters.from)) {
+      next = next.gte("payment_date", filters.from);
+    }
+    if (filters.to && isIsoDate(filters.to)) {
+      next = next.lte("payment_date", filters.to);
+    }
   }
-  if (filters.to && isIsoDate(filters.to)) {
-    next = next.lte("payment_date", filters.to);
-  }
+
   if (options.includeStatus && filters.status && isCrmPaymentStatus(filters.status)) {
     next = next.eq("status", filters.status);
   }
@@ -543,9 +550,17 @@ const applyListFilters = <T>(
     next = next.eq("bank", filters.bank.trim());
   }
 
-  const search = filters.q ? sanitizeSearch(filters.q) : "";
   if (search) {
-    next = next.or(`cedula.ilike.%${search}%,client_name.ilike.%${search}%`);
+    const digits = search.replace(/\D/g, "");
+    if (digits && digits !== search && digits.length >= 4) {
+      next = next.or(
+        `cedula.ilike.%${search}%,client_name.ilike.%${search}%,cedula.ilike.%${digits}%,transaction_code.ilike.%${digits}%`,
+      );
+    } else {
+      next = next.or(
+        `cedula.ilike.%${search}%,client_name.ilike.%${search}%,transaction_code.ilike.%${search}%`,
+      );
+    }
   }
 
   return next as T;

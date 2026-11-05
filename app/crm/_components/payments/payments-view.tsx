@@ -118,9 +118,12 @@ export const PaymentsView = ({
 
       try {
         const params = new URLSearchParams();
-        if (debouncedSearch) params.set("q", debouncedSearch);
-        if (dateRange.from) params.set("from", dateRange.from);
-        if (dateRange.to) params.set("to", dateRange.to);
+        if (debouncedSearch) {
+          params.set("q", debouncedSearch);
+        } else {
+          if (dateRange.from) params.set("from", dateRange.from);
+          if (dateRange.to) params.set("to", dateRange.to);
+        }
         if (status !== "all") params.set("status", status);
         if (bank !== "all") params.set("bank", bank);
         params.set("limit", String(PAGE_SIZE));
