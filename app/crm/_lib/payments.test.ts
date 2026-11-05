@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildPaymentBankStats,
   formatPlanAmountLabel,
+  getPaymentApprovedAt,
   isPaymentReadyForManualApproval,
   normalizeReceptorBank,
 } from "./payments";
@@ -199,5 +200,75 @@ describe("isPaymentReadyForManualApproval", () => {
         amount: null,
       }),
     ).toBe(false);
+  });
+});
+
+describe("getPaymentApprovedAt", () => {
+  it("returns null when status is not APROBADO", () => {
+    expect(
+      getPaymentApprovedAt({
+        status: "EN_PROCESO",
+        approved_at: "2026-11-05T10:00:00Z",
+      }),
+    ).toBeNull();
+
+    expect(
+      getPaymentApprovedAt({
+        status: "RECHAZADO",
+        updated_at: "2026-11-05T10:00:00Z",
+      }),
+    ).toBeNull();
+
+    expect(getPaymentApprovedAt(null)).toBeNull();
+  });
+
+  it("prioritizes explicit approved_at when available", () => {
+    expect(
+      getPaymentApprovedAt({
+        status: "APROBADO",
+        approved_at: "2026-11-05T14:30:00Z",
+        receipt_metadata: { approved_at: "2026-11-05T12:00:00Z" },
+        updated_at: "2026-11-05T10:00:00Z",
+      }),
+    ).toBe("2026-11-05T14:30:00Z");
+  });
+
+  it("reads approved_at from receipt_metadata", () => {
+    expect(
+      getPaymentApprovedAt({
+        status: "APROBADO",
+        receipt_metadata: { approved_at: "2026-11-05T12:00:00Z" },
+      }),
+    ).toBe("2026-11-05T12:00:00Z");
+  });
+
+  it("reads manual_approved_at from receipt_metadata", () => {
+    expect(
+      getPaymentApprovedAt({
+        status: "APROBADO",
+        receipt_metadata: { manual_approved_at: "2026-11-05T13:15:00Z" },
+      }),
+    ).toBe("2026-11-05T13:15:00Z");
+  });
+
+  it("reads registered_at from wispro_payment metadata", () => {
+    expect(
+      getPaymentApprovedAt({
+        status: "APROBADO",
+        receipt_metadata: {
+          wispro_payment: { registered_at: "2026-11-05T11:45:00Z" },
+        },
+      }),
+    ).toBe("2026-11-05T11:45:00Z");
+  });
+
+  it("falls back to updated_at for historic approved payments", () => {
+    expect(
+      getPaymentApprovedAt({
+        status: "APROBADO",
+        receipt_metadata: {},
+        updated_at: "2026-11-05T09:20:00Z",
+      }),
+    ).toBe("2026-11-05T09:20:00Z");
   });
 });

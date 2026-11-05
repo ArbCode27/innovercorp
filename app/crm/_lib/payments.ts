@@ -51,6 +51,8 @@ export type CrmPayment = {
   error_message: string | null;
   receipt_media_url: string | null;
   receipt_metadata?: Record<string, unknown> | null;
+  /** ISO timestamp when the payment was approved, when available. */
+  approved_at?: string | null;
   /** Most recent pending Wispro invoice date (YYYY-MM-DD), when available. */
   latest_invoice_date?: string | null;
   /** Balance of the single pending Wispro invoice, or plan price when none. */
@@ -332,3 +334,68 @@ export const formatPaymentDateTime = (value: string) =>
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(value));
+
+/**
+ * Resolves the date and time when a payment was approved.
+ * Inspects explicit `approved_at`, receipt_metadata keys, and falls back to
+ * `updated_at` / `created_at` for historic approved payments.
+ */
+export const getPaymentApprovedAt = (
+  payment:
+    | {
+        status?: CrmPaymentStatus | string | null;
+        approved_at?: string | null;
+        receipt_metadata?: Record<string, unknown> | null;
+        updated_at?: string;
+        created_at?: string;
+      }
+    | null
+    | undefined,
+): string | null => {
+  if (!payment || payment.status !== "APROBADO") return null;
+
+  if (typeof payment.approved_at === "string" && payment.approved_at.trim()) {
+    return payment.approved_at.trim();
+  }
+
+  const meta = payment.receipt_metadata;
+  if (meta && typeof meta === "object") {
+    if (typeof meta.approved_at === "string" && meta.approved_at.trim()) {
+      return meta.approved_at.trim();
+    }
+    if (
+      typeof meta.manual_approved_at === "string" &&
+      meta.manual_approved_at.trim()
+    ) {
+      return meta.manual_approved_at.trim();
+    }
+    const wisproPayment = meta.wispro_payment as
+      | Record<string, unknown>
+      | undefined;
+    if (
+      wisproPayment &&
+      typeof wisproPayment.registered_at === "string" &&
+      wisproPayment.registered_at.trim()
+    ) {
+      return wisproPayment.registered_at.trim();
+    }
+    if (
+      meta.registered_in_wispro &&
+      typeof meta.registered_at === "string" &&
+      meta.registered_at.trim()
+    ) {
+      return meta.registered_at.trim();
+    }
+  }
+
+  if (typeof payment.updated_at === "string" && payment.updated_at.trim()) {
+    return payment.updated_at.trim();
+  }
+
+  if (typeof payment.created_at === "string" && payment.created_at.trim()) {
+    return payment.created_at.trim();
+  }
+
+  return null;
+};
+

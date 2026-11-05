@@ -57,7 +57,7 @@ interface PaymentsExportDialogProps {
   onOpenChange: (open: boolean) => void;
   availableBanks: string[];
   currentBankFilter: string;
-  currentDateRange: { from: string; to: string };
+  currentDateRange: { from?: string | null; to?: string | null };
   currentStatus: CrmPaymentStatus | "all";
   bankStats: CrmPaymentBankStat[];
 }
@@ -137,9 +137,10 @@ export const PaymentsExportDialog = ({
   }, [availableBanks]);
 
   const [selectedBanks, setSelectedBanks] = useState<string[]>([]);
-  const [dateRange, setDateRange] = useState<{ from: string; to: string }>(
-    currentDateRange,
-  );
+  const [dateRange, setDateRange] = useState<{ from?: string; to?: string }>({
+    from: currentDateRange.from || undefined,
+    to: currentDateRange.to || undefined,
+  });
   const [statusFilter, setStatusFilter] = useState<CrmPaymentStatus | "all">(
     currentStatus,
   );
@@ -154,7 +155,10 @@ export const PaymentsExportDialog = ({
       } else {
         setSelectedBanks([...allBanksList]);
       }
-      setDateRange(currentDateRange);
+      setDateRange({
+        from: currentDateRange.from || undefined,
+        to: currentDateRange.to || undefined,
+      });
       setStatusFilter(currentStatus);
       setIsExporting(false);
     }
@@ -199,10 +203,15 @@ export const PaymentsExportDialog = ({
   // Estimate stats based on selected banks and bankStats
   const selectionSummary = useMemo(() => {
     const filteredStats = bankStats.filter((s) => selectedBanks.includes(s.bank));
+    if (statusFilter === "APROBADO") {
+      const count = filteredStats.reduce((acc, s) => acc + s.approvedCount, 0);
+      const amount = filteredStats.reduce((acc, s) => acc + s.approvedAmount, 0);
+      return { count, amount };
+    }
     const count = filteredStats.reduce((acc, s) => acc + s.totalPayments, 0);
     const amount = filteredStats.reduce((acc, s) => acc + s.totalAmount, 0);
     return { count, amount };
-  }, [bankStats, selectedBanks]);
+  }, [bankStats, selectedBanks, statusFilter]);
 
   const handleExecuteExport = async (format: "xls" | "csv") => {
     if (selectedBanks.length === 0) {
@@ -406,11 +415,11 @@ export const PaymentsExportDialog = ({
                       {stat ? (
                         <div className="mt-2.5 flex items-baseline justify-between border-t border-border/40 pt-1.5 text-[11px]">
                           <span className="text-muted-foreground">
-                            {stat.totalPayments}{" "}
-                            {stat.totalPayments === 1 ? "pago" : "pagos"}
+                            {stat.approvedCount}{" "}
+                            {stat.approvedCount === 1 ? "aprobado" : "aprobados"}
                           </span>
                           <span className="font-semibold text-foreground">
-                            {formatPaymentAmount(stat.totalAmount)}
+                            {formatPaymentAmount(stat.approvedAmount)}
                           </span>
                         </div>
                       ) : null}

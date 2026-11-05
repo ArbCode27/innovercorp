@@ -133,6 +133,7 @@ describe("payments-export", () => {
       expect(xml).toContain("INNOVER CORP · REPORTE DE PAGOS RECIBIDOS");
       expect(xml).toContain("BANCO: BANCAMIGA");
       expect(xml).toContain("BANCO: VENEZUELA");
+      expect(xml).toContain("F. Aprobación");
       expect(xml).toContain("TOTAL GENERAL DE PAGOS RECIBIDOS (2 pagos)");
 
       // Special characters must be properly escaped
@@ -173,7 +174,7 @@ describe("payments-export", () => {
       });
 
       expect(csv.startsWith("\uFEFF")).toBe(true);
-      expect(csv).toContain("Nro,Fecha,Banco Receptor,Cedula/RIF,Cliente,Referencia,Estado,Monto USD,Monto Bs,Comentario");
+      expect(csv).toContain("Nro,Fecha,Banco Receptor,Cedula/RIF,Cliente,Referencia,Estado,Fecha Aprobacion,Monto USD,Monto Bs,Comentario");
       expect(csv).toContain("Bancamiga");
       expect(csv).toContain("TOTAL GENERAL");
       expect(csv).toContain("30.00");

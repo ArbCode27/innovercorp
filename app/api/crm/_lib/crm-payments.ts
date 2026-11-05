@@ -51,6 +51,7 @@ export type CrmPayment = {
   error_message: string | null;
   receipt_media_url: string | null;
   receipt_metadata: Record<string, unknown>;
+  approved_at?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -737,8 +738,10 @@ export const approveCrmPayment = async (
         }
       : null;
 
+  const approvedAt = new Date().toISOString();
   const nextMetadata: Record<string, unknown> = {
     ...(input.payment.receipt_metadata || {}),
+    approved_at: approvedAt,
   };
 
   if (wisproPaymentData) {
@@ -746,7 +749,7 @@ export const approveCrmPayment = async (
   }
   if (input.manualApproval) {
     nextMetadata.manual_approval = true;
-    nextMetadata.manual_approved_at = new Date().toISOString();
+    nextMetadata.manual_approved_at = approvedAt;
   }
 
   const { data, error } = await supabase
@@ -755,6 +758,7 @@ export const approveCrmPayment = async (
       status: "APROBADO",
       error_message: null,
       receipt_metadata: nextMetadata,
+      updated_at: approvedAt,
     })
     .eq("id", input.payment.id)
     .select("*")

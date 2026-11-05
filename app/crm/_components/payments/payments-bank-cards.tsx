@@ -84,10 +84,10 @@ export const PaymentsBankCards = ({
       <div className="flex items-center justify-between px-0.5">
         <div className="flex items-center gap-2">
           <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Cuentas Receptoras Registradas
+            Ingresos Recibidos por Banco
           </span>
           <span className="text-[11px] text-muted-foreground">
-            (Haz clic en un banco para filtrar)
+            (Solo pagos aprobados · Clic para filtrar)
           </span>
         </div>
 
@@ -155,25 +155,27 @@ export const PaymentsBankCards = ({
                     <Badge
                       variant="outline"
                       className="border-border/60 text-[10px] font-normal text-muted-foreground">
-                      {stat.totalPayments}{" "}
-                      {stat.totalPayments === 1 ? "pago" : "pagos"}
+                      {stat.approvedCount}{" "}
+                      {stat.approvedCount === 1 ? "aprobado" : "aprobados"}
                     </Badge>
                   )}
                 </div>
 
                 <div className="mt-3">
-                  <p className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
-                    {formatPaymentAmount(stat.totalAmount)}
-                  </p>
+                  <div className="flex items-baseline justify-between gap-2">
+                    <p className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
+                      {formatPaymentAmount(stat.approvedAmount)}
+                    </p>
+                    <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                      {stat.approvedCount} {stat.approvedCount === 1 ? "aprobado" : "aprobados"}
+                    </span>
+                  </div>
                   <p className="mt-1 text-[11px] text-muted-foreground">
                     {stat.totalPayments > 0 ? (
                       <>
-                        <span className="font-medium text-emerald-600 dark:text-emerald-400">
-                          {stat.approvedCount} aprobados (
-                          {formatPaymentAmount(stat.approvedAmount)})
-                        </span>
+                        <span>Total registrados: {stat.totalPayments}</span>
                         {stat.inProcessCount > 0 ? (
-                          <span> · {stat.inProcessCount} en proceso</span>
+                          <span> · {stat.inProcessCount} en proceso ({formatPaymentAmount(stat.inProcessAmount)})</span>
                         ) : null}
                       </>
                     ) : (

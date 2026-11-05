@@ -21,6 +21,7 @@ import {
 } from "@/app/api/crm/_lib/wispro-api";
 import { matchInvoicesToPaymentAmount } from "@/app/api/crm/_lib/wispro-invoice-match";
 import { resolveComparisonExpected } from "@/app/crm/_lib/payment-amount-compare";
+import { getPaymentApprovedAt } from "@/app/crm/_lib/payments";
 import { getCrmSettings } from "@/app/api/crm/_lib/crm-settings";
 import {
   applyPaymentReviewOwnership,
@@ -153,6 +154,7 @@ const enrichPaymentsWithLatestInvoiceDate = async (
 
     return {
       ...payment,
+      approved_at: getPaymentApprovedAt(payment),
       latest_invoice_date: fromMeta.date || live?.date || null,
       plan_amount: planAmount,
       expected_amount: resolveComparisonExpected(invoiceExpected, planAmount),

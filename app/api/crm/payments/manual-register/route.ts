@@ -348,6 +348,9 @@ export async function POST(req: NextRequest) {
         .maybeSingle();
     }
 
+    const nowIso = new Date().toISOString();
+    const isApproved = paymentStatus === "APROBADO";
+
     const receiptMetadata = {
       ...(existingPaymentQuery.data?.receipt_metadata || {}),
       manual_registered: true,
@@ -356,10 +359,11 @@ export async function POST(req: NextRequest) {
       amount_bs: amountBs || null,
       amount_usd: amountUsd,
       bcv_rate: bcvRate || null,
-      registered_at: new Date().toISOString(),
+      registered_at: nowIso,
       registered_in_wispro: registerInWispro,
       wispro_payment: wisproPaymentResult,
       wispro_invoice_match: wisproInvoiceMatchMeta,
+      ...(isApproved ? { approved_at: nowIso } : {}),
     };
 
     let paymentId: string;

@@ -1,5 +1,7 @@
 import {
   formatPaymentAmount,
+  formatPaymentDateTime,
+  getPaymentApprovedAt,
   normalizeReceptorBank,
   CRM_PAYMENT_STATUS_LABELS,
   type CrmPayment,
@@ -322,46 +324,47 @@ export const generatePaymentsExcelXml = (options: PaymentsExportOptions): string
    <Column ss:Width="190"/>
    <Column ss:Width="110"/>
    <Column ss:Width="100"/>
+   <Column ss:Width="125"/>
    <Column ss:Width="110"/>
    <Column ss:Width="100"/>
    <Column ss:Width="200"/>
 
    <!-- Encabezado corporativo -->
    <Row ss:Height="26">
-    <Cell ss:MergeAcross="9" ss:StyleID="Title"><Data ss:Type="String">INNOVER CORP · REPORTE DE PAGOS RECIBIDOS</Data></Cell>
+    <Cell ss:MergeAcross="10" ss:StyleID="Title"><Data ss:Type="String">INNOVER CORP · REPORTE DE PAGOS RECIBIDOS</Data></Cell>
    </Row>
    <Row ss:Height="18">
     <Cell ss:StyleID="MetaLabel"><Data ss:Type="String">Período:</Data></Cell>
-    <Cell ss:MergeAcross="3" ss:StyleID="MetaValue"><Data ss:Type="String">${escapeXml(rangeLabel)}</Data></Cell>
+    <Cell ss:MergeAcross="4" ss:StyleID="MetaValue"><Data ss:Type="String">${escapeXml(rangeLabel)}</Data></Cell>
     <Cell ss:StyleID="MetaLabel"><Data ss:Type="String">Fecha de emisión:</Data></Cell>
-    <Cell ss:MergeAcross="3" ss:StyleID="MetaValue"><Data ss:Type="String">${escapeXml(formattedDate)}</Data></Cell>
+    <Cell ss:MergeAcross="4" ss:StyleID="MetaValue"><Data ss:Type="String">${escapeXml(formattedDate)}</Data></Cell>
    </Row>
    <Row ss:Height="18">
     <Cell ss:StyleID="MetaLabel"><Data ss:Type="String">Bancos:</Data></Cell>
-    <Cell ss:MergeAcross="3" ss:StyleID="MetaValue"><Data ss:Type="String">${escapeXml(bankLabel)}</Data></Cell>
+    <Cell ss:MergeAcross="4" ss:StyleID="MetaValue"><Data ss:Type="String">${escapeXml(bankLabel)}</Data></Cell>
     <Cell ss:StyleID="MetaLabel"><Data ss:Type="String">Total movimientos:</Data></Cell>
-    <Cell ss:MergeAcross="3" ss:StyleID="MetaValue"><Data ss:Type="String">${totalPayments} pagos registrados (${escapeXml(formatPaymentAmount(grandTotalAmount))})</Data></Cell>
+    <Cell ss:MergeAcross="4" ss:StyleID="MetaValue"><Data ss:Type="String">${totalPayments} pagos registrados (${escapeXml(formatPaymentAmount(grandTotalAmount))})</Data></Cell>
    </Row>
    ${
      statusFilter && statusFilter !== "all"
        ? `<Row ss:Height="18">
     <Cell ss:StyleID="MetaLabel"><Data ss:Type="String">Filtro Estado:</Data></Cell>
-    <Cell ss:MergeAcross="8" ss:StyleID="MetaValue"><Data ss:Type="String">${escapeXml(statusFilter)}</Data></Cell>
+    <Cell ss:MergeAcross="9" ss:StyleID="MetaValue"><Data ss:Type="String">${escapeXml(statusFilter)}</Data></Cell>
    </Row>`
        : ""
    }
-   <Row ss:Height="10"><Cell ss:MergeAcross="9"/></Row>
+   <Row ss:Height="10"><Cell ss:MergeAcross="10"/></Row>
 
    <!-- RESUMEN EJECUTIVO POR BANCO -->
    <Row ss:Height="22">
-    <Cell ss:MergeAcross="9" ss:StyleID="SectionHeader"><Data ss:Type="String">  RESUMEN EJECUTIVO POR BANCO RECEPTOR</Data></Cell>
+    <Cell ss:MergeAcross="10" ss:StyleID="SectionHeader"><Data ss:Type="String">  RESUMEN EJECUTIVO POR BANCO RECEPTOR</Data></Cell>
    </Row>
    <Row ss:Height="22">
     <Cell ss:MergeAcross="1" ss:StyleID="TableHeader"><Data ss:Type="String">Banco Receptor</Data></Cell>
     <Cell ss:MergeAcross="1" ss:StyleID="TableHeader"><Data ss:Type="String">Total Movimientos</Data></Cell>
     <Cell ss:MergeAcross="1" ss:StyleID="TableHeader"><Data ss:Type="String">Aprobados</Data></Cell>
     <Cell ss:MergeAcross="1" ss:StyleID="TableHeader"><Data ss:Type="String">En Proceso</Data></Cell>
-    <Cell ss:MergeAcross="1" ss:StyleID="TableHeader"><Data ss:Type="String">Total Recaudado (USD)</Data></Cell>
+    <Cell ss:MergeAcross="2" ss:StyleID="TableHeader"><Data ss:Type="String">Total Recaudado (USD)</Data></Cell>
    </Row>
    ${bankGroups
      .map(
@@ -370,21 +373,21 @@ export const generatePaymentsExcelXml = (options: PaymentsExportOptions): string
     <Cell ss:MergeAcross="1" ss:StyleID="CellCenter"><Data ss:Type="Number">${group.payments.length}</Data></Cell>
     <Cell ss:MergeAcross="1" ss:StyleID="CellCenter"><Data ss:Type="String">${group.approvedCount} (${escapeXml(formatPaymentAmount(group.approvedAmount))})</Data></Cell>
     <Cell ss:MergeAcross="1" ss:StyleID="CellCenter"><Data ss:Type="String">${group.inProcessCount} (${escapeXml(formatPaymentAmount(group.inProcessAmount))})</Data></Cell>
-    <Cell ss:MergeAcross="1" ss:StyleID="CellCurrency"><Data ss:Type="Number">${group.totalAmount}</Data></Cell>
+    <Cell ss:MergeAcross="2" ss:StyleID="CellCurrency"><Data ss:Type="Number">${group.totalAmount}</Data></Cell>
    </Row>`,
      )
      .join("\n   ")}
    <Row ss:Height="24">
     <Cell ss:MergeAcross="1" ss:StyleID="GrandTotalRow"><Data ss:Type="String">TOTAL GENERAL</Data></Cell>
     <Cell ss:MergeAcross="1" ss:StyleID="GrandTotalRow"><Data ss:Type="Number">${totalPayments}</Data></Cell>
-    <Cell ss:MergeAcross="5" ss:StyleID="GrandTotalCurrency"><Data ss:Type="Number">${grandTotalAmount}</Data></Cell>
+    <Cell ss:MergeAcross="6" ss:StyleID="GrandTotalCurrency"><Data ss:Type="Number">${grandTotalAmount}</Data></Cell>
    </Row>
 
-   <Row ss:Height="16"><Cell ss:MergeAcross="9"/></Row>
+   <Row ss:Height="16"><Cell ss:MergeAcross="10"/></Row>
 
    <!-- DETALLE COMPLETO DE PAGOS -->
    <Row ss:Height="22">
-    <Cell ss:MergeAcross="9" ss:StyleID="SectionHeader"><Data ss:Type="String">  DETALLE DE MOVIMIENTOS BANCARIOS</Data></Cell>
+    <Cell ss:MergeAcross="10" ss:StyleID="SectionHeader"><Data ss:Type="String">  DETALLE DE MOVIMIENTOS BANCARIOS</Data></Cell>
    </Row>
    <Row ss:Height="24">
     <Cell ss:StyleID="TableHeader"><Data ss:Type="String">N°</Data></Cell>
@@ -394,6 +397,7 @@ export const generatePaymentsExcelXml = (options: PaymentsExportOptions): string
     <Cell ss:StyleID="TableHeader"><Data ss:Type="String">Cliente / Titular</Data></Cell>
     <Cell ss:StyleID="TableHeader"><Data ss:Type="String">Referencia</Data></Cell>
     <Cell ss:StyleID="TableHeader"><Data ss:Type="String">Estado</Data></Cell>
+    <Cell ss:StyleID="TableHeader"><Data ss:Type="String">F. Aprobación</Data></Cell>
     <Cell ss:StyleID="TableHeader"><Data ss:Type="String">Monto (USD)</Data></Cell>
     <Cell ss:StyleID="TableHeader"><Data ss:Type="String">Monto en Bs</Data></Cell>
     <Cell ss:StyleID="TableHeader"><Data ss:Type="String">Comentario / Nota</Data></Cell>
@@ -402,12 +406,12 @@ export const generatePaymentsExcelXml = (options: PaymentsExportOptions): string
    ${
      payments.length === 0
        ? `<Row ss:Height="24">
-    <Cell ss:MergeAcross="9" ss:StyleID="CellCenter"><Data ss:Type="String">No se encontraron movimientos registrados en los bancos y fechas seleccionadas.</Data></Cell>
+    <Cell ss:MergeAcross="10" ss:StyleID="CellCenter"><Data ss:Type="String">No se encontraron movimientos registrados en los bancos y fechas seleccionadas.</Data></Cell>
    </Row>`
        : bankGroups
            .map((group) => {
              const groupHeaderRow = `<Row ss:Height="22">
-    <Cell ss:MergeAcross="9" ss:StyleID="BankGroupHeader"><Data ss:Type="String">  BANCO: ${escapeXml(group.bankName.toUpperCase())} (${group.payments.length} movimientos · Subtotal: ${escapeXml(formatPaymentAmount(group.totalAmount))})</Data></Cell>
+    <Cell ss:MergeAcross="10" ss:StyleID="BankGroupHeader"><Data ss:Type="String">  BANCO: ${escapeXml(group.bankName.toUpperCase())} (${group.payments.length} movimientos · Subtotal: ${escapeXml(formatPaymentAmount(group.totalAmount))})</Data></Cell>
    </Row>`;
 
              const rows = group.payments
@@ -427,6 +431,10 @@ export const generatePaymentsExcelXml = (options: PaymentsExportOptions): string
                  const refCode = payment.transaction_code || "—";
                  const comment = payment.comment || "—";
                  const paymentDate = payment.payment_date?.slice(0, 10) || "—";
+                 const approvedAt = getPaymentApprovedAt(payment);
+                 const approvedDateText = approvedAt
+                   ? formatPaymentDateTime(approvedAt)
+                   : "—";
 
                  return `<Row ss:Height="20">
     <Cell ss:StyleID="CellCenter"><Data ss:Type="Number">${index + 1}</Data></Cell>
@@ -436,6 +444,7 @@ export const generatePaymentsExcelXml = (options: PaymentsExportOptions): string
     <Cell ss:StyleID="CellDefault"><Data ss:Type="String">${escapeXml(clientName)}</Data></Cell>
     <Cell ss:StyleID="CellCenter"><Data ss:Type="String">${escapeXml(refCode)}</Data></Cell>
     <Cell ss:StyleID="${statusStyle}"><Data ss:Type="String">${escapeXml(statusLabel)}</Data></Cell>
+    <Cell ss:StyleID="CellCenter"><Data ss:Type="String">${escapeXml(approvedDateText)}</Data></Cell>
     <Cell ss:StyleID="CellCurrency"><Data ss:Type="Number">${amountUsd}</Data></Cell>
     <Cell ss:StyleID="CellCenter"><Data ss:Type="String">${escapeXml(amountBs)}</Data></Cell>
     <Cell ss:StyleID="CellDefault"><Data ss:Type="String">${escapeXml(comment)}</Data></Cell>
@@ -444,7 +453,7 @@ export const generatePaymentsExcelXml = (options: PaymentsExportOptions): string
                .join("\n   ");
 
              const subtotalRow = `<Row ss:Height="22">
-    <Cell ss:MergeAcross="6" ss:StyleID="BankSubtotalRow"><Data ss:Type="String">  SUBTOTAL ${escapeXml(group.bankName.toUpperCase())} (${group.payments.length} pagos)</Data></Cell>
+    <Cell ss:MergeAcross="7" ss:StyleID="BankSubtotalRow"><Data ss:Type="String">  SUBTOTAL ${escapeXml(group.bankName.toUpperCase())} (${group.payments.length} pagos)</Data></Cell>
     <Cell ss:StyleID="BankSubtotalCurrency"><Data ss:Type="Number">${group.totalAmount}</Data></Cell>
     <Cell ss:MergeAcross="1" ss:StyleID="BankSubtotalRow"/>
    </Row>`;
@@ -456,7 +465,7 @@ export const generatePaymentsExcelXml = (options: PaymentsExportOptions): string
 
    <!-- FILA FINAL DE TOTAL GENERAL -->
    <Row ss:Height="26">
-    <Cell ss:MergeAcross="6" ss:StyleID="GrandTotalRow"><Data ss:Type="String">  TOTAL GENERAL DE PAGOS RECIBIDOS (${totalPayments} pagos)</Data></Cell>
+    <Cell ss:MergeAcross="7" ss:StyleID="GrandTotalRow"><Data ss:Type="String">  TOTAL GENERAL DE PAGOS RECIBIDOS (${totalPayments} pagos)</Data></Cell>
     <Cell ss:StyleID="GrandTotalCurrency"><Data ss:Type="Number">${grandTotalAmount}</Data></Cell>
     <Cell ss:MergeAcross="1" ss:StyleID="GrandTotalRow"/>
    </Row>
@@ -492,6 +501,7 @@ export const generatePaymentsCsv = (options: PaymentsExportOptions): string => {
       "Cliente",
       "Referencia",
       "Estado",
+      "Fecha Aprobacion",
       "Monto USD",
       "Monto Bs",
       "Comentario",
@@ -506,6 +516,8 @@ export const generatePaymentsCsv = (options: PaymentsExportOptions): string => {
     const bank = normalizeReceptorBank(rawBank) || rawBank || "Sin banco";
     const amount = Number(p.amount) || 0;
     totalUsd = roundMoney(totalUsd + amount);
+    const approvedAt = getPaymentApprovedAt(p);
+    const approvedText = approvedAt ? formatPaymentDateTime(approvedAt) : "—";
 
     return [
       counter++,
@@ -515,6 +527,7 @@ export const generatePaymentsCsv = (options: PaymentsExportOptions): string => {
       escapeCsv(p.client_name),
       escapeCsv(p.transaction_code),
       escapeCsv(CRM_PAYMENT_STATUS_LABELS[p.status] || p.status),
+      escapeCsv(approvedText),
       amount.toFixed(2),
       escapeCsv(p.amount_raw),
       escapeCsv(p.comment),
@@ -527,6 +540,7 @@ export const generatePaymentsCsv = (options: PaymentsExportOptions): string => {
     "TOTAL GENERAL",
     "",
     `${payments.length} pagos`,
+    "",
     "",
     "",
     totalUsd.toFixed(2),

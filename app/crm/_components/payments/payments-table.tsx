@@ -29,6 +29,7 @@ import {
   formatPaymentDateTime,
   formatPaymentField,
   formatPlanAmountLabel,
+  getPaymentApprovedAt,
   isPaymentReadyForApproval,
   isPaymentReadyForManualApproval,
   PAYMENT_PENDING_LABEL,
@@ -102,7 +103,7 @@ export const PaymentsTable = ({
   return (
     <Card className="overflow-hidden py-0">
       <div className="overflow-x-auto">
-        <Table className="min-w-[1200px]">
+        <Table className="min-w-[1280px]">
           <TableHeader>
             <TableRow className={`${CRM_SURFACES.border} hover:bg-transparent`}>
               <TableHead className={CRM_SURFACES.textMuted}>Fecha</TableHead>
@@ -114,6 +115,7 @@ export const PaymentsTable = ({
               <TableHead className={CRM_SURFACES.textMuted}>Referencia</TableHead>
               <TableHead className={CRM_SURFACES.textMuted}>Factura</TableHead>
               <TableHead className={CRM_SURFACES.textMuted}>Estado</TableHead>
+              <TableHead className={CRM_SURFACES.textMuted}>F. Aprobación</TableHead>
               <TableHead className={CRM_SURFACES.textMuted}>Revisión</TableHead>
             </TableRow>
           </TableHeader>
@@ -141,6 +143,7 @@ export const PaymentsTable = ({
                 payment.expected_amount,
               );
               const planLabel = formatPlanAmountLabel(payment.plan_amount);
+              const approvedAt = getPaymentApprovedAt(payment);
 
               return (
                 <TableRow
@@ -216,6 +219,22 @@ export const PaymentsTable = ({
                   </TableCell>
                   <TableCell>
                     <StatusBadge status={payment.status} />
+                  </TableCell>
+                  <TableCell>
+                    {approvedAt ? (
+                      <div>
+                        <div className={CRM_SURFACES.textPrimary}>
+                          {formatPaymentDate(approvedAt)}
+                        </div>
+                        <div className={`text-[11px] ${CRM_SURFACES.textMuted}`}>
+                          {formatPaymentDateTime(approvedAt)}
+                        </div>
+                      </div>
+                    ) : (
+                      <span className={`text-xs ${CRM_SURFACES.textMuted}`}>
+                        —
+                      </span>
+                    )}
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-wrap items-center gap-2">

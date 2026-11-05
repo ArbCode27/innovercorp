@@ -307,11 +307,17 @@ export const PaymentsView = ({
     const optimisticStatus: CrmPaymentStatus = isApproval
       ? "APROBADO"
       : "RECHAZADO";
+    const nowIso = new Date().toISOString();
     const optimisticPayment: CrmPayment = {
       ...paymentBeforeAction,
       status: optimisticStatus,
+      approved_at: isApproval ? nowIso : null,
+      receipt_metadata: {
+        ...(paymentBeforeAction.receipt_metadata || {}),
+        ...(isApproval ? { approved_at: nowIso } : {}),
+      },
       error_message: null,
-      updated_at: new Date().toISOString(),
+      updated_at: nowIso,
     };
 
     setUpdatingId(paymentId);
