@@ -562,6 +562,12 @@ export const applyListFilters = <T>(
 
   if (options.includeStatus && filters.status && isCrmPaymentStatus(filters.status)) {
     next = next.eq("status", filters.status);
+  } else if (
+    options.includeStatus &&
+    filters.dateType === "approval" &&
+    (!filters.status || filters.status === "all")
+  ) {
+    next = next.eq("status", "APROBADO");
   }
   if (filters.bank?.trim()) {
     next = next.eq("bank", filters.bank.trim());
@@ -626,9 +632,12 @@ export const listCrmPayments = async (
     ),
   );
 
+  const orderColumn =
+    filters.dateType === "approval" ? "approved_at" : "created_at";
+
   let [listResult, banksResult, bankStatsResult, ...countResults] = await Promise.all([
     listQuery
-      .order("created_at", { ascending: false })
+      .order(orderColumn, { ascending: false, nullsFirst: false })
       .range(offset, offset + limit - 1),
     banksQuery,
     bankStatsQuery,
@@ -736,9 +745,14 @@ export const updateCrmPaymentStatus = async (
     throw new Error("Estado de pago no permitido");
   }
 
+  const patch: Record<string, unknown> = {
+    status: input.status,
+    approved_at: input.status === "APROBADO" ? new Date().toISOString() : null,
+  };
+
   const { data, error } = await supabase
     .from("crm_payments")
-    .update({ status: input.status })
+    .update(patch)
     .eq("id", input.id)
     .select("*")
     .maybeSingle<CrmPayment>();
@@ -827,6 +841,7 @@ export const approveCrmPayment = async (
     .from("crm_payments")
     .update({
       status: "APROBADO",
+      approved_at: approvedAt,
       error_message: null,
       receipt_metadata: nextMetadata,
       updated_at: approvedAt,
@@ -850,6 +865,7 @@ export const rejectCrmPayment = async (
     .from("crm_payments")
     .update({
       status: "RECHAZADO",
+      approved_at: null,
       error_message: null,
     })
     .eq("id", paymentId)
@@ -874,6 +890,7 @@ export const markCrmPaymentApprovalError = async (
     .from("crm_payments")
     .update({
       status: "ERROR",
+      approved_at: null,
       error_message: input.message,
     })
     .eq("id", input.paymentId)

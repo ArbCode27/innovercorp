@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { applyListFilters, type ListCrmPaymentsFilters } from "./crm-payments";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  applyListFilters,
+  approveCrmPayment,
+  rejectCrmPayment,
+  markCrmPaymentApprovalError,
+  updateCrmPaymentStatus,
+  type CrmPayment,
+  type ListCrmPaymentsFilters,
+} from "./crm-payments";
 
 type MockCall = { method: string; args: unknown[] };
 
@@ -161,5 +170,135 @@ describe("applyListFilters", () => {
       method: "lte",
       args: ["payment_date", "2026-11-05"],
     });
+  });
+
+  it("defaults to status APROBADO when dateType is approval and no status specified", () => {
+    const query = createMockQuery();
+    const filters: ListCrmPaymentsFilters = {
+      from: "2026-11-01",
+      to: "2026-11-05",
+      dateType: "approval",
+      q: null,
+    };
+
+    applyListFilters(query, filters, { includeStatus: true });
+
+    const eqCall = query.calls.find((c) => c.method === "eq");
+    expect(eqCall).toEqual({
+      method: "eq",
+      args: ["status", "APROBADO"],
+    });
+  });
+});
+
+describe("crm-payments status transitions approved_at column", () => {
+  const createCaptureClient = (captured: {
+    table?: string;
+    updatePayload?: Record<string, unknown>;
+  }) => {
+    return {
+      from: (table: string) => {
+        captured.table = table;
+        return {
+          update: (payload: Record<string, unknown>) => {
+            captured.updatePayload = payload;
+            return {
+              eq: () => ({
+                select: () => ({
+                  maybeSingle: async () => ({ id: "pay-1", ...payload }),
+                }),
+              }),
+            };
+          },
+        };
+      },
+    } as unknown as SupabaseClient;
+  };
+
+  const dummyPayment: CrmPayment = {
+    id: "pay-1",
+    client_id: 1,
+    conversation_id: 1,
+    message_id: 1,
+    submitted_by_agent_id: 1,
+    wispro_client_id: null,
+    client_name: "Test Client",
+    cedula: "12345678",
+    phone_id: "584120000000",
+    amount: 30,
+    amount_raw: "30",
+    bank: "Bancamiga",
+    transaction_code: "123456",
+    payment_date: "2026-11-06",
+    comment: null,
+    status: "EN_PROCESO",
+    source: "advisor",
+    external_payment_id: null,
+    external_api_status: null,
+    error_message: null,
+    receipt_media_url: null,
+    receipt_metadata: {},
+    approved_at: null,
+    created_at: "2026-11-06T10:00:00Z",
+    updated_at: "2026-11-06T10:00:00Z",
+  };
+
+  it("approveCrmPayment writes approved_at column directly in database update", async () => {
+    const captured: { table?: string; updatePayload?: Record<string, unknown> } = {};
+    const supabase = createCaptureClient(captured);
+
+    await approveCrmPayment(supabase, {
+      payment: dummyPayment,
+      manualApproval: true,
+      manualNote: "Aprobación de prueba",
+    });
+
+    expect(captured.table).toBe("crm_payments");
+    expect(captured.updatePayload?.status).toBe("APROBADO");
+    expect(typeof captured.updatePayload?.approved_at).toBe("string");
+    expect(captured.updatePayload?.approved_at).toBeTruthy();
+  });
+
+  it("rejectCrmPayment clears approved_at column to null", async () => {
+    const captured: { table?: string; updatePayload?: Record<string, unknown> } = {};
+    const supabase = createCaptureClient(captured);
+
+    await rejectCrmPayment(supabase, "pay-1");
+
+    expect(captured.table).toBe("crm_payments");
+    expect(captured.updatePayload?.status).toBe("RECHAZADO");
+    expect(captured.updatePayload?.approved_at).toBeNull();
+  });
+
+  it("markCrmPaymentApprovalError clears approved_at column to null", async () => {
+    const captured: { table?: string; updatePayload?: Record<string, unknown> } = {};
+    const supabase = createCaptureClient(captured);
+
+    await markCrmPaymentApprovalError(supabase, {
+      paymentId: "pay-1",
+      message: "Wispro API timeout",
+    });
+
+    expect(captured.table).toBe("crm_payments");
+    expect(captured.updatePayload?.status).toBe("ERROR");
+    expect(captured.updatePayload?.approved_at).toBeNull();
+    expect(captured.updatePayload?.error_message).toBe("Wispro API timeout");
+  });
+
+  it("updateCrmPaymentStatus sets approved_at on APROBADO and null on other statuses", async () => {
+    const captured: { table?: string; updatePayload?: Record<string, unknown> } = {};
+    const supabase = createCaptureClient(captured);
+
+    await updateCrmPaymentStatus(supabase, {
+      id: "pay-1",
+      status: "APROBADO",
+    });
+    expect(typeof captured.updatePayload?.approved_at).toBe("string");
+
+    await updateCrmPaymentStatus(supabase, {
+      id: "pay-1",
+      status: "RECHAZADO",
+    });
+    expect(captured.updatePayload?.approved_at).toBeNull();
   });
 });

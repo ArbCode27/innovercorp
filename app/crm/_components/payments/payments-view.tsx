@@ -195,7 +195,7 @@ export const PaymentsView = ({
   const handleDateTypeChange = (value: PaymentDateType) => {
     setDateType(value);
     setPage(1);
-    if (value === "approval" && status === "EN_PROCESO") {
+    if (value === "approval" && status !== "APROBADO") {
       setStatus("APROBADO");
     }
   };
