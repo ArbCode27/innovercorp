@@ -14,6 +14,9 @@ interface ConversationListProps {
   selectedConversationId: number | null;
   openCasos?: CrmWisproCaso[];
   onSelect: (id: number) => void;
+  isSelectionMode?: boolean;
+  selectedConversationIds?: Set<number>;
+  onToggleSelect?: (id: number) => void;
 }
 
 export const ConversationList = ({
@@ -23,6 +26,9 @@ export const ConversationList = ({
   selectedConversationId,
   openCasos = [],
   onSelect,
+  isSelectionMode = false,
+  selectedConversationIds,
+  onToggleSelect,
 }: ConversationListProps) => {
   if (!conversations.length) {
     return (
@@ -51,6 +57,9 @@ export const ConversationList = ({
           isActive={selectedConversationId === conversation.id}
           hasOpenTicket={conversationHasOpenTicket(conversation, openCasos)}
           onSelect={onSelect}
+          isSelectionMode={isSelectionMode}
+          isSelected={selectedConversationIds?.has(conversation.id) ?? false}
+          onToggleSelect={onToggleSelect}
         />
       ))}
     </div>

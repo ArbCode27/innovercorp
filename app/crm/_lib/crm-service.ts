@@ -409,6 +409,47 @@ export const crmService = {
     throwIfError(error);
   },
 
+  async bulkUpdateConversations(
+    conversationIds: number[],
+    payload: Partial<
+      Pick<
+        Conversation,
+        "human_mode" | "status" | "label_ids" | "agent_id" | "agent_control"
+      >
+    >,
+  ): Promise<void> {
+    if (!conversationIds.length) return;
+
+    const { error } = await db()
+      .from("conversations")
+      .update({ ...payload, updated_at: new Date().toISOString() })
+      .in("id", conversationIds);
+
+    throwIfError(error);
+  },
+
+  async bulkUpdateConversationLabels(
+    updates: { id: number; label_ids: number[] }[],
+  ): Promise<void> {
+    if (!updates.length) return;
+
+    const CHUNK_SIZE = 10;
+    for (let i = 0; i < updates.length; i += CHUNK_SIZE) {
+      const chunk = updates.slice(i, i + CHUNK_SIZE);
+      await Promise.all(
+        chunk.map((item) =>
+          db()
+            .from("conversations")
+            .update({
+              label_ids: item.label_ids,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", item.id),
+        ),
+      );
+    }
+  },
+
   async takeControlConversation(conversationId: number, agent: Pick<Agent, "id" | "name">) {
     const { data, error } = await db()
       .from("conversations")
@@ -481,6 +522,41 @@ export const crmService = {
     }
 
     return payload.historyId;
+  },
+
+  async archiveAndResolveConversations(
+    conversationIds: number[],
+    resolvedBy: number,
+  ): Promise<{
+    resolvedIds: number[];
+    failedIds: { id: number; error: string }[];
+  }> {
+    if (!conversationIds.length) {
+      return { resolvedIds: [], failedIds: [] };
+    }
+
+    const response = await fetch("/api/crm/conversations/resolve", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ conversationIds, resolvedBy }),
+    });
+
+    const payload = (await response.json()) as {
+      resolvedIds?: number[];
+      failedIds?: { id: number; error: string }[];
+      error?: string;
+    };
+
+    if (!response.ok) {
+      throw new Error(
+        payload.error || "No se pudieron resolver las conversaciones",
+      );
+    }
+
+    return {
+      resolvedIds: payload.resolvedIds || [],
+      failedIds: payload.failedIds || [],
+    };
   },
 
   async loadConversationHistory(input?: {

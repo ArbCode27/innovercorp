@@ -1,13 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { archiveAndDeleteConversation } from "@/app/crm/_lib/conversation-resolve";
 import type { Ticket } from "@/app/crm/_lib/types";
 
-const resolveSchema = z.object({
-  conversationId: z.coerce.number().int().positive(),
-  resolvedBy: z.coerce.number().int().positive(),
-});
+const resolveSchema = z
+  .object({
+    conversationId: z.coerce.number().int().positive().optional(),
+    conversationIds: z
+      .array(z.coerce.number().int().positive())
+      .min(1)
+      .optional(),
+    resolvedBy: z.coerce.number().int().positive(),
+  })
+  .refine(
+    (data) =>
+      data.conversationId !== undefined ||
+      (Array.isArray(data.conversationIds) && data.conversationIds.length > 0),
+    {
+      message: "Debe proporcionar conversationId o conversationIds",
+    },
+  );
 
 const getServerEnv = (key: string) => {
   const value = process.env[key];
@@ -20,7 +33,7 @@ const getServerEnv = (key: string) => {
 };
 
 const resolveOpenTicketForClient = async (
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   clientId: number | null,
 ) => {
   if (!clientId) return;
@@ -37,7 +50,7 @@ const resolveOpenTicketForClient = async (
 
   const { error } = await supabase
     .from("tickets")
-    .update({ status: "Resuelto" })
+    .update({ status: "Resuelto" } as never)
     .eq("id", data.id);
 
   if (error) {
@@ -56,43 +69,70 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { conversationId, resolvedBy } = payload.data;
+    const { conversationId, conversationIds, resolvedBy } = payload.data;
+    const isSingle = conversationId !== undefined && !conversationIds;
+    const idsToResolve = conversationIds ?? (conversationId ? [conversationId] : []);
 
     const supabase = createClient(
       getServerEnv("NEXT_PUBLIC_SUPABASE_URL"),
       getServerEnv("SUPABASE_SERVICE_ROLE_KEY"),
-    );
+    ) as unknown as SupabaseClient;
 
-    const { data: conversation, error: conversationError } = await supabase
-      .from("conversations")
-      .select("id, client_id")
-      .eq("id", conversationId)
-      .maybeSingle<{ id: number; client_id: number | null }>();
+    const resolvedIds: number[] = [];
+    const failedIds: { id: number; error: string }[] = [];
+    let lastHistoryId: number | null = null;
 
-    if (conversationError) {
-      console.error("Resolve conversation lookup:", conversationError);
-      return NextResponse.json(
-        { error: "No se pudo validar la conversación" },
-        { status: 500 },
-      );
+    for (const id of idsToResolve) {
+      try {
+        const { data: conversation, error: conversationError } = await supabase
+          .from("conversations")
+          .select("id, client_id")
+          .eq("id", id)
+          .maybeSingle<{ id: number; client_id: number | null }>();
+
+        if (conversationError) {
+          throw conversationError;
+        }
+
+        if (!conversation) {
+          failedIds.push({ id, error: "La conversación no existe" });
+          continue;
+        }
+
+        const historyId = await archiveAndDeleteConversation(
+          supabase,
+          id,
+          resolvedBy,
+        );
+
+        await resolveOpenTicketForClient(supabase, conversation.client_id);
+        resolvedIds.push(id);
+        lastHistoryId = historyId;
+      } catch (err) {
+        console.error(`Resolve conversation error for ID ${id}:`, err);
+        failedIds.push({
+          id,
+          error: err instanceof Error ? err.message : "Error al archivar",
+        });
+      }
     }
 
-    if (!conversation) {
-      return NextResponse.json(
-        { error: "La conversación no existe" },
-        { status: 404 },
-      );
+    if (isSingle) {
+      if (failedIds.length > 0) {
+        return NextResponse.json(
+          { error: failedIds[0].error },
+          { status: 500 },
+        );
+      }
+      return NextResponse.json({ historyId: lastHistoryId });
     }
 
-    const historyId = await archiveAndDeleteConversation(
-      supabase,
-      conversationId,
-      resolvedBy,
-    );
-
-    await resolveOpenTicketForClient(supabase, conversation.client_id);
-
-    return NextResponse.json({ historyId });
+    return NextResponse.json({
+      success: true,
+      resolvedCount: resolvedIds.length,
+      resolvedIds,
+      failedIds,
+    });
   } catch (error) {
     if (error instanceof Error && error.message.startsWith("Missing environment")) {
       console.error(error.message);

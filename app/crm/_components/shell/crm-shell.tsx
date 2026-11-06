@@ -197,6 +197,11 @@ export const CrmShell = () => {
                 }}
                 onCasoCreated={refreshOpenCasos}
                 onOpenSettingsView={handleSelectView}
+                isBulkProcessing={crm.isBulkProcessing}
+                onBulkResolve={crm.bulkResolveConversations}
+                onBulkReactivateBot={crm.bulkReactivateBot}
+                onBulkUpdateLabels={crm.bulkUpdateLabels}
+                onBulkAssignAgent={crm.bulkAssignAgent}
               />
             ) : null}
             {activeView === "history" ? (

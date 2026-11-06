@@ -10,6 +10,7 @@ import {
 import type { Client, Conversation, Label } from "../../_lib/types";
 import { formatCrmTime } from "../../_lib/formatters";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { CRM_INBOX_ITEM, CRM_SURFACES } from "../../_lib/crm-theme";
 import { AvatarInitials } from "../shared/avatar-initials";
 import { LabelChip } from "../shared/label-chip";
@@ -24,6 +25,9 @@ interface ConversationListItemProps {
   isActive: boolean;
   hasOpenTicket?: boolean;
   onSelect: (id: number) => void;
+  isSelectionMode?: boolean;
+  isSelected?: boolean;
+  onToggleSelect?: (id: number) => void;
 }
 
 export const ConversationListItem = ({
@@ -33,6 +37,9 @@ export const ConversationListItem = ({
   isActive,
   hasOpenTicket = false,
   onSelect,
+  isSelectionMode = false,
+  isSelected = false,
+  onToggleSelect,
 }: ConversationListItemProps) => {
   const displayName =
     client?.name || conversation.customer_phone || "Número desconocido";
@@ -46,11 +53,21 @@ export const ConversationListItem = ({
   const showHumanBadge = isHuman && !agentControlName;
   const shouldShowStatusBadge = conversation.status !== "abierto";
 
+  const handleClick = () => {
+    if (isSelectionMode) {
+      onToggleSelect?.(conversation.id);
+      return;
+    }
+    onSelect(conversation.id);
+  };
+
   return (
     <button
       type="button"
-      onClick={() => onSelect(conversation.id)}
+      onClick={handleClick}
+      aria-pressed={isSelectionMode ? isSelected : undefined}
       aria-label={[
+        isSelectionMode ? (isSelected ? "Seleccionado" : "No seleccionado") : null,
         displayName,
         hasUnread ? `${unreadCount} mensajes sin leer` : null,
         hasOpenTicket ? "ticket activo" : null,
@@ -61,13 +78,28 @@ export const ConversationListItem = ({
       className={cn(
         "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
         "group w-full rounded-2xl p-3 text-left transition",
-        isActive
-          ? CRM_INBOX_ITEM.active
-          : hasUnread
-            ? CRM_INBOX_ITEM.unread
-            : cn(CRM_INBOX_ITEM.default, CRM_SURFACES.hover),
+        isSelected
+          ? "border border-primary/50 bg-primary/10 dark:bg-primary/15 ring-1 ring-primary/40 shadow-xs"
+          : isActive
+            ? CRM_INBOX_ITEM.active
+            : hasUnread
+              ? CRM_INBOX_ITEM.unread
+              : cn(CRM_INBOX_ITEM.default, CRM_SURFACES.hover),
       )}>
-      <div className="flex gap-3">
+      <div className="flex items-center gap-3">
+        {isSelectionMode ? (
+          <div
+            className="flex shrink-0 items-center pr-0.5"
+            onClick={(event) => {
+              event.stopPropagation();
+            }}>
+            <Checkbox
+              checked={isSelected}
+              onCheckedChange={() => onToggleSelect?.(conversation.id)}
+              aria-label={`Seleccionar conversación de ${displayName}`}
+            />
+          </div>
+        ) : null}
         <AvatarInitials
           name={displayName}
           initials={client?.initials}

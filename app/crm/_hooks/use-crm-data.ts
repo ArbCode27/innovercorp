@@ -114,6 +114,7 @@ export const useCrmData = (agent: Agent | null) => {
     isSending: isSendingMessage,
   } = useSendMessage();
   const [isResolvingConversation, setIsResolvingConversation] = useState(false);
+  const [isBulkProcessing, setIsBulkProcessing] = useState(false);
 
   // Ref para acceder al selectedConversationId dentro de los listeners de Realtime
   const selectedConversationIdRef = useRef<number | null>(null);
@@ -1084,6 +1085,199 @@ export const useCrmData = (agent: Agent | null) => {
     }
   };
 
+  const bulkResolveConversations = async (conversationIds: number[]) => {
+    if (!conversationIds.length || !agent) {
+      return { succeeded: 0, failed: 0 };
+    }
+
+    setIsBulkProcessing(true);
+    try {
+      const { resolvedIds, failedIds } =
+        await crmService.archiveAndResolveConversations(
+          conversationIds,
+          agent.id,
+        );
+
+      if (resolvedIds.length > 0) {
+        const resolvedSet = new Set(resolvedIds);
+        setData((current) => ({
+          ...current,
+          conversations: current.conversations.filter(
+            (conversation) => !resolvedSet.has(conversation.id),
+          ),
+        }));
+
+        if (
+          selectedConversationId !== null &&
+          resolvedSet.has(selectedConversationId)
+        ) {
+          setSelectedConversationId(null);
+          setMessages([]);
+        }
+
+        toast.success(
+          `${resolvedIds.length} ${
+            resolvedIds.length === 1
+              ? "conversación archivada y cerrada"
+              : "conversaciones archivadas y cerradas"
+          }`,
+        );
+      }
+
+      if (failedIds.length > 0) {
+        toast.error(
+          `No se pudieron archivar ${failedIds.length} conversaciones`,
+        );
+      }
+
+      return { succeeded: resolvedIds.length, failed: failedIds.length };
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Error al archivar conversaciones en lote",
+      );
+      throw error;
+    } finally {
+      setIsBulkProcessing(false);
+    }
+  };
+
+  const bulkReactivateBot = async (conversationIds: number[]) => {
+    if (!conversationIds.length) return;
+
+    setIsBulkProcessing(true);
+    try {
+      await crmService.bulkUpdateConversations(conversationIds, {
+        human_mode: false,
+      });
+
+      const idSet = new Set(conversationIds);
+      setData((current) => ({
+        ...current,
+        conversations: current.conversations.map((c) =>
+          idSet.has(c.id) ? { ...c, human_mode: false } : c,
+        ),
+      }));
+
+      toast.success(
+        `Bot IA reactivado en ${conversationIds.length} ${
+          conversationIds.length === 1 ? "conversación" : "conversaciones"
+        }`,
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "No se pudo reactivar el bot en lote",
+      );
+      throw error;
+    } finally {
+      setIsBulkProcessing(false);
+    }
+  };
+
+  const bulkUpdateLabels = async (
+    conversationIds: number[],
+    action: "add" | "remove" | "replace",
+    targetLabelIds: number[],
+  ) => {
+    if (!conversationIds.length) return;
+
+    setIsBulkProcessing(true);
+    try {
+      const targetIdSet = new Set(targetLabelIds);
+      const updates = conversationIds
+        .map((convId) => {
+          const conv = data.conversations.find((c) => c.id === convId);
+          if (!conv) return null;
+
+          let newLabels: number[];
+          if (action === "add") {
+            newLabels = Array.from(new Set([...conv.label_ids, ...targetLabelIds]));
+          } else if (action === "remove") {
+            newLabels = conv.label_ids.filter((id) => !targetIdSet.has(id));
+          } else {
+            newLabels = [...targetLabelIds];
+          }
+
+          return { id: conv.id, label_ids: newLabels };
+        })
+        .filter((item): item is { id: number; label_ids: number[] } => Boolean(item));
+
+      await crmService.bulkUpdateConversationLabels(updates);
+
+      const updatesMap = new Map(updates.map((u) => [u.id, u.label_ids]));
+      setData((current) => ({
+        ...current,
+        conversations: current.conversations.map((c) => {
+          const newLabels = updatesMap.get(c.id);
+          return newLabels ? { ...c, label_ids: newLabels } : c;
+        }),
+      }));
+
+      toast.success(
+        `Etiquetas actualizadas en ${conversationIds.length} ${
+          conversationIds.length === 1 ? "conversación" : "conversaciones"
+        }`,
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "No se pudieron actualizar las etiquetas en lote",
+      );
+      throw error;
+    } finally {
+      setIsBulkProcessing(false);
+    }
+  };
+
+  const bulkAssignAgent = async (
+    conversationIds: number[],
+    newAgentId: number | null,
+  ) => {
+    if (!conversationIds.length) return;
+
+    setIsBulkProcessing(true);
+    try {
+      const targetAgent = newAgentId
+        ? data.agents.find((a) => Number(a.id) === Number(newAgentId))
+        : null;
+
+      const payload = {
+        agent_id: newAgentId,
+        agent_control: targetAgent ? targetAgent.name : null,
+        human_mode: Boolean(newAgentId),
+      };
+
+      await crmService.bulkUpdateConversations(conversationIds, payload);
+
+      const idSet = new Set(conversationIds);
+      setData((current) => ({
+        ...current,
+        conversations: current.conversations.map((c) =>
+          idSet.has(c.id) ? { ...c, ...payload } : c,
+        ),
+      }));
+
+      toast.success(
+        newAgentId
+          ? `Conversaciones reasignadas a ${targetAgent?.name ?? "asesor"}`
+          : "Conversaciones liberadas a sin asignar",
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "No se pudo reasignar en lote",
+      );
+      throw error;
+    } finally {
+      setIsBulkProcessing(false);
+    }
+  };
+
   const updateLabels = async (labelIds: number[]) => {
     if (!selectedConversation) return;
 
@@ -1446,6 +1640,7 @@ export const useCrmData = (agent: Agent | null) => {
     isMessagesLoading,
     isSendingMessage,
     isResolvingConversation,
+    isBulkProcessing,
     searchTerm,
     conversationFilter,
     selectedLabelId,
@@ -1463,6 +1658,10 @@ export const useCrmData = (agent: Agent | null) => {
     addNote,
     takeControl,
     reactivateBot,
+    bulkResolveConversations,
+    bulkReactivateBot,
+    bulkUpdateLabels,
+    bulkAssignAgent,
     updateAiSystemPrompt,
     updatePaymentSuccessMessage,
     updateAiRecoveryMessages,
