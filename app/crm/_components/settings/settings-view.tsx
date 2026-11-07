@@ -8,12 +8,7 @@ import {
   DEFAULT_AI_SYSTEM_PROMPT,
   promptLooksCompatibleWithAiParser,
 } from "../../_lib/ai-default-prompt";
-import {
-  buildPaymentSuccessMessage,
-  DEFAULT_PAYMENT_SUCCESS_MESSAGE,
-  PAYMENT_SUCCESS_MESSAGE_MAX_LENGTH,
-} from "../../_lib/payment-success-message";
-import type { Agent, CrmSettings } from "../../_lib/types";
+import type { Agent, CrmSettings, Label } from "../../_lib/types";
 import { DEFAULT_AI_MODEL } from "../../_lib/ai-models";
 import type {
   AfterHoursPaymentsConfig,
@@ -25,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { OfficeHoursSettingsSection } from "./office-hours-settings-section";
 import { AiRecoverySettingsSection } from "./ai-recovery-settings-section";
 import { AppearanceSettingsSection } from "./appearance-settings-section";
+import { PaymentApprovalSettingsSection } from "./payment-approval-settings-section";
 import { useCrmAppearance } from "../shell/crm-appearance-provider";
 import type { AiRecoveryMessages } from "../../_lib/ai-recovery-messages";
 import type { CrmAccentId, CrmColorMode } from "../../_lib/crm-accents";
@@ -32,8 +28,10 @@ import type { CrmAccentId, CrmColorMode } from "../../_lib/crm-accents";
 interface SettingsViewProps {
   currentAgent: Agent;
   settings: CrmSettings;
+  labels: Label[];
   onUpdateAiSystemPrompt: (prompt: string | null) => Promise<void>;
   onUpdatePaymentSuccessMessage: (message: string | null) => Promise<void>;
+  onUpdatePaymentApprovedLabels: (labelIds: number[]) => Promise<void>;
   onUpdateAiRecoveryMessages: (messages: AiRecoveryMessages) => Promise<void>;
   onUpdateOfficeHours: (input: {
     office_hours: OfficeHoursConfig;
@@ -53,8 +51,10 @@ interface SettingsViewProps {
 export const SettingsView = ({
   currentAgent,
   settings,
+  labels,
   onUpdateAiSystemPrompt,
   onUpdatePaymentSuccessMessage,
+  onUpdatePaymentApprovedLabels,
   onUpdateAiRecoveryMessages,
   onUpdateOfficeHours,
   onUpdateAppearance,
@@ -64,23 +64,14 @@ export const SettingsView = ({
     useCrmAppearance();
   const [isSavingAppearance, setIsSavingAppearance] = useState(false);
   const savedPrompt = settings.ai_system_prompt?.trim() || "";
-  const savedPaymentMessage = settings.payment_success_message?.trim() || "";
   const [draftPrompt, setDraftPrompt] = useState(
     savedPrompt || DEFAULT_AI_SYSTEM_PROMPT,
   );
   const [isSavingPrompt, setIsSavingPrompt] = useState(false);
-  const [draftPaymentMessage, setDraftPaymentMessage] = useState(
-    savedPaymentMessage || DEFAULT_PAYMENT_SUCCESS_MESSAGE,
-  );
-  const [isSavingPaymentMessage, setIsSavingPaymentMessage] = useState(false);
 
   useEffect(() => {
     setDraftPrompt(savedPrompt || DEFAULT_AI_SYSTEM_PROMPT);
   }, [savedPrompt]);
-
-  useEffect(() => {
-    setDraftPaymentMessage(savedPaymentMessage || DEFAULT_PAYMENT_SUCCESS_MESSAGE);
-  }, [savedPaymentMessage]);
 
   const isUsingDefault = !savedPrompt;
   const isDirty = useMemo(() => {
@@ -93,20 +84,9 @@ export const SettingsView = ({
 
   const characterCount = draftPrompt.length;
   const isOverLimit = characterCount > AI_SYSTEM_PROMPT_MAX_LENGTH;
-  const paymentCharacterCount = draftPaymentMessage.length;
-  const isPaymentOverLimit =
-    paymentCharacterCount > PAYMENT_SUCCESS_MESSAGE_MAX_LENGTH;
   const showParserWarning =
     draftPrompt.trim().length > 0 &&
     !promptLooksCompatibleWithAiParser(draftPrompt);
-  const isUsingDefaultPaymentMessage = !savedPaymentMessage;
-  const isPaymentMessageDirty = useMemo(() => {
-    const normalizedDraft = draftPaymentMessage.trim();
-    if (isUsingDefaultPaymentMessage) {
-      return normalizedDraft !== DEFAULT_PAYMENT_SUCCESS_MESSAGE.trim();
-    }
-    return normalizedDraft !== savedPaymentMessage;
-  }, [draftPaymentMessage, isUsingDefaultPaymentMessage, savedPaymentMessage]);
 
   const handleSavePrompt = async () => {
     if (!isAdmin || !isDirty || isOverLimit || isSavingPrompt) return;
@@ -135,43 +115,6 @@ export const SettingsView = ({
       await onUpdateAiSystemPrompt(null);
     } finally {
       setIsSavingPrompt(false);
-    }
-  };
-
-  const handleSavePaymentMessage = async () => {
-    if (
-      !isAdmin ||
-      !isPaymentMessageDirty ||
-      isPaymentOverLimit ||
-      isSavingPaymentMessage
-    ) {
-      return;
-    }
-
-    setIsSavingPaymentMessage(true);
-    try {
-      const trimmed = draftPaymentMessage.trim();
-      const nextValue =
-        !trimmed || trimmed === DEFAULT_PAYMENT_SUCCESS_MESSAGE.trim()
-          ? null
-          : trimmed;
-      await onUpdatePaymentSuccessMessage(nextValue);
-    } finally {
-      setIsSavingPaymentMessage(false);
-    }
-  };
-
-  const handleRestoreDefaultPaymentMessage = async () => {
-    if (!isAdmin || isSavingPaymentMessage) return;
-
-    setDraftPaymentMessage(DEFAULT_PAYMENT_SUCCESS_MESSAGE);
-    if (isUsingDefaultPaymentMessage) return;
-
-    setIsSavingPaymentMessage(true);
-    try {
-      await onUpdatePaymentSuccessMessage(null);
-    } finally {
-      setIsSavingPaymentMessage(false);
     }
   };
 
@@ -364,80 +307,14 @@ export const SettingsView = ({
           ) : null}
         </section>
 
-        <section
-          className={`rounded-2xl p-4 md:p-5 ${CRM_SURFACES.elevated}`}>
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h3
-                className={`text-base font-semibold ${CRM_SURFACES.textPrimary}`}>
-                Mensaje de pago aprobado
-              </h3>
-              <p className={`mt-1 text-sm ${CRM_SURFACES.textMuted}`}>
-                Se envía automáticamente al cliente cuando se confirma el pago.
-                Usa <code>{"{{mes}}"}</code> para insertar el mes del pago.
-              </p>
-            </div>
-            {isAdmin ? (
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  variant="default"
-                  disabled={
-                    !isPaymentMessageDirty ||
-                    isPaymentOverLimit ||
-                    isSavingPaymentMessage
-                  }
-                  onClick={() => void handleSavePaymentMessage()}>
-                  {isSavingPaymentMessage ? "Guardando…" : "Guardar mensaje"}
-                </Button>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  disabled={isSavingPaymentMessage || isUsingDefaultPaymentMessage}
-                  onClick={() => void handleRestoreDefaultPaymentMessage()}>
-                  Restaurar predeterminado
-                </Button>
-              </div>
-            ) : null}
-          </div>
-
-          <label htmlFor="crm-payment-success-message" className="sr-only">
-            Mensaje de pago aprobado para el cliente
-          </label>
-          <Textarea
-            id="crm-payment-success-message"
-            value={draftPaymentMessage}
-            onChange={(event) => setDraftPaymentMessage(event.target.value)}
-            disabled={!isAdmin || isSavingPaymentMessage}
-            className={`crm-scrollbar mt-4 h-56 resize-none overflow-y-auto text-sm leading-relaxed md:h-64 `}
-            aria-describedby="crm-payment-success-message-help"
-          />
-          <div
-            id="crm-payment-success-message-help"
-            className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs">
-            <span
-              className={
-                isPaymentOverLimit ? "text-red-500" : CRM_SURFACES.textMuted
-              }>
-              {paymentCharacterCount.toLocaleString("es-VE")} /{" "}
-              {PAYMENT_SUCCESS_MESSAGE_MAX_LENGTH.toLocaleString("es-VE")}
-            </span>
-            <span className={CRM_SURFACES.textMuted}>
-              Vista previa:{" "}
-              {buildPaymentSuccessMessage({
-                template: draftPaymentMessage,
-                paymentDate: new Date().toISOString(),
-              }).slice(0, 90)}
-              …
-            </span>
-          </div>
-
-          {!isAdmin ? (
-            <p className={`mt-3 text-sm ${CRM_SURFACES.textMuted}`}>
-              Solo un administrador puede editar este mensaje.
-            </p>
-          ) : null}
-        </section>
+        <PaymentApprovalSettingsSection
+          isAdmin={isAdmin}
+          savedMessage={settings.payment_success_message}
+          savedLabelIds={settings.payment_approved_label_ids}
+          availableLabels={labels}
+          onSaveMessage={onUpdatePaymentSuccessMessage}
+          onSaveLabelIds={onUpdatePaymentApprovedLabels}
+        />
       </div>
     </div>
   );

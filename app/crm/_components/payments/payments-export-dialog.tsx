@@ -2,15 +2,18 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
-  Building2,
   Calendar,
   Check,
+  Coins,
+  CreditCard,
+  DollarSign,
   Download,
   FileSpreadsheet,
   Filter,
   Landmark,
   Loader2,
   Wallet,
+  Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -66,18 +69,7 @@ interface PaymentsExportDialogProps {
 const getBankCardMeta = (bank: string) => {
   const normalized = bank.toLowerCase();
 
-  if (normalized.includes("venezuela") || normalized.includes("bdv")) {
-    return {
-      displayName: "Banco de Venezuela",
-      subName: "BDV · Receptor",
-      icon: Building2,
-      accentBorder: "border-red-500/40",
-      accentBg: "bg-red-500/5",
-      iconBg: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20",
-    };
-  }
-
-  if (normalized.includes("bancamiga")) {
+  if (normalized.includes("bancamiga") || normalized.includes("amiga")) {
     return {
       displayName: "Bancamiga",
       subName: "Cuenta Receptora",
@@ -100,14 +92,69 @@ const getBankCardMeta = (bank: string) => {
     };
   }
 
+  if (normalized.includes("binance") || normalized.includes("usdt")) {
+    return {
+      displayName: "Binance",
+      subName: "USDT · Cripto",
+      icon: Coins,
+      accentBorder: "border-amber-500/40",
+      accentBg: "bg-amber-500/5",
+      iconBg:
+        "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
+    };
+  }
+
+  if (
+    normalized.includes("tarjeta") ||
+    normalized.includes("debito") ||
+    normalized.includes("débito") ||
+    normalized.includes("debido") ||
+    normalized.includes("pos") ||
+    normalized.includes("punto")
+  ) {
+    return {
+      displayName: "Tarjeta de Débito",
+      subName: "Punto de Venta · POS",
+      icon: CreditCard,
+      accentBorder: "border-violet-500/40",
+      accentBg: "bg-violet-500/5",
+      iconBg:
+        "bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/20",
+    };
+  }
+
+  if (normalized.includes("zelle")) {
+    return {
+      displayName: "Zelle",
+      subName: "Transferencia USD",
+      icon: Zap,
+      accentBorder: "border-purple-500/40",
+      accentBg: "bg-purple-500/5",
+      iconBg:
+        "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20",
+    };
+  }
+
+  if (normalized.includes("paypal")) {
+    return {
+      displayName: "PayPal",
+      subName: "Billetera Digital",
+      icon: DollarSign,
+      accentBorder: "border-sky-500/40",
+      accentBg: "bg-sky-500/5",
+      iconBg:
+        "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20",
+    };
+  }
+
   return {
     displayName: bank,
     subName: "Cuenta Registrada",
     icon: Landmark,
-    accentBorder: "border-purple-500/40",
-    accentBg: "bg-purple-500/5",
+    accentBorder: "border-zinc-500/40",
+    accentBg: "bg-zinc-500/5",
     iconBg:
-      "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20",
+      "bg-zinc-500/10 text-zinc-600 dark:text-zinc-400 border-zinc-500/20",
   };
 };
 
@@ -133,7 +180,9 @@ export const PaymentsExportDialog = ({
     return Array.from(
       new Set([
         ...CRM_KNOWN_PAYMENT_BANKS,
-        ...availableBanks.map((b) => normalizeReceptorBank(b) || b),
+        ...availableBanks
+          .map((b) => normalizeReceptorBank(b) || b)
+          .filter((b) => !/venezuela|bdv/i.test(b)),
       ]),
     ).filter(Boolean);
   }, [availableBanks]);

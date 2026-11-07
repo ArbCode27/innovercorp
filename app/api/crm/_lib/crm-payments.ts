@@ -5,6 +5,7 @@ import {
   normalizeReceptorBank,
   type CrmPaymentBankStat,
 } from "@/app/crm/_lib/payments";
+import { roundMoney } from "@/app/crm/_lib/payment-amount-compare";
 
 export const CRM_PAYMENT_STATUSES = [
   "RECIBIDO",
@@ -313,7 +314,11 @@ export const applyCrmPaymentExtraction = async (
     const cedula = digitsOnly(input.cedula);
     const rawBank = trimOrNull(input.bank);
     const bank = normalizeReceptorBank(rawBank) ?? rawBank;
-    const transactionCode = digitsOnly(input.transactionCode);
+    const rawTx = trimOrNull(input.transactionCode);
+    const isAlphanumeric = Boolean(bank && /binance|zelle|paypal/i.test(bank));
+    const transactionCode = isAlphanumeric && rawTx
+      ? rawTx.replace(/[^a-zA-Z0-9_-]/g, "")
+      : digitsOnly(input.transactionCode) || (rawTx ? rawTx.replace(/[^a-zA-Z0-9_-]/g, "") : null);
     const clientName = trimOrNull(input.clientName);
 
     const existing = input.messageId
@@ -711,9 +716,9 @@ export const listCrmPayments = async (
             normalizeReceptorBank((row as { bank?: string }).bank) ||
             String((row as { bank?: string }).bank || "").trim(),
         )
-        .filter(Boolean),
+        .filter((b) => b && !/venezuela|bdv/i.test(b)),
     ]),
-  );
+  ).filter((b) => !/venezuela|bdv/i.test(b));
 
   return {
     payments: (listResult.data || []) as CrmPayment[],
@@ -776,6 +781,103 @@ export const getCrmPaymentById = async (
 
   if (error) {
     throw new Error(error.message);
+  }
+
+  return data;
+};
+
+export type UpdateCrmPaymentDetailsInput = {
+  id: string;
+  client_name?: string | null;
+  cedula?: string | null;
+  phone_id?: string | null;
+  amount?: number | null;
+  bank?: string | null;
+  transaction_code?: string | null;
+  payment_date?: string | null;
+  comment?: string | null;
+  status?: CrmPaymentStatus;
+  edited_by_agent_id?: number | null;
+};
+
+export const updateCrmPaymentDetails = async (
+  supabase: SupabaseClient,
+  input: UpdateCrmPaymentDetailsInput,
+): Promise<CrmPayment> => {
+  const existing = await getCrmPaymentById(supabase, input.id);
+  if (!existing) {
+    throw new Error("Pago no encontrado");
+  }
+
+  const patch: Record<string, unknown> = {
+    updated_at: new Date().toISOString(),
+  };
+
+  if (input.client_name !== undefined) {
+    patch.client_name = input.client_name ? input.client_name.trim() : null;
+  }
+  if (input.cedula !== undefined) {
+    patch.cedula = input.cedula ? input.cedula.trim() : null;
+  }
+  if (input.phone_id !== undefined) {
+    patch.phone_id = input.phone_id ? input.phone_id.trim() : null;
+  }
+  if (input.amount !== undefined) {
+    const numericAmount =
+      input.amount !== null && Number.isFinite(input.amount)
+        ? roundMoney(input.amount)
+        : null;
+    patch.amount = numericAmount;
+    patch.amount_raw = numericAmount !== null ? String(numericAmount) : null;
+  }
+  if (input.bank !== undefined) {
+    patch.bank = input.bank
+      ? normalizeReceptorBank(input.bank) || input.bank.trim()
+      : null;
+  }
+  if (input.transaction_code !== undefined) {
+    patch.transaction_code = input.transaction_code
+      ? input.transaction_code.trim()
+      : null;
+  }
+  if (input.payment_date !== undefined) {
+    patch.payment_date = input.payment_date
+      ? input.payment_date.trim()
+      : existing.payment_date;
+  }
+  if (input.comment !== undefined) {
+    patch.comment = input.comment ? input.comment.trim() : null;
+  }
+
+  if (input.status !== undefined) {
+    patch.status = input.status;
+    if (input.status === "APROBADO" && !existing.approved_at) {
+      patch.approved_at = new Date().toISOString();
+    }
+  }
+
+  const existingMeta =
+    existing.receipt_metadata && typeof existing.receipt_metadata === "object"
+      ? existing.receipt_metadata
+      : {};
+
+  patch.receipt_metadata = {
+    ...existingMeta,
+    last_edited_at: new Date().toISOString(),
+    ...(input.edited_by_agent_id
+      ? { last_edited_by_agent_id: input.edited_by_agent_id }
+      : {}),
+  };
+
+  const { data, error } = await supabase
+    .from("crm_payments")
+    .update(patch)
+    .eq("id", input.id)
+    .select("*")
+    .single<CrmPayment>();
+
+  if (error || !data) {
+    throw new Error(error?.message || "No se pudo actualizar el pago");
   }
 
   return data;

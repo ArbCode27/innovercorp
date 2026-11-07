@@ -72,6 +72,9 @@ const updateSchema = z
       )
       .nullable()
       .optional(),
+    payment_approved_label_ids: z
+      .array(z.coerce.number().int().positive())
+      .optional(),
     ai_recovery_messages: aiRecoveryMessagesSchema.optional(),
     office_hours: officeHoursSchema.optional(),
     after_hours_payments: afterHoursPaymentsSchema.optional(),
@@ -81,6 +84,7 @@ const updateSchema = z
       value.ai_model !== undefined ||
       value.ai_system_prompt !== undefined ||
       value.payment_success_message !== undefined ||
+      value.payment_approved_label_ids !== undefined ||
       value.ai_recovery_messages !== undefined ||
       value.office_hours !== undefined ||
       value.after_hours_payments !== undefined,
@@ -187,6 +191,7 @@ export async function PATCH(req: NextRequest) {
         typeof payload.data.payment_success_message === "string"
           ? payload.data.payment_success_message.trim() || null
           : payload.data.payment_success_message,
+      payment_approved_label_ids: payload.data.payment_approved_label_ids,
       ai_recovery_messages: payload.data.ai_recovery_messages
         ? {
             ack: payload.data.ai_recovery_messages.ack?.trim() || null,

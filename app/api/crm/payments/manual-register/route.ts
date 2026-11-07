@@ -11,6 +11,7 @@ import { resolveLinkedClientIdentity } from "@/app/crm/_lib/client-profile-utils
 import { normalizeReceptorBank } from "@/app/crm/_lib/payments";
 import { getCrmSettings } from "@/app/api/crm/_lib/crm-settings";
 import { buildPaymentSuccessMessage } from "@/app/crm/_lib/payment-success-message";
+import { applyPaymentApprovedLabels } from "@/app/api/crm/_lib/conversation-labels";
 
 const GRAPH_API_VERSION = "v19.0";
 
@@ -230,8 +231,12 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const cleanTransactionCode = transactionCode.replace(/\D/g, "");
+    const trimmedRef = transactionCode.trim();
     const normalizedBank = normalizeReceptorBank(bank) || bank.trim();
+    const isAlphanumeric = /binance|zelle|paypal/i.test(normalizedBank);
+    const cleanTransactionCode = isAlphanumeric
+      ? trimmedRef.replace(/[^a-zA-Z0-9_-]/g, "")
+      : trimmedRef.replace(/\D/g, "") || trimmedRef.replace(/[^a-zA-Z0-9_-]/g, "");
 
     let wisproPaymentResult: unknown = null;
     let externalPaymentId: string | null = null;
@@ -469,6 +474,19 @@ export async function POST(req: NextRequest) {
     }
 
     // 7. If notifyClient and registerInWispro, send WhatsApp notice
+    if (registerInWispro && resolvedConversationId) {
+      try {
+        const settings = await getCrmSettings(supabase);
+        await applyPaymentApprovedLabels(
+          supabase,
+          resolvedConversationId,
+          settings.payment_approved_label_ids,
+        );
+      } catch (labelError) {
+        console.warn("[MANUAL_REGISTER] label_apply_soft_failed", labelError);
+      }
+    }
+
     if (notifyClient && registerInWispro && customerPhone) {
       try {
         const settings = await getCrmSettings(supabase);

@@ -417,7 +417,7 @@ export const AI_MEDIA_CONTRACT_PROMPT = `Media (imagen/audio/ubicación):
 - Usa caption + análisis juntos cuando existan.
 - Si el análisis trae cédula legible, puedes usar lookup_wispro_by_cedula.
 - Si parece comprobante de pago:
-  1) Extrae amount, transaction_code y bank (REGLA ESTRICTA DE BANCO: 'bank' DEBE ser ÚNICAMENTE el BANCO RECEPTOR / DESTINO de la empresa, ej. Venezuela, Banplus, Bancamiga. NUNCA uses el banco emisor u origen desde el que pagó el cliente, como Banesco, Mercantil, Provincial, etc. Si el comprobante o análisis menciona banco origen y banco destino, toma SIEMPRE el banco destino).
+  1) Extrae amount, transaction_code y bank (REGLA ESTRICTA DE BANCO: 'bank' DEBE ser ÚNICAMENTE el BANCO O MÉTODO RECEPTOR / DESTINO de la empresa: Bancamiga, Banplus, Binance, Tarjeta de Débito, Zelle, PayPal. NUNCA uses el banco emisor u origen desde el que pagó el cliente, como Banesco, Mercantil, Provincial, etc. Banco de Venezuela ya no se usa. Si el comprobante o análisis menciona banco origen y banco destino, toma SIEMPRE el canal destino).
   2) Si NO tienes cédula del abonado: PÍDELA. No uses escalate_to_human todavía.
   3) Con cédula: lookup_wispro_by_cedula (con 1 match el sistema vincula ESTE chat) y luego submit_payment_receipt.
   4) Tras submit, el sistema hace handoff; confirma según el resultado. NUNCA digas que el pago está aprobado.

@@ -6,6 +6,7 @@ import {
   rejectCrmPayment,
   markCrmPaymentApprovalError,
   updateCrmPaymentStatus,
+  updateCrmPaymentDetails,
   type CrmPayment,
   type ListCrmPaymentsFilters,
 } from "./crm-payments";
@@ -107,7 +108,7 @@ describe("applyListFilters", () => {
       from: "2026-11-05",
       to: "2026-11-05",
       status: "APROBADO",
-      bank: "Venezuela",
+      bank: "Binance",
       q: "Pedro",
     };
 
@@ -120,7 +121,7 @@ describe("applyListFilters", () => {
     const eqCalls = query.calls.filter((c) => c.method === "eq");
     expect(eqCalls).toEqual([
       { method: "eq", args: ["status", "APROBADO"] },
-      { method: "eq", args: ["bank", "Venezuela"] },
+      { method: "eq", args: ["bank", "Binance"] },
     ]);
   });
 
@@ -192,29 +193,6 @@ describe("applyListFilters", () => {
 });
 
 describe("crm-payments status transitions approved_at column", () => {
-  const createCaptureClient = (captured: {
-    table?: string;
-    updatePayload?: Record<string, unknown>;
-  }) => {
-    return {
-      from: (table: string) => {
-        captured.table = table;
-        return {
-          update: (payload: Record<string, unknown>) => {
-            captured.updatePayload = payload;
-            return {
-              eq: () => ({
-                select: () => ({
-                  maybeSingle: async () => ({ id: "pay-1", ...payload }),
-                }),
-              }),
-            };
-          },
-        };
-      },
-    } as unknown as SupabaseClient;
-  };
-
   const dummyPayment: CrmPayment = {
     id: "pay-1",
     client_id: 1,
@@ -241,6 +219,35 @@ describe("crm-payments status transitions approved_at column", () => {
     approved_at: null,
     created_at: "2026-11-06T10:00:00Z",
     updated_at: "2026-11-06T10:00:00Z",
+  };
+
+  const createCaptureClient = (captured: {
+    table?: string;
+    updatePayload?: Record<string, unknown>;
+  }) => {
+    return {
+      from: (table: string) => {
+        captured.table = table;
+        return {
+          select: () => ({
+            eq: () => ({
+              maybeSingle: async () => ({ data: dummyPayment, error: null }),
+            }),
+          }),
+          update: (payload: Record<string, unknown>) => {
+            captured.updatePayload = payload;
+            return {
+              eq: () => ({
+                select: () => ({
+                  maybeSingle: async () => ({ data: { id: "pay-1", ...payload }, error: null }),
+                  single: async () => ({ data: { id: "pay-1", ...payload }, error: null }),
+                }),
+              }),
+            };
+          },
+        };
+      },
+    } as unknown as SupabaseClient;
   };
 
   it("approveCrmPayment writes approved_at column directly in database update", async () => {
@@ -300,5 +307,39 @@ describe("crm-payments status transitions approved_at column", () => {
       status: "RECHAZADO",
     });
     expect(captured.updatePayload?.approved_at).toBeNull();
+  });
+
+  it("updateCrmPaymentDetails updates payment fields and records audit metadata", async () => {
+    const captured: { table?: string; updatePayload?: Record<string, unknown> } = {};
+    const supabase = createCaptureClient(captured);
+
+    await updateCrmPaymentDetails(supabase, {
+      id: "pay-1",
+      client_name: "Carlos Sanchez",
+      cedula: "V87654321",
+      amount: 45.5,
+      bank: "Banplus",
+      transaction_code: "TX998877",
+      payment_date: "2026-11-05",
+      comment: "Ajuste de referencia",
+      status: "APROBADO",
+      edited_by_agent_id: 42,
+    });
+
+    expect(captured.table).toBe("crm_payments");
+    expect(captured.updatePayload?.client_name).toBe("Carlos Sanchez");
+    expect(captured.updatePayload?.cedula).toBe("V87654321");
+    expect(captured.updatePayload?.amount).toBe(45.5);
+    expect(captured.updatePayload?.amount_raw).toBe("45.5");
+    expect(captured.updatePayload?.bank).toBe("Banplus");
+    expect(captured.updatePayload?.transaction_code).toBe("TX998877");
+    expect(captured.updatePayload?.payment_date).toBe("2026-11-05");
+    expect(captured.updatePayload?.comment).toBe("Ajuste de referencia");
+    expect(captured.updatePayload?.status).toBe("APROBADO");
+    expect(typeof captured.updatePayload?.approved_at).toBe("string");
+
+    const meta = captured.updatePayload?.receipt_metadata as Record<string, unknown>;
+    expect(meta.last_edited_by_agent_id).toBe(42);
+    expect(typeof meta.last_edited_at).toBe("string");
   });
 });

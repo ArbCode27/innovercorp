@@ -18,6 +18,7 @@ import { LoadingState } from "../shared/loading-state";
 import { PaymentsBankCards } from "./payments-bank-cards";
 import { PaymentsExportDialog } from "./payments-export-dialog";
 import { CreatePaymentDialog } from "./create-payment-dialog";
+import { EditPaymentDialog } from "./edit-payment-dialog";
 import {
   PaymentsFilters,
   PaymentsPagination,
@@ -91,6 +92,7 @@ export const PaymentsView = ({
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
   const [isCreatePaymentOpen, setIsCreatePaymentOpen] = useState(false);
+  const [editingPayment, setEditingPayment] = useState<CrmPayment | null>(null);
   const [, startTransition] = useTransition();
 
   const handlePaymentCreated = (newPayment: CrmPayment) => {
@@ -102,6 +104,12 @@ export const PaymentsView = ({
       [statusKey]: (current[statusKey] || 0) + 1,
     }));
     void loadPayments("refresh");
+  };
+
+  const handlePaymentUpdated = (updatedPayment: CrmPayment) => {
+    const previous = payments.find((p) => p.id === updatedPayment.id);
+    applyLocalPaymentUpdate(previous, updatedPayment);
+    toast.success("Pago actualizado con éxito");
   };
 
   useEffect(() => {
@@ -564,6 +572,7 @@ export const PaymentsView = ({
               onApproveManual={handleApproveManual}
               onReject={handleReject}
               onOpenChat={onOpenClientChat}
+              onEdit={setEditingPayment}
             />
             <PaymentsPagination
               page={page}
@@ -595,6 +604,16 @@ export const PaymentsView = ({
           onPaymentCreated={handlePaymentCreated}
         />
       ) : null}
+
+      <EditPaymentDialog
+        open={editingPayment !== null}
+        onOpenChange={(open) => {
+          if (!open) setEditingPayment(null);
+        }}
+        payment={editingPayment}
+        currentAgent={currentAgent}
+        onPaymentUpdated={handlePaymentUpdated}
+      />
     </div>
   );
 };

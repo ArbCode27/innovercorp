@@ -215,6 +215,13 @@ export const crmService = {
             typeof settingsRow.payment_success_message === "string"
               ? settingsRow.payment_success_message
               : null,
+          payment_approved_label_ids: Array.isArray(
+            settingsRow.payment_approved_label_ids,
+          )
+            ? settingsRow.payment_approved_label_ids
+                .map((id: unknown) => Number(id))
+                .filter((id: number) => Number.isFinite(id) && id > 0)
+            : [],
           ai_recovery_messages: parseAiRecoveryMessages(
             settingsRow.ai_recovery_messages,
           ),
@@ -246,6 +253,7 @@ export const crmService = {
           ai_model: DEFAULT_AI_MODEL,
           ai_system_prompt: null,
           payment_success_message: null,
+          payment_approved_label_ids: [],
           ai_recovery_messages: { ...EMPTY_AI_RECOVERY_MESSAGES },
           office_hours: DEFAULT_OFFICE_HOURS,
           after_hours_payments: DEFAULT_AFTER_HOURS_PAYMENTS,
@@ -281,6 +289,7 @@ export const crmService = {
       ai_model?: string;
       ai_system_prompt?: string | null;
       payment_success_message?: string | null;
+      payment_approved_label_ids?: number[];
       ai_recovery_messages?: import("./ai-recovery-messages").AiRecoveryMessages;
       office_hours?: import("./office-hours").OfficeHoursConfig;
       after_hours_payments?: import("./office-hours").AfterHoursPaymentsConfig;

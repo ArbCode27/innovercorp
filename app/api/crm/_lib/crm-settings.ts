@@ -31,6 +31,7 @@ export type CrmSettings = {
   ai_model: string;
   ai_system_prompt: string | null;
   payment_success_message: string | null;
+  payment_approved_label_ids: number[];
   ai_recovery_messages: AiRecoveryMessages;
   office_hours: OfficeHoursConfig;
   after_hours_payments: AfterHoursPaymentsConfig;
@@ -55,6 +56,7 @@ const DEFAULT_SETTINGS: CrmSettings = {
   ai_model: DEFAULT_AI_MODEL,
   ai_system_prompt: null,
   payment_success_message: null,
+  payment_approved_label_ids: [],
   ai_recovery_messages: { ...EMPTY_AI_RECOVERY_MESSAGES },
   office_hours: DEFAULT_OFFICE_HOURS,
   after_hours_payments: DEFAULT_AFTER_HOURS_PAYMENTS,
@@ -91,6 +93,11 @@ const mapSettingsRow = (row: Record<string, unknown> | null): CrmSettings => {
       typeof row.payment_success_message === "string"
         ? row.payment_success_message
         : null,
+    payment_approved_label_ids: Array.isArray(row.payment_approved_label_ids)
+      ? row.payment_approved_label_ids
+          .map((id) => Number(id))
+          .filter((id) => Number.isFinite(id) && id > 0)
+      : [],
     ai_recovery_messages: parseAiRecoveryMessages(row.ai_recovery_messages),
     office_hours: officeFromDb,
     after_hours_payments: afterHoursFromDb,
@@ -157,6 +164,7 @@ export const updateCrmSettings = async (
     ai_model?: string;
     ai_system_prompt?: string | null;
     payment_success_message?: string | null;
+    payment_approved_label_ids?: number[];
     ai_recovery_messages?: AiRecoveryMessages;
     office_hours?: OfficeHoursConfig;
     after_hours_payments?: AfterHoursPaymentsConfig;
@@ -184,6 +192,10 @@ export const updateCrmSettings = async (
       payload.payment_success_message === undefined
         ? current.payment_success_message
         : payload.payment_success_message,
+    payment_approved_label_ids:
+      payload.payment_approved_label_ids === undefined
+        ? current.payment_approved_label_ids
+        : payload.payment_approved_label_ids,
     ai_recovery_messages:
       payload.ai_recovery_messages === undefined
         ? current.ai_recovery_messages
@@ -209,12 +221,12 @@ export const updateCrmSettings = async (
   if (error) {
     // Soft message if migration not applied yet.
     if (
-      /office_hours|after_hours_payments|ai_recovery_messages|ui_accent|column/i.test(
+      /office_hours|after_hours_payments|ai_recovery_messages|ui_accent|payment_approved_label_ids|column/i.test(
         error.message || "",
       )
     ) {
       throw new Error(
-        "Falta una migración de ajustes en Supabase. Ejecuta supabase/migrations/20260817140000_crm_settings_office_hours.sql, supabase/migrations/20260827120000_ai_agent_reliability.sql y supabase/migrations/20260901140000_crm_ui_appearance.sql",
+        "Falta una migración de ajustes en Supabase. Ejecuta supabase/migrations/20260817140000_crm_settings_office_hours.sql, supabase/migrations/20260827120000_ai_agent_reliability.sql, supabase/migrations/20260901140000_crm_ui_appearance.sql y supabase/migrations/20261106140000_crm_settings_payment_approved_labels.sql",
       );
     }
     throw error;

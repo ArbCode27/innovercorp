@@ -225,15 +225,85 @@ export const removeConversationLabel = async (
 };
 
 /**
- * After payment approval: apply PAGADO API and drop Verificar pago if present.
+ * After payment approval: apply configured labels (or fallback to PAGADO API) and drop Verificar pago if present.
  */
 export const applyPaymentApprovedLabels = async (
   supabase: SupabaseClient,
   conversationId: number,
+  configuredLabelIds?: number[] | null,
 ): Promise<{
+  appliedLabelIds: number[];
   pagadoApi: { applied: boolean; labelId: number | null };
   verificarPagoRemoved: boolean;
 }> => {
+  const hasConfiguredLabels =
+    Array.isArray(configuredLabelIds) && configuredLabelIds.length > 0;
+
+  if (hasConfiguredLabels) {
+    const validConfiguredIds = configuredLabelIds
+      .map(Number)
+      .filter((id) => Number.isFinite(id) && id > 0);
+
+    const verificarPagoId = await resolveAutoLabelId(supabase, "verificar_pago");
+    const pagadoApiId = await resolveAutoLabelId(supabase, "pagado_api");
+
+    const { data: conversation, error: readError } = await supabase
+      .from("conversations")
+      .select("id, label_ids")
+      .eq("id", conversationId)
+      .maybeSingle();
+
+    if (readError || !conversation) {
+      console.warn(`${LOG_PREFIX} conversation_read_failed_for_payment_labels`, {
+        conversationId,
+        error: readError?.message || "not_found",
+      });
+      return {
+        appliedLabelIds: [],
+        pagadoApi: { applied: false, labelId: pagadoApiId },
+        verificarPagoRemoved: false,
+      };
+    }
+
+    const currentIds = readConversationLabelIds(conversation.label_ids);
+    const filteredCurrent = verificarPagoId
+      ? currentIds.filter((id) => id !== verificarPagoId)
+      : currentIds;
+    const nextIds = Array.from(new Set([...filteredCurrent, ...validConfiguredIds]));
+
+    const { error: updateError } = await supabase
+      .from("conversations")
+      .update({
+        label_ids: nextIds,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", conversationId);
+
+    if (updateError) {
+      console.warn(`${LOG_PREFIX} configured_labels_apply_failed`, {
+        conversationId,
+        validConfiguredIds,
+        error: updateError.message,
+      });
+      return {
+        appliedLabelIds: [],
+        pagadoApi: { applied: false, labelId: pagadoApiId },
+        verificarPagoRemoved: false,
+      };
+    }
+
+    return {
+      appliedLabelIds: validConfiguredIds,
+      pagadoApi: {
+        applied: pagadoApiId ? validConfiguredIds.includes(pagadoApiId) : false,
+        labelId: pagadoApiId,
+      },
+      verificarPagoRemoved: Boolean(
+        verificarPagoId && currentIds.includes(verificarPagoId),
+      ),
+    };
+  }
+
   const pagadoApi = await ensureConversationLabel(
     supabase,
     conversationId,
@@ -245,6 +315,7 @@ export const applyPaymentApprovedLabels = async (
     "verificar_pago",
   );
   return {
+    appliedLabelIds: pagadoApi.labelId ? [pagadoApi.labelId] : [],
     pagadoApi,
     verificarPagoRemoved: removed.removed,
   };

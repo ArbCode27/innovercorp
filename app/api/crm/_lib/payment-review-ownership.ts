@@ -6,6 +6,7 @@ import {
   assignConversationToAgent,
   resolveConversationIdForPayment,
 } from "@/app/api/crm/_lib/conversation-assign";
+import { getCrmSettings } from "@/app/api/crm/_lib/crm-settings";
 
 export type PaymentReviewOwnershipResult = {
   conversationId: number | null;
@@ -13,6 +14,7 @@ export type PaymentReviewOwnershipResult = {
   agentId: number;
   agentName: string | null;
   labels: {
+    appliedLabelIds?: number[];
     pagadoApiApplied: boolean;
     pagadoApiLabelId: number | null;
     verificarPagoRemoved: boolean;
@@ -87,14 +89,20 @@ export const applyPaymentReviewOwnership = async (
   let labels: PaymentReviewOwnershipResult["labels"] = null;
   if (input.action === "approve") {
     try {
-      const applied = await applyPaymentApprovedLabels(supabase, conversationId);
+      const settings = await getCrmSettings(supabase);
+      const applied = await applyPaymentApprovedLabels(
+        supabase,
+        conversationId,
+        settings.payment_approved_label_ids,
+      );
       labels = {
+        appliedLabelIds: applied.appliedLabelIds,
         pagadoApiApplied: applied.pagadoApi.applied,
         pagadoApiLabelId: applied.pagadoApi.labelId,
         verificarPagoRemoved: applied.verificarPagoRemoved,
       };
     } catch (labelError) {
-      console.warn("[CRM_PAYMENTS] pagado_api_label_soft_failed", {
+      console.warn("[CRM_PAYMENTS] payment_approved_labels_soft_failed", {
         paymentId: input.paymentId,
         conversationId,
         error:
@@ -120,6 +128,7 @@ export const applyPaymentReviewOwnership = async (
 
   const labelMeta = labels
     ? {
+        applied_label_ids: labels.appliedLabelIds,
         pagado_api_applied: labels.pagadoApiApplied,
         pagado_api_label_id: labels.pagadoApiLabelId,
         verificar_pago_removed: labels.verificarPagoRemoved,

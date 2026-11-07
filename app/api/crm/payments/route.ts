@@ -9,6 +9,7 @@ import {
   listCrmPayments,
   markCrmPaymentApprovalError,
   rejectCrmPayment,
+  updateCrmPaymentDetails,
 } from "@/app/api/crm/_lib/crm-payments";
 import {
   createWisproInvoicingPayment,
@@ -399,6 +400,27 @@ const patchSchema = z.object({
     .positive("agent_id es requerido para aprobar o rechazar"),
 });
 
+const putPaymentSchema = z.object({
+  id: z.string().uuid("ID de pago inválido"),
+  agent_id: z.coerce.number().int().positive("agent_id es requerido"),
+  client_name: z.string().trim().max(160).nullable().optional(),
+  cedula: z.string().trim().max(30).nullable().optional(),
+  phone_id: z.string().trim().max(40).nullable().optional(),
+  amount: z.coerce
+    .number()
+    .positive("El monto debe ser mayor a 0")
+    .nullable()
+    .optional(),
+  bank: z.string().trim().max(80).nullable().optional(),
+  transaction_code: z.string().trim().max(80).nullable().optional(),
+  payment_date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha inválida (YYYY-MM-DD)")
+    .optional(),
+  comment: z.string().trim().max(1000).nullable().optional(),
+  status: z.enum(CRM_PAYMENT_STATUSES).optional(),
+});
+
 export async function GET(req: NextRequest) {
   const startedAt = Date.now();
   let listFilters: z.infer<typeof listQuerySchema> | null = null;
@@ -467,6 +489,56 @@ export async function GET(req: NextRequest) {
           error instanceof Error
             ? error.message
             : "No se pudieron cargar los pagos",
+      },
+      { status: 500 },
+    );
+  }
+}
+
+export async function PUT(req: NextRequest) {
+  try {
+    const json = await req.json();
+    const parsed = putPaymentSchema.safeParse(json);
+    if (!parsed.success) {
+      return NextResponse.json(
+        {
+          error:
+            parsed.error.issues[0]?.message ||
+            "Datos inválidos para editar el pago",
+        },
+        { status: 400 },
+      );
+    }
+
+    const supabase = getServiceClient();
+    const updated = await updateCrmPaymentDetails(supabase, {
+      id: parsed.data.id,
+      client_name: parsed.data.client_name,
+      cedula: parsed.data.cedula,
+      phone_id: parsed.data.phone_id,
+      amount: parsed.data.amount,
+      bank: parsed.data.bank,
+      transaction_code: parsed.data.transaction_code,
+      payment_date: parsed.data.payment_date,
+      comment: parsed.data.comment,
+      status: parsed.data.status,
+      edited_by_agent_id: parsed.data.agent_id,
+    });
+
+    const [enriched] = await enrichPaymentsWithLatestInvoiceDate([updated]);
+
+    return NextResponse.json({
+      ok: true,
+      payment: enriched || updated,
+    });
+  } catch (error) {
+    console.error("[CRM_PAYMENTS] edit_payment_failed", error);
+    return NextResponse.json(
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Error al actualizar el pago",
       },
       { status: 500 },
     );

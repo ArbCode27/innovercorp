@@ -23,9 +23,12 @@ export const CRM_PAYMENT_STATUS_LABELS: Record<CrmPaymentStatus, string> = {
 export const PAYMENT_PENDING_LABEL = "Pendiente";
 
 export const CRM_KNOWN_PAYMENT_BANKS = [
-  "Venezuela",
-  "Banplus",
   "Bancamiga",
+  "Banplus",
+  "Binance",
+  "Tarjeta de Débito",
+  "Zelle",
+  "PayPal",
 ] as const;
 
 export type PaymentDateType = "payment" | "approval";
@@ -102,24 +105,44 @@ export const normalizeReceptorBank = (
 
   const lower = text.toLowerCase();
 
-  // If there's an explicit destination pattern (e.g. "hacia Bancamiga", "destino: BDV", "a Banplus")
+  // If there's an explicit destination pattern (e.g. "hacia Bancamiga", "destino: Binance", "a Banplus")
   const destinationMatch = lower.match(
-    /(?:destino|receptor|hacia|beneficiario|acreditad[oa]\s+en|\ba\b|->)\s*:?\s*(?:el\s+)?(?:banco\s+)?([a-záéíóúñ0-9\s]+)/i,
+    /(?:destino|receptor|hacia|beneficiario|acreditad[oa]\s+en|\ba\b|->)\s*:?\s*(?:el\s+)?(?:banco\s+|método\s+|metodo\s+)?([a-záéíóúñ0-9\s]+)/i,
   );
   const targetSegment = destinationMatch ? destinationMatch[1] : lower;
 
-  if (targetSegment.includes("bancamiga")) return "Bancamiga";
+  if (targetSegment.includes("bancamiga") || targetSegment.includes("amiga")) return "Bancamiga";
   if (targetSegment.includes("banplus")) return "Banplus";
-  if (targetSegment.includes("venezuela") || targetSegment.includes("bdv")) {
-    return "Venezuela";
+  if (targetSegment.includes("binance") || targetSegment.includes("usdt")) return "Binance";
+  if (
+    targetSegment.includes("tarjeta") ||
+    targetSegment.includes("debito") ||
+    targetSegment.includes("débito") ||
+    targetSegment.includes("debido") ||
+    targetSegment.includes("punto de venta") ||
+    targetSegment.includes("pos")
+  ) {
+    return "Tarjeta de Débito";
   }
+  if (targetSegment.includes("zelle")) return "Zelle";
+  if (targetSegment.includes("paypal")) return "PayPal";
 
   // Check known registered receptor banks anywhere in text (prioritizing company receiving banks):
-  if (lower.includes("bancamiga")) return "Bancamiga";
+  if (lower.includes("bancamiga") || lower.includes("amiga")) return "Bancamiga";
   if (lower.includes("banplus")) return "Banplus";
-  if (lower.includes("venezuela") || lower.includes("bdv")) {
-    return "Venezuela";
+  if (lower.includes("binance") || lower.includes("usdt")) return "Binance";
+  if (
+    lower.includes("tarjeta") ||
+    lower.includes("debito") ||
+    lower.includes("débito") ||
+    lower.includes("debido") ||
+    lower.includes("punto de venta") ||
+    lower.includes("pos")
+  ) {
+    return "Tarjeta de Débito";
   }
+  if (lower.includes("zelle")) return "Zelle";
+  if (lower.includes("paypal")) return "PayPal";
 
   // If no known bank matched but an explicit destination phrase exists, extract and format it:
   if (destinationMatch && destinationMatch[1]) {
@@ -136,9 +159,18 @@ export const normalizeReceptorBank = (
   return text;
 };
 
+const isExcludedFromAnalytics = (bank: string): boolean => {
+  const lower = bank.toLowerCase();
+  return (
+    lower.includes("venezuela") ||
+    lower === "bdv" ||
+    lower.includes("banco de venezuela")
+  );
+};
+
 /**
  * Aggregates payment statistics per bank/account.
- * Always seeds known collection banks (Venezuela, Banplus, Bancamiga).
+ * Always seeds known collection accounts (Bancamiga, Banplus, Binance, Tarjeta de Débito, Zelle, PayPal).
  */
 export const buildPaymentBankStats = (
   rows: Array<{
@@ -164,6 +196,8 @@ export const buildPaymentBankStats = (
   for (const row of rows) {
     const normalized = normalizeReceptorBank(row.bank);
     if (!normalized) continue;
+    // Discard Banco de Venezuela (not used as collection channel)
+    if (isExcludedFromAnalytics(normalized)) continue;
 
     let stat = map.get(normalized);
     if (!stat) {
@@ -290,11 +324,14 @@ export const isPaymentReadyForApproval = (payment: {
     return false;
   }
 
+  const rawRef = String(payment.transaction_code || "").trim();
+  const hasValidRef = digitsOnly(rawRef).length > 0 || rawRef.length >= 3;
+
   return Boolean(
     payment.wispro_client_id?.trim() &&
       digitsOnly(payment.cedula) &&
       String(payment.bank || "").trim() &&
-      digitsOnly(payment.transaction_code) &&
+      hasValidRef &&
       Number(payment.amount) > 0,
   );
 };

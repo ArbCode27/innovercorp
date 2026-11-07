@@ -31,6 +31,7 @@ import { Switch } from "@/components/ui/switch";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
 import type { Agent, Client, Message } from "../../_lib/types";
 import { formatBcvRate, roundMoney } from "@/app/api/crm/_lib/dolarvzla-rate";
+import { normalizeReceptorBank } from "../../_lib/payments";
 
 interface ManualPaymentDialogProps {
   open: boolean;
@@ -52,8 +53,11 @@ interface ManualPaymentDialogProps {
 
 const COMMON_BANKS = [
   { id: "Bancamiga", label: "Bancamiga" },
-  { id: "Banco de Venezuela", label: "Banco de Venezuela" },
   { id: "Banplus", label: "Banplus" },
+  { id: "Binance", label: "Binance" },
+  { id: "Tarjeta de Débito", label: "Tarjeta de Débito" },
+  { id: "Zelle", label: "Zelle" },
+  { id: "PayPal", label: "PayPal" },
 ] as const;
 
 export const ManualPaymentDialog = ({
@@ -180,7 +184,12 @@ export const ManualPaymentDialog = ({
       return;
     }
 
-    const cleanRef = transactionCode.replace(/\D/g, "");
+    const trimmedRef = transactionCode.trim();
+    const isAlphanumericMethod = /binance|zelle|paypal/i.test(bank);
+    const cleanRef = isAlphanumericMethod
+      ? trimmedRef.replace(/[^a-zA-Z0-9_-]/g, "")
+      : trimmedRef.replace(/\D/g, "") || trimmedRef.replace(/[^a-zA-Z0-9_-]/g, "");
+
     if (!cleanRef || cleanRef.length < 3) {
       toast.error("Ingresa un número de referencia válido");
       return;
@@ -245,7 +254,7 @@ export const ManualPaymentDialog = ({
         amountBs: numericBs && Number.isFinite(numericBs) ? numericBs : undefined,
         bank: bank.trim(),
         transactionCode: cleanRef,
-        registeredInWispro,
+        registeredInWispro: registerInWispro,
       });
 
       onOpenChange(false);
@@ -429,9 +438,12 @@ export const ManualPaymentDialog = ({
                 </Label>
 
                 {/* Common Bank Quick Buttons */}
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {COMMON_BANKS.map((item) => {
-                    const isSelected = bank.toLowerCase().includes(item.id.toLowerCase());
+                    const isSelected =
+                      bank === item.label ||
+                      normalizeReceptorBank(bank) === item.label ||
+                      bank.toLowerCase() === item.id.toLowerCase();
                     return (
                       <Button
                         key={item.id}
@@ -451,7 +463,7 @@ export const ManualPaymentDialog = ({
                 </div>
 
                 <Input
-                  placeholder="O escribe otro banco (ej: Bancamiga, BDV...)"
+                  placeholder="O escribe otro método o banco (ej: Bancamiga, Zelle, Binance...)"
                   value={bank}
                   onChange={(e) => setBank(e.target.value)}
                   className="mt-1"

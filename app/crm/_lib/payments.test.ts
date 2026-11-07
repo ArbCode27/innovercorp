@@ -23,33 +23,40 @@ describe("formatPlanAmountLabel", () => {
 });
 
 describe("normalizeReceptorBank", () => {
-  it("normalizes direct known banks", () => {
+  it("normalizes direct known banks and methods", () => {
     expect(normalizeReceptorBank("Bancamiga")).toBe("Bancamiga");
     expect(normalizeReceptorBank("Banco Bancamiga")).toBe("Bancamiga");
     expect(normalizeReceptorBank("bancamiga")).toBe("Bancamiga");
 
-    expect(normalizeReceptorBank("Venezuela")).toBe("Venezuela");
-    expect(normalizeReceptorBank("Banco de Venezuela")).toBe("Venezuela");
-    expect(normalizeReceptorBank("BDV")).toBe("Venezuela");
-    expect(normalizeReceptorBank("bdv en linea")).toBe("Venezuela");
-
     expect(normalizeReceptorBank("Banplus")).toBe("Banplus");
     expect(normalizeReceptorBank("Banco Banplus")).toBe("Banplus");
+
+    expect(normalizeReceptorBank("Binance")).toBe("Binance");
+    expect(normalizeReceptorBank("Binance Pay (USDT)")).toBe("Binance");
+    expect(normalizeReceptorBank("pago por usdt")).toBe("Binance");
+
+    expect(normalizeReceptorBank("Tarjeta de Débito")).toBe("Tarjeta de Débito");
+    expect(normalizeReceptorBank("tarjeta de debito")).toBe("Tarjeta de Débito");
+    expect(normalizeReceptorBank("POS Punto de Venta")).toBe("Tarjeta de Débito");
+
+    expect(normalizeReceptorBank("Zelle")).toBe("Zelle");
+    expect(normalizeReceptorBank("transferencia zelle")).toBe("Zelle");
+
+    expect(normalizeReceptorBank("PayPal")).toBe("PayPal");
+    expect(normalizeReceptorBank("paypal account")).toBe("PayPal");
   });
 
   it("extracts the receptor bank from transfer descriptions with both sender and receiver", () => {
     expect(normalizeReceptorBank("Banesco a Bancamiga")).toBe("Bancamiga");
-    expect(normalizeReceptorBank("Desde Mercantil hacia Banco de Venezuela")).toBe(
-      "Venezuela",
-    );
     expect(normalizeReceptorBank("Provincial -> Banplus")).toBe("Banplus");
+    expect(normalizeReceptorBank("Desde Mercantil hacia Binance")).toBe("Binance");
     expect(
       normalizeReceptorBank(
-        "Banco origen: Banesco, Banco destino: Banco de Venezuela",
+        "Banco origen: Banesco, Banco destino: Bancamiga",
       ),
-    ).toBe("Venezuela");
+    ).toBe("Bancamiga");
     expect(normalizeReceptorBank("Destino: Bancamiga")).toBe("Bancamiga");
-    expect(normalizeReceptorBank("Hacia BDV")).toBe("Venezuela");
+    expect(normalizeReceptorBank("Hacia Zelle")).toBe("Zelle");
   });
 
   it("handles null, empty, or unknown custom banks gracefully", () => {
@@ -61,15 +68,18 @@ describe("normalizeReceptorBank", () => {
 });
 
 describe("buildPaymentBankStats", () => {
-  it("seeds known collection banks with zeroes if there are no rows", () => {
+  it("seeds known collection channels with zeroes if there are no rows", () => {
     const stats = buildPaymentBankStats([]);
     expect(stats.map((s) => s.bank)).toEqual([
-      "Venezuela",
-      "Banplus",
       "Bancamiga",
+      "Banplus",
+      "Binance",
+      "Tarjeta de Débito",
+      "Zelle",
+      "PayPal",
     ]);
     expect(stats[0]).toEqual({
-      bank: "Venezuela",
+      bank: "Bancamiga",
       totalPayments: 0,
       totalAmount: 0,
       approvedCount: 0,
@@ -79,28 +89,25 @@ describe("buildPaymentBankStats", () => {
     });
   });
 
-  it("correctly aggregates amounts and counts per receptor bank", () => {
+  it("correctly aggregates amounts and counts per receptor channel and excludes Venezuela", () => {
     const rows = [
       { bank: "Banesco a Bancamiga", amount: 30, status: "APROBADO" as const },
       { bank: "Bancamiga", amount: 15, status: "EN_PROCESO" as const },
       { bank: "Banco de Venezuela", amount: 45, status: "APROBADO" as const },
       { bank: "BDV", amount: 20, status: "RECIBIDO" as const },
       { bank: "Banplus", amount: 10, status: "RECHAZADO" as const },
+      { bank: "Binance", amount: 50, status: "APROBADO" as const },
+      { bank: "Zelle", amount: 25, status: "APROBADO" as const },
+      { bank: "PayPal", amount: 40, status: "EN_PROCESO" as const },
+      { bank: "Tarjeta de Débito", amount: 35, status: "APROBADO" as const },
       { bank: "BNC", amount: 50, status: "APROBADO" as const },
     ];
 
     const stats = buildPaymentBankStats(rows);
 
-    const venezuela = stats.find((s) => s.bank === "Venezuela");
-    expect(venezuela).toEqual({
-      bank: "Venezuela",
-      totalPayments: 2,
-      totalAmount: 65,
-      approvedCount: 1,
-      approvedAmount: 45,
-      inProcessCount: 1,
-      inProcessAmount: 20,
-    });
+    // Venezuela is excluded from analytics cards
+    const venezuela = stats.find((s) => s.bank.toLowerCase().includes("venezuela") || s.bank === "BDV");
+    expect(venezuela).toBeUndefined();
 
     const bancamiga = stats.find((s) => s.bank === "Bancamiga");
     expect(bancamiga).toEqual({
@@ -120,6 +127,50 @@ describe("buildPaymentBankStats", () => {
       totalAmount: 10,
       approvedCount: 0,
       approvedAmount: 0,
+      inProcessCount: 0,
+      inProcessAmount: 0,
+    });
+
+    const binance = stats.find((s) => s.bank === "Binance");
+    expect(binance).toEqual({
+      bank: "Binance",
+      totalPayments: 1,
+      totalAmount: 50,
+      approvedCount: 1,
+      approvedAmount: 50,
+      inProcessCount: 0,
+      inProcessAmount: 0,
+    });
+
+    const zelle = stats.find((s) => s.bank === "Zelle");
+    expect(zelle).toEqual({
+      bank: "Zelle",
+      totalPayments: 1,
+      totalAmount: 25,
+      approvedCount: 1,
+      approvedAmount: 25,
+      inProcessCount: 0,
+      inProcessAmount: 0,
+    });
+
+    const paypal = stats.find((s) => s.bank === "PayPal");
+    expect(paypal).toEqual({
+      bank: "PayPal",
+      totalPayments: 1,
+      totalAmount: 40,
+      approvedCount: 0,
+      approvedAmount: 0,
+      inProcessCount: 1,
+      inProcessAmount: 40,
+    });
+
+    const tarjeta = stats.find((s) => s.bank === "Tarjeta de Débito");
+    expect(tarjeta).toEqual({
+      bank: "Tarjeta de Débito",
+      totalPayments: 1,
+      totalAmount: 35,
+      approvedCount: 1,
+      approvedAmount: 35,
       inProcessCount: 0,
       inProcessAmount: 0,
     });

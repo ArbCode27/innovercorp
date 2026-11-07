@@ -53,6 +53,7 @@ export interface CrmSettings {
   ai_model: string;
   ai_system_prompt: string | null;
   payment_success_message: string | null;
+  payment_approved_label_ids?: number[];
   ai_recovery_messages?: import("./ai-recovery-messages").AiRecoveryMessages;
   office_hours?: OfficeHoursConfig;
   after_hours_payments?: AfterHoursPaymentsConfig;

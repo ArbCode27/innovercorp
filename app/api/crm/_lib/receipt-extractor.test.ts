@@ -67,9 +67,16 @@ describe("receipt-extractor helpers", () => {
     it("identifies bank mentioned in text or conversation", () => {
       expect(detectBankFromText("lo pasé a Bancamiga")).toBe("Bancamiga");
       expect(detectBankFromText("transferí a bancamiga")).toBe("Bancamiga");
-      expect(detectBankFromText("pago móvil a venezuela")).toBe("Banco de Venezuela");
-      expect(detectBankFromText("fue a bdv")).toBe("Banco de Venezuela");
       expect(detectBankFromText("a Banplus")).toBe("Banplus");
+      expect(detectBankFromText("pagué por Binance")).toBe("Binance");
+      expect(detectBankFromText("envío por Zelle")).toBe("Zelle");
+      expect(detectBankFromText("pago por PayPal")).toBe("PayPal");
+      expect(detectBankFromText("pagó con tarjeta de debito en pos")).toBe("Tarjeta de Débito");
+    });
+
+    it("does not detect Venezuela as an active collection bank", () => {
+      expect(detectBankFromText("pago móvil a venezuela")).toBeNull();
+      expect(detectBankFromText("fue a bdv")).toBeNull();
     });
 
     it("returns null if no known bank is found", () => {

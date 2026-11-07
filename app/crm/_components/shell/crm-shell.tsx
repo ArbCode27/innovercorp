@@ -294,8 +294,10 @@ export const CrmShell = () => {
               <SettingsView
                 currentAgent={auth.agent}
                 settings={crm.settings}
+                labels={crm.labels}
                 onUpdateAiSystemPrompt={crm.updateAiSystemPrompt}
                 onUpdatePaymentSuccessMessage={crm.updatePaymentSuccessMessage}
+                onUpdatePaymentApprovedLabels={crm.updatePaymentApprovedLabels}
                 onUpdateAiRecoveryMessages={crm.updateAiRecoveryMessages}
                 onUpdateOfficeHours={crm.updateOfficeHoursSettings}
                 onUpdateAppearance={handleUpdateAppearance}

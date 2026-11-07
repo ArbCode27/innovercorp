@@ -1,6 +1,22 @@
 export const PAYMENT_SUCCESS_MONTH_TOKEN = "{{mes}}";
 export const PAYMENT_SUCCESS_MESSAGE_MAX_LENGTH = 4096;
 
+export interface DynamicTemplateVariable {
+  token: string;
+  label: string;
+  description: string;
+  example: string;
+}
+
+export const PAYMENT_SUCCESS_VARIABLES: DynamicTemplateVariable[] = [
+  {
+    token: "{{mes}}",
+    label: "Mes del pago",
+    description: "Inserta el mes del pago en mayúsculas (ej: NOVIEMBRE)",
+    example: "NOVIEMBRE",
+  },
+];
+
 export const DEFAULT_PAYMENT_SUCCESS_MESSAGE = `Su pago fue recibido y verificado con éxito 👍🏻 y su servicio ha sido renovado para el mes de {{mes}}. Su comprobante será enviado vía correo electrónico.
 
 Si todavía no formas parte de nuestra comunidad te invitamos a través del siguiente enlace. Allí compartimos información importante como reportes, promociones, caídas, o cualquier tema de su interés.
@@ -18,7 +34,7 @@ const MONTH_FORMATTER = new Intl.DateTimeFormat("es-VE", {
   month: "long",
 });
 
-const resolvePaymentMonth = (paymentDate: string | null | undefined) => {
+export const resolvePaymentMonth = (paymentDate: string | null | undefined) => {
   const dateOnly = String(paymentDate || "").slice(0, 10);
   const validDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(dateOnly);
   const targetDate = validDateOnly
@@ -33,6 +49,9 @@ export const buildPaymentSuccessMessage = (input: {
   paymentDate: string | null | undefined;
 }) => {
   const month = resolvePaymentMonth(input.paymentDate);
-  const baseTemplate = String(input.template || "").trim() || DEFAULT_PAYMENT_SUCCESS_MESSAGE;
-  return baseTemplate.split(PAYMENT_SUCCESS_MONTH_TOKEN).join(month);
+  const baseTemplate =
+    String(input.template || "").trim() || DEFAULT_PAYMENT_SUCCESS_MESSAGE;
+
+  // Replaces {{mes}}, {{ mes }}, {{MES}}, and {mes} in a case-insensitive, whitespace-tolerant manner
+  return baseTemplate.replace(/\{\{\s*mes\s*\}\}|\{mes\}/gi, month);
 };

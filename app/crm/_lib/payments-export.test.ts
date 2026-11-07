@@ -47,7 +47,7 @@ describe("payments-export", () => {
 
     it("names the file for multiple banks", () => {
       const name = buildExportFileName(
-        ["Bancamiga", "Venezuela"],
+        ["Bancamiga", "Binance"],
         { from: "2026-11-01", to: "2026-11-02" },
         "xls",
       );
@@ -80,7 +80,7 @@ describe("payments-export", () => {
       });
       const p3 = createMockPayment({
         id: "3",
-        bank: "BDV",
+        bank: "Binance",
         amount: 50,
         status: "APROBADO",
       });
@@ -97,11 +97,11 @@ describe("payments-export", () => {
       expect(bancamigaGroup?.approvedAmount).toBe(30);
       expect(bancamigaGroup?.inProcessCount).toBe(1);
 
-      const venzGroup = groups.find((g) => g.bankName === "Venezuela");
-      expect(venzGroup).toBeDefined();
-      expect(venzGroup?.payments).toHaveLength(1);
-      expect(venzGroup?.totalAmount).toBe(50);
-      expect(venzGroup?.approvedCount).toBe(1);
+      const binanceGroup = groups.find((g) => g.bankName === "Binance");
+      expect(binanceGroup).toBeDefined();
+      expect(binanceGroup?.payments).toHaveLength(1);
+      expect(binanceGroup?.totalAmount).toBe(50);
+      expect(binanceGroup?.approvedCount).toBe(1);
     });
   });
 
@@ -117,14 +117,14 @@ describe("payments-export", () => {
       });
       const p2 = createMockPayment({
         id: "2",
-        bank: "Venezuela",
+        bank: "Binance",
         amount: 45,
         status: "EN_PROCESO",
       });
 
       const xml = generatePaymentsExcelXml({
         payments: [p1, p2],
-        selectedBanks: ["Bancamiga", "Venezuela"],
+        selectedBanks: ["Bancamiga", "Binance"],
         dateRange: { from: "2026-11-01", to: "2026-11-02" },
       });
 
@@ -132,7 +132,7 @@ describe("payments-export", () => {
       expect(xml).toContain('<?mso-application progid="Excel.Sheet"?>');
       expect(xml).toContain("INNOVER CORP · REPORTE DE PAGOS RECIBIDOS");
       expect(xml).toContain("BANCO: BANCAMIGA");
-      expect(xml).toContain("BANCO: VENEZUELA");
+      expect(xml).toContain("BANCO: BINANCE");
       expect(xml).toContain("F. Aprobación");
       expect(xml).toContain("TOTAL GENERAL DE PAGOS RECIBIDOS (2 pagos)");
 

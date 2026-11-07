@@ -1,7 +1,16 @@
 "use client";
 
 import type { KeyboardEvent } from "react";
-import { Building2, Check, Landmark, Wallet, X } from "lucide-react";
+import {
+  Check,
+  Coins,
+  CreditCard,
+  DollarSign,
+  Landmark,
+  Wallet,
+  X,
+  Zap,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -19,17 +28,7 @@ interface PaymentsBankCardsProps {
 const getBankMeta = (bank: string) => {
   const normalized = bank.toLowerCase();
 
-  if (normalized.includes("venezuela") || normalized.includes("bdv")) {
-    return {
-      displayName: "Banco de Venezuela",
-      subName: "BDV",
-      icon: Building2,
-      badgeColor: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20",
-      activeRing: "ring-2 ring-red-500/50 border-red-500/60 bg-red-500/5",
-    };
-  }
-
-  if (normalized.includes("bancamiga")) {
+  if (normalized.includes("bancamiga") || normalized.includes("amiga")) {
     return {
       displayName: "Bancamiga",
       subName: "Receptor",
@@ -52,14 +51,69 @@ const getBankMeta = (bank: string) => {
     };
   }
 
+  if (normalized.includes("binance") || normalized.includes("usdt")) {
+    return {
+      displayName: "Binance",
+      subName: "USDT · Cripto",
+      icon: Coins,
+      badgeColor:
+        "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
+      activeRing:
+        "ring-2 ring-amber-500/50 border-amber-500/60 bg-amber-500/5",
+    };
+  }
+
+  if (
+    normalized.includes("tarjeta") ||
+    normalized.includes("debito") ||
+    normalized.includes("débito") ||
+    normalized.includes("debido") ||
+    normalized.includes("pos") ||
+    normalized.includes("punto")
+  ) {
+    return {
+      displayName: "Tarjeta de Débito",
+      subName: "Punto de Venta · POS",
+      icon: CreditCard,
+      badgeColor:
+        "bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/20",
+      activeRing:
+        "ring-2 ring-violet-500/50 border-violet-500/60 bg-violet-500/5",
+    };
+  }
+
+  if (normalized.includes("zelle")) {
+    return {
+      displayName: "Zelle",
+      subName: "Transferencia USD",
+      icon: Zap,
+      badgeColor:
+        "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20",
+      activeRing:
+        "ring-2 ring-purple-500/50 border-purple-500/60 bg-purple-500/5",
+    };
+  }
+
+  if (normalized.includes("paypal")) {
+    return {
+      displayName: "PayPal",
+      subName: "Billetera Digital",
+      icon: DollarSign,
+      badgeColor:
+        "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20",
+      activeRing:
+        "ring-2 ring-sky-500/50 border-sky-500/60 bg-sky-500/5",
+    };
+  }
+
   return {
     displayName: bank,
     subName: "Cuenta",
     icon: Landmark,
     badgeColor:
-      "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20",
+      "bg-zinc-500/10 text-zinc-600 dark:text-zinc-400 border-zinc-500/20",
     activeRing:
-      "ring-2 ring-purple-500/50 border-purple-500/60 bg-purple-500/5",
+      "ring-2 ring-zinc-500/50 border-zinc-500/60 bg-zinc-500/5",
   };
 };
 
@@ -103,7 +157,7 @@ export const PaymentsBankCards = ({
         ) : null}
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
         {bankStats.map((stat) => {
           const meta = getBankMeta(stat.bank);
           const Icon = meta.icon;

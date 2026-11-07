@@ -37,7 +37,14 @@ import {
 } from "../../_lib/payments";
 import { StatusBadge } from "../shared/status-badge";
 import { EmptyState } from "../shared/empty-state";
-import { CheckCircle2, ClipboardCheck, MessageCircle, Wallet, XCircle } from "lucide-react";
+import {
+  CheckCircle2,
+  ClipboardCheck,
+  MessageCircle,
+  Pencil,
+  Wallet,
+  XCircle,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface PaymentsTableProps {
@@ -47,6 +54,7 @@ interface PaymentsTableProps {
   onApproveManual?: (paymentId: string) => void;
   onReject: (paymentId: string) => void;
   onOpenChat?: (conversationId: number) => void;
+  onEdit?: (payment: CrmPayment) => void;
 }
 
 const PaymentValue = ({
@@ -73,6 +81,7 @@ export const PaymentsTable = ({
   onApproveManual,
   onReject,
   onOpenChat,
+  onEdit,
 }: PaymentsTableProps) => {
   const [paymentForManualApproval, setPaymentForManualApproval] =
     useState<CrmPayment | null>(null);
@@ -261,6 +270,19 @@ export const PaymentsTable = ({
                         <MessageCircle className="size-4" aria-hidden="true" />
                       </Button>
 
+                      {onEdit ? (
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          className="size-8 cursor-pointer text-sky-600 hover:bg-sky-50 hover:text-sky-700 dark:text-sky-400 dark:hover:bg-sky-950/50 dark:hover:text-sky-300"
+                          title={`Editar datos del pago de ${clientName}`}
+                          aria-label={`Editar datos del pago de ${clientName}`}
+                          onClick={() => onEdit(payment)}>
+                          <Pencil className="size-4" aria-hidden="true" />
+                        </Button>
+                      ) : null}
+
                       {canReject ? (
                         <>
                           <Button
@@ -306,9 +328,11 @@ export const PaymentsTable = ({
                           </Button>
                         </>
                       ) : (
-                        <span className={`text-xs ${CRM_SURFACES.textMuted}`}>
-                          Sin acciones
-                        </span>
+                        !onEdit && !hasCrmChat ? (
+                          <span className={`text-xs ${CRM_SURFACES.textMuted}`}>
+                            Sin acciones
+                          </span>
+                        ) : null
                       )}
                     </div>
                   </TableCell>

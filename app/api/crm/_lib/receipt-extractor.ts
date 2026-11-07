@@ -71,8 +71,15 @@ export const parseReceiptTransactionCode = (value: unknown): string | null => {
   if (typeof value === "number") return String(Math.trunc(value));
   if (typeof value !== "string") return null;
 
-  const digits = value.replace(/\D/g, "");
-  return digits.length >= 3 ? digits : null;
+  const trimmed = value.trim();
+  const digits = trimmed.replace(/\D/g, "");
+  if (digits.length >= 3) return digits;
+
+  const alphanumeric = trimmed.replace(/[^a-zA-Z0-9_-]/g, "");
+  if (alphanumeric.length >= 4 && /[0-9]/.test(alphanumeric)) {
+    return alphanumeric;
+  }
+  return null;
 };
 
 export const parseReceiptDate = (value: unknown): string | null => {
@@ -103,8 +110,20 @@ export const parseReceiptDate = (value: unknown): string | null => {
 
 export const detectBankFromText = (text: string): string | null => {
   const lower = text.toLowerCase();
+  if (lower.includes("binance") || lower.includes("usdt")) return "Binance";
+  if (lower.includes("zelle")) return "Zelle";
+  if (lower.includes("paypal")) return "PayPal";
+  if (
+    lower.includes("tarjeta") ||
+    lower.includes("debito") ||
+    lower.includes("débito") ||
+    lower.includes("debido") ||
+    lower.includes("punto de venta") ||
+    lower.includes("pos")
+  ) {
+    return "Tarjeta de Débito";
+  }
   if (lower.includes("bancamiga") || lower.includes("amiga")) return "Bancamiga";
-  if (lower.includes("venezuela") || lower.includes("bdv")) return "Banco de Venezuela";
   if (lower.includes("banplus")) return "Banplus";
   if (lower.includes("banesco")) return "Banesco";
   if (lower.includes("mercantil")) return "Mercantil";
@@ -112,24 +131,28 @@ export const detectBankFromText = (text: string): string | null => {
   return null;
 };
 
-const SYSTEM_RECEIPT_PROMPT = `Eres un auditor experto en comprobantes bancarios venezolanos (Pago Móvil, Transferencias Banesco, Banco de Venezuela, Bancamiga, Banplus, Mercantil, Provincial).
+const SYSTEM_RECEIPT_PROMPT = `Eres un auditor experto en comprobantes bancarios y métodos de pago (Pago Móvil, Transferencias Bancamiga, Banplus, Binance, Tarjeta de Débito/POS, Zelle, PayPal).
 Tu tarea es interpretar la imagen del comprobante de pago y extraer sus datos en un objeto JSON estricto.
 
 CAMPOS A EXTRAER:
-1. "amount": Monto numérico del comprobante (ej: 26796.30). Si tiene formato venezolano "26.796,30", conviértelo a float 26796.30.
-2. "currency": "VES" si el pago es en bolívares (Bs. / Bs), o "USD" si es en dólares.
-3. "transaction_code": Código de referencia o número de comprobante (solo dígitos, ej: "63082316683").
+1. "amount": Monto numérico del comprobante (ej: 26796.30 o 25.00). Si tiene formato venezolano "26.796,30", conviértelo a float 26796.30. Si es en divisas o USDT (ej. $25, 25.00 USDT), conviértelo a float 25.00.
+2. "currency": "VES" si el pago es en bolívares (Bs. / Bs), o "USD" si es en dólares / cripto (USD, USDT, Zelle, Binance, PayPal).
+3. "transaction_code": Código de referencia, número de comprobante, confirmación o TxID.
 4. "payment_date": Fecha de la transacción en formato YYYY-MM-DD (ej: "2026-11-04").
-5. "bank": BANCO RECEPTOR / DESTINO de la empresa (la cuenta donde se depositó el dinero).
-   - REGLA CRÍTICA: Los bancos receptores de la empresa suelen ser: "Bancamiga", "Banco de Venezuela", o "Banplus".
-   - Si el comprobante dice "Banesco Pago Móvil", ese es el banco emisor (origen), NO necesariamente el receptor.
-   - Si el comprobante no menciona el banco receptor, pero en el contexto del chat provisto el cliente o bot mencionan "Bancamiga" o "Venezuela", usa ese banco.
+5. "bank": MÉTODO O CANAL RECEPTOR / DESTINO de la empresa (a donde se envió o transfirió el dinero).
+   - REGLA CRÍTICA: Los métodos receptores autorizados de la empresa son: "Bancamiga", "Banplus", "Binance", "Tarjeta de Débito", "Zelle", "PayPal".
+   - IMPORTANTE: Banco de Venezuela (BDV) ya NO se utiliza bajo ninguna circunstancia.
+   - Si el comprobante es de Binance o USDT, usa "Binance" y currency="USD".
+   - Si el comprobante es de Zelle, usa "Zelle" y currency="USD".
+   - Si el comprobante es de PayPal, usa "PayPal" y currency="USD".
+   - Si es un voucher de punto de venta físico / tarjeta de débito, usa "Tarjeta de Débito".
+   - Si el comprobante dice "Banesco Pago Móvil", ese es el banco emisor (origen), NO el receptor. El receptor suele ser Bancamiga o Banplus.
    - Si no está seguro, responde null.
-6. "origin_bank": Banco desde donde pagó el cliente (ej: "Banesco", "Mercantil", etc.).
+6. "origin_bank": Banco o plataforma desde donde pagó el cliente (ej: "Banesco", "Mercantil", etc.).
 7. "sender_phone": Teléfono emisor si aparece en el comprobante.
 8. "sender_cedula": Cédula o RIF del emisor si aparece.
 9. "confidence": "high" | "medium" | "low".
-10. "summary": Breve descripción (ej: "Pago Móvil Banesco a Bancamiga por Bs. 26.796,30").
+10. "summary": Breve descripción (ej: "Pago Móvil Banesco a Bancamiga por Bs. 26.796,30" o "Transferencia Zelle por $25.00").
 
 RESPONDE ÚNICAMENTE CON EL OBJETO JSON VÁLIDO.`;
 

@@ -66,6 +66,7 @@ const emptyData: CrmData = {
     ai_model: DEFAULT_AI_MODEL,
     ai_system_prompt: null,
     payment_success_message: null,
+    payment_approved_label_ids: [],
     ai_recovery_messages: undefined,
     office_hours: undefined,
     after_hours_payments: undefined,
@@ -996,6 +997,37 @@ export const useCrmData = (agent: Agent | null) => {
     }
   };
 
+  const updatePaymentApprovedLabels = async (labelIds: number[]) => {
+    if (!agent) return;
+    if (!isAdminRole(agent.role)) {
+      toast.error(
+        "Solo un administrador puede configurar las etiquetas de pago",
+      );
+      return;
+    }
+
+    const normalizedIds = Array.isArray(labelIds)
+      ? labelIds
+          .map((id) => Number(id))
+          .filter((id) => Number.isFinite(id) && id > 0)
+      : [];
+
+    try {
+      const settings = await crmService.updateCrmSettings(agent.id, {
+        payment_approved_label_ids: normalizedIds,
+      });
+      setData((current) => ({ ...current, settings }));
+      toast.success("Etiquetas de pago aprobado actualizadas");
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "No se pudieron guardar las etiquetas de pago aprobado",
+      );
+      throw error;
+    }
+  };
+
   const updateAiRecoveryMessages = async (
     messages: import("../_lib/ai-recovery-messages").AiRecoveryMessages,
   ) => {
@@ -1664,6 +1696,7 @@ export const useCrmData = (agent: Agent | null) => {
     bulkAssignAgent,
     updateAiSystemPrompt,
     updatePaymentSuccessMessage,
+    updatePaymentApprovedLabels,
     updateAiRecoveryMessages,
     updateOfficeHoursSettings,
     updateAppearance,
